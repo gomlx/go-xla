@@ -1,4 +1,4 @@
-module github.com/gomlx/stablehlo
+module github.com/gomlx/go-xla
 
 go 1.24.0
 

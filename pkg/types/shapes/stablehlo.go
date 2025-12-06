@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gomlx/stablehlo/internal/utils"
+	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // ToStableHLO returns the ToStableHLO representation of the shape's type.

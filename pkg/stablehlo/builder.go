@@ -6,9 +6,9 @@ import (
 	"io"
 	"slices"
 
-	"github.com/gomlx/stablehlo/internal/utils"
-	"github.com/gomlx/stablehlo/types"
-	"github.com/gomlx/stablehlo/types/shardy"
+	"github.com/gomlx/go-xla/internal/utils"
+	"github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/pkg/errors"
 )
 

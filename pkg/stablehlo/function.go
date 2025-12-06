@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/go-xla/internal/optypes"
+	"github.com/gomlx/go-xla/internal/shapeinference"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo/internal/optypes"
-	"github.com/gomlx/stablehlo/shapeinference"
-	"github.com/gomlx/stablehlo/types/shapes"
-	"github.com/gomlx/stablehlo/types/shardy"
 	"github.com/pkg/errors"
 )
 

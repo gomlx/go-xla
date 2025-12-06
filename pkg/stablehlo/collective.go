@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gomlx/stablehlo/internal/optypes"
-	"github.com/gomlx/stablehlo/shapeinference"
-	"github.com/gomlx/stablehlo/types"
+	"github.com/gomlx/go-xla/internal/optypes"
+	"github.com/gomlx/go-xla/internal/shapeinference"
+	"github.com/gomlx/go-xla/pkg/types"
 	"github.com/pkg/errors"
 )
 

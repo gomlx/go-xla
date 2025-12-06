@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/go-xla/pkg/stablehlo"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
-	"github.com/gomlx/stablehlo"
-	"github.com/gomlx/stablehlo/types/shapes"
-	"github.com/gomlx/stablehlo/types/shardy"
 )
 
 func TestShardy(t *testing.T) {

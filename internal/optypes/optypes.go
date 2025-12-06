@@ -4,7 +4,7 @@ package optypes
 import (
 	"fmt"
 
-	"github.com/gomlx/stablehlo/internal/utils"
+	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // OpType is an enum of all generic operations that ToStableHLO can support -- not all are implemented yet.

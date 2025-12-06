@@ -13,7 +13,7 @@
 // See ToStableHLO documentation and specifications in https://openxla.org/stablehlo/spec
 package stablehlo
 
-import "github.com/gomlx/stablehlo/internal/utils"
+import "github.com/gomlx/go-xla/internal/utils"
 
 // Generates some trivial functions (binary and unary operators) automatically.
 //go:generate go run ./internal/cmd/ops_generator

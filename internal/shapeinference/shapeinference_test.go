@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/go-xla/internal/optypes"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo/internal/optypes"
-	"github.com/gomlx/stablehlo/types/shapes"
 )
 
 // Aliases

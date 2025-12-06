@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/stablehlo/internal/utils"
+	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/pkg/errors"
 )
 

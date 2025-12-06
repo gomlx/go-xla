@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo/internal/utils"
 )
 
 // ComparisonType enum defined for the Compare op.

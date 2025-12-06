@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/go-xla/internal/optypes"
+	"github.com/gomlx/go-xla/internal/shapeinference"
+	"github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo/internal/optypes"
-	"github.com/gomlx/stablehlo/shapeinference"
-	"github.com/gomlx/stablehlo/types"
-	"github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 )
 

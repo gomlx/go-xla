@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/pkg/types/shardy"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/stablehlo/types/shapes"
-	"github.com/gomlx/stablehlo/types/shardy"
 )
 
 func must[T any](value T, err error) T {

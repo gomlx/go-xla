@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	. "github.com/gomlx/go-xla/pkg/stablehlo"
+	"github.com/gomlx/go-xla/pkg/types"
+	S "github.com/gomlx/go-xla/pkg/types/shapes"
 	D "github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
-	. "github.com/gomlx/stablehlo"
-	"github.com/gomlx/stablehlo/types"
-	S "github.com/gomlx/stablehlo/types/shapes"
 )
 
 func TestDotGeneral(t *testing.T) {

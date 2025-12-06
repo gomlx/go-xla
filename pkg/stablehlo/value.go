@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gomlx/stablehlo/types/shapes"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
 // Value represents a value in a StableHLO program, like `%0` or `%arg0`.

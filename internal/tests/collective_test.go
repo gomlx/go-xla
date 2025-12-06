@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	. "github.com/gomlx/go-xla/pkg/stablehlo"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
-	. "github.com/gomlx/stablehlo"
-	"github.com/gomlx/stablehlo/types/shapes"
 )
 
 var flagCollectiveBroadcast = flag.Bool("collective_broadcast", false, "Run collective broadcast test: it is not implemented in PJRT CPU, so it is skipped by default.")
