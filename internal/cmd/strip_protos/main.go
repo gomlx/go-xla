@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	github.com/go-xla/internal/must
+	"github.com/gomlx/go-xla/internal/must"
 	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"

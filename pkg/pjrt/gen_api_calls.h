@@ -165,8 +165,16 @@ extern PJRT_Error* call_PJRT_AsyncHostToDeviceTransferManager_SetBufferError(con
 // call_PJRT_AsyncHostToDeviceTransferManager_AddMetadata calls the corresponding PJRT API method.
 extern PJRT_Error* call_PJRT_AsyncHostToDeviceTransferManager_AddMetadata(const PJRT_Api *api, PJRT_AsyncHostToDeviceTransferManager_AddMetadata_Args* args);
 
+// call_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral calls the corresponding PJRT API method.
+// Asynchronously copies a host literal to a buffer managed by a transfer
+// manager.
+extern PJRT_Error* call_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral(const PJRT_Api *api, PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args* args);
+
 // call_PJRT_Client_CreateUninitializedBuffer calls the corresponding PJRT API method.
 extern PJRT_Error* call_PJRT_Client_CreateUninitializedBuffer(const PJRT_Api *api, PJRT_Client_CreateUninitializedBuffer_Args* args);
+
+// call_PJRT_Client_CreateErrorBuffer calls the corresponding PJRT API method.
+extern PJRT_Error* call_PJRT_Client_CreateErrorBuffer(const PJRT_Api *api, PJRT_Client_CreateErrorBuffer_Args* args);
 
 // call_PJRT_Client_CreateAliasBuffer calls the corresponding PJRT API method.
 extern PJRT_Error* call_PJRT_Client_CreateAliasBuffer(const PJRT_Api *api, PJRT_Client_CreateAliasBuffer_Args* args);

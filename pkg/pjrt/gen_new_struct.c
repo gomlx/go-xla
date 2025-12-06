@@ -326,11 +326,19 @@ PJRT_Buffer_MemoryLayout* new_PJRT_Buffer_MemoryLayout() {
 	return p;
 }
 
-// new_PJRT_Client_CreateUninitializedBuffer_Args allocates a zero-initialized C.PJRT_Client_CreateUninitializedBuffer_Args structure, sets its .struct_size, and returns it.
-PJRT_Client_CreateUninitializedBuffer_Args* new_PJRT_Client_CreateUninitializedBuffer_Args() {
-	PJRT_Client_CreateUninitializedBuffer_Args* p = malloc(sizeof(PJRT_Client_CreateUninitializedBuffer_Args));
-	memset(p, 0, sizeof(PJRT_Client_CreateUninitializedBuffer_Args));
-	p->struct_size = PJRT_Client_CreateUninitializedBuffer_Args_STRUCT_SIZE;
+// new_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args allocates a zero-initialized C.PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args structure, sets its .struct_size, and returns it.
+PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args* new_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args() {
+	PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args* p = malloc(sizeof(PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args));
+	memset(p, 0, sizeof(PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args));
+	p->struct_size = PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Client_CreateErrorBuffer_Args allocates a zero-initialized C.PJRT_Client_CreateErrorBuffer_Args structure, sets its .struct_size, and returns it.
+PJRT_Client_CreateErrorBuffer_Args* new_PJRT_Client_CreateErrorBuffer_Args() {
+	PJRT_Client_CreateErrorBuffer_Args* p = malloc(sizeof(PJRT_Client_CreateErrorBuffer_Args));
+	memset(p, 0, sizeof(PJRT_Client_CreateErrorBuffer_Args));
+	p->struct_size = PJRT_Client_CreateErrorBuffer_Args_STRUCT_SIZE;
 	return p;
 }
 

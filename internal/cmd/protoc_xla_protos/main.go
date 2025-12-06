@@ -93,6 +93,8 @@ func main() {
 		if err := copyFile(localCopyPath, protoPath); err != nil {
 			log.Fatalf("Failed to copy file: %v", err)
 		}
+		fmt.Printf("✅ Successfully proto-compiled %q\n", packageName)
+
 	}
 }
 

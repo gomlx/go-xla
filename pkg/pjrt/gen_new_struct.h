@@ -135,8 +135,11 @@ extern PJRT_Buffer_MemoryLayout_Strides* new_PJRT_Buffer_MemoryLayout_Strides();
 // strides.
 extern PJRT_Buffer_MemoryLayout* new_PJRT_Buffer_MemoryLayout();
 
-// new_PJRT_Client_CreateUninitializedBuffer_Args allocates a zero-initialized C.PJRT_Client_CreateUninitializedBuffer_Args structure, sets its .struct_size, and returns it.
-extern PJRT_Client_CreateUninitializedBuffer_Args* new_PJRT_Client_CreateUninitializedBuffer_Args();
+// new_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args allocates a zero-initialized C.PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args structure, sets its .struct_size, and returns it.
+extern PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args* new_PJRT_AsyncHostToDeviceTransferManager_TransferLiteral_Args();
+
+// new_PJRT_Client_CreateErrorBuffer_Args allocates a zero-initialized C.PJRT_Client_CreateErrorBuffer_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Client_CreateErrorBuffer_Args* new_PJRT_Client_CreateErrorBuffer_Args();
 
 // new_PJRT_Client_CreateAliasBuffer_Args allocates a zero-initialized C.PJRT_Client_CreateAliasBuffer_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Client_CreateAliasBuffer_Args* new_PJRT_Client_CreateAliasBuffer_Args();

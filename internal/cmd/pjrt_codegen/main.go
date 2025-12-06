@@ -3,11 +3,12 @@
 package main
 
 import (
-	"github.com/janpfeifer/gonb/common"
-	github.com/go-xla/internal/must
 	"log"
 	"os"
 	"path"
+
+	"github.com/gomlx/go-xla/internal/must"
+	"github.com/gomlx/go-xla/pkg/installer"
 )
 
 const (
@@ -20,7 +21,7 @@ func main() {
 	if xlaSrc == "" {
 		log.Fatalf("Please set %s to the directory containing the cloned github.com/openxla/xla repository.\n", xlaSrcEnvVar)
 	}
-	xlaSrc = common.ReplaceTildeInDir(xlaSrc)
+	xlaSrc = must.M1(installer.ReplaceTildeInDir(xlaSrc))
 
 	// Copy pjrt_c_api.h.
 	contentsBytes := must.M1(os.ReadFile(path.Join(xlaSrc, "xla", "pjrt", "c", pjrtAPIFileName)))

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	github.com/go-xla/internal/must
+	"github.com/gomlx/go-xla/internal/must"
 	"os"
 	"os/exec"
 	"regexp"

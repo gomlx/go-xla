@@ -4,7 +4,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	github.com/go-xla/internal/must
+	"github.com/gomlx/go-xla/internal/must"
 	"github.com/pkg/errors"
 	"os"
 	"strings"

@@ -11,7 +11,7 @@ import (
 	"text/template"
 
 	"github.com/gomlx/go-xla/internal/protos/xla_data"
-	github.com/go-xla/internal/must
+	"github.com/gomlx/go-xla/internal/must"
 	"github.com/pkg/errors"
 )
 

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"text/template"
 
-	github.com/go-xla/internal/must
+	"github.com/gomlx/go-xla/internal/must"
 )
 
 const (

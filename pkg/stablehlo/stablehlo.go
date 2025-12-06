@@ -16,7 +16,7 @@ package stablehlo
 import "github.com/gomlx/go-xla/internal/utils"
 
 // Generates some trivial functions (binary and unary operators) automatically.
-//go:generate go run ./internal/cmd/ops_generator
+//go:generate go run ../../internal/cmd/ops_generator
 
 // NormalizeIdentifier converts the name of an identifier (function name or function input parameter
 // name, etc.) to a valid one: only letters, digits, and underscores are allowed.

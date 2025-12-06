@@ -3,12 +3,13 @@ package main
 
 import (
 	"bytes"
-	github.com/go-xla/internal/must
 	"io"
 	"os"
+
+	"github.com/gomlx/go-xla/internal/must"
 )
 
-const pjrtCAPIHFilePath = "../pjrt/pjrt_c_api.h"
+const pjrtCAPIHFilePath = "../../../pkg/pjrt/pjrt_c_api.h"
 
 func main() {
 	// Read pjrt_c_api.h
