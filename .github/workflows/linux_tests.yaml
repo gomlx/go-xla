@@ -1,0 +1,82 @@
+name: "Tests(linux)"
+
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04  # Rename to ubuntu-latest once the latest include GLIBC-2.38.
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.25.x"
+
+    - name: Install Gopjrt C library gomlx_xlabuilder and PJRT plugin
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        (cd ./cmd/gopjrt_installer && go install .)
+        sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/gopjrt_installer -plugin linux -version latest -path /usr/local
+        sudo ln -sf /usr/local/lib/libpjrt* /usr/lib/x86_64-linux-gnu/
+        sudo ln -sf /usr/local/include/gomlx /usr/include/
+
+    - name: PreTest
+      run: |
+        go test . -test.v
+
+    - name: Test
+      # Notice xlabuilder is not installed in CI -- it requires manual installation of the older version of the library.
+      run: |
+        go test ./pjrt/...
+
+    - name: Go Coverage Badge
+      if: github.ref == 'refs/heads/main'
+      uses: tj-actions/coverage-badge-go@v2
+      with:
+        green: 80
+        filename: docs/coverage.out
+
+    - name: Commit README.md changes
+      if: github.ref == 'refs/heads/main'
+      run: |
+        if git diff --quiet -- 'README.md' ; then
+          echo "README.md not modified."
+        else
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "chore: Updated coverage badge."
+        fi
+
+    - name: Push Changes
+      if: github.ref == 'refs/heads/main'
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ github.token }}
+        branch: ${{ github.ref }}
