@@ -4,7 +4,7 @@ package main
 
 import (
 	"github.com/janpfeifer/gonb/common"
-	"github.com/janpfeifer/must"
+	github.com/go-xla/internal/must
 	"log"
 	"os"
 	"path"

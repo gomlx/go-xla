@@ -3,7 +3,7 @@ package main
 
 import (
 	"bytes"
-	"github.com/janpfeifer/must"
+	github.com/go-xla/internal/must
 	"io"
 	"os"
 )

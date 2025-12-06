@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/janpfeifer/must"
+	github.com/go-xla/internal/must
 	"io"
 	"os"
 	"path"

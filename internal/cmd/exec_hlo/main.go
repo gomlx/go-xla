@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
-	"github.com/janpfeifer/must"
+	github.com/go-xla/internal/must
 	"k8s.io/klog/v2"
 )
 

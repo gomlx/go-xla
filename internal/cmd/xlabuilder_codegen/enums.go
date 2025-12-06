@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/janpfeifer/must"
+	github.com/go-xla/internal/must
 	"os"
 	"os/exec"
 	"text/template"
