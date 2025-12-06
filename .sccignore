@@ -1,0 +1,7 @@
+internal/protos
+LICENSE
+.gitignore
+.idea
+protos/
+gen_*
+*_enumer.go
