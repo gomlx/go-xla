@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || all
+//go:build (linux && amd64) || pjrt_all
 
 package installer
 
@@ -115,4 +115,3 @@ func TPUGetPJRTPipInfo(plugin string) (*PipPackageInfo, string, error) {
 	}
 	return info, packageName, nil
 }
-

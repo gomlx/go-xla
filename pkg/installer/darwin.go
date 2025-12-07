@@ -1,4 +1,4 @@
-//go:build (darwin && arm64) || all
+//go:build (darwin && arm64) || pjrt_all
 
 package installer
 
@@ -106,4 +106,3 @@ func DarwinInstall(plugin, version, installPath string, useCache bool) error {
 	fmt.Printf("\n✅ Installed Gopjrt %s \"cpu\" PJRT to %s (%s/%s)\n\n", version, installPath, runtime.GOOS, runtime.GOARCH)
 	return nil
 }
-
