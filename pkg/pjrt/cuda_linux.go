@@ -102,8 +102,16 @@ func cudaPluginCheckDrivers(name string) {
 // cudaNVidiaPath returns the path to the nvidia libraries. If they are not found in the same directory as the plugin.
 // It returns an empty string if the nvidia libraries are found.
 func cudaNVidiaPath(plugin *Plugin) (nvidiaExpectedPath string, found bool) {
-	nvidiaExpectedPath = path.Join(path.Dir(path.Dir(plugin.Path())), "nvidia")
+	// Search in ./nvidia
+	nvidiaExpectedPath = path.Join(path.Dir(plugin.Path()), "nvidia")
 	fi, err := os.Stat(nvidiaExpectedPath)
+	if err == nil && fi.IsDir() {
+		return nvidiaExpectedPath, true
+	}
+
+	// Search in ../nvidia/...
+	nvidiaExpectedPath = path.Join(path.Dir(path.Dir(plugin.Path())), "nvidia")
+	fi, err = os.Stat(nvidiaExpectedPath)
 	return nvidiaExpectedPath, err == nil && fi.IsDir()
 }
 
