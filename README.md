@@ -17,7 +17,7 @@ It can be used to power Machine Learning frameworks (e.g. [GoMLX](https://github
 computation, game AIs, etc. 
 
 And because [Jax](https://docs.jax.dev/en/latest/), [TensorFlow](https://www.tensorflow.org/) and 
-[optionally PyTorch](https://pytorch.org/xla/release/2.3/index.html) run on XLA, it is possible to run Jax functions in Go with GoPJRT, 
+[optionally PyTorch](https://pytorch.org/xla/release/2.3/index.html) run on XLA, it is possible to run Jax functions in Go with **go-xla**, 
 and probably TensorFlow and PyTorch as well.
 
 The **go-xla** porject aims to be minimalist and robust: it provides well-maintained, extensible Go wrappers for
@@ -61,18 +61,9 @@ The currently better supported IR (intermediary representation) supported by PJR
 in [StableHLO docs](https://openxla.org/stablehlo). It's a text representation of the computation
 that can easily be parsed by computers, but not easily written or read by humans.
 
-The package [`github.com/gomlx/go-xla/pkg/stablehlo`](https://github.com/gomlx/go-xla/pkg/stablehlo?tab=readme-ov-file)
+The package [`github.com/gomlx/go-xla/pkg/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/stablehlo)
 provides a Go API for writing StableHLO programs, including _shape inference_, needed to correctly 
 infer the output shape of operations as the program is being built.
-
-is the current preferred IR language for XLA PJRT. This library (co-developed with **GoPJRT**) is a Go API for building
-computation graphs in StableHLO that can be directly fed to *GoPJRT*. See examples below.
-This is a wrapper Go library to an XLA C++ library that generates the previous IR (called MHLO).
-It is still supported by XLA and by **GoPJRT**, but it is being deprecated.
-3. Using Jax, Tensorflow, PyTorchXLA: Jax/Tensorflow/PyTorchXLA can output the StableHLO of JIT compiled functions  
-that can be fed directly to PJRT (as text). We don't detail this here, but the authors did this a lot during
-development of **GoPJRT**, [github.com/gomlx/go-xla/pkg/stablehlo](https://github.com/gomlx/go-xla/pkg/stablehlo?tab=readme-ov-file) and 
-[github.com/gomlx/gopjtr/xlabuilder](https://github.com/gomlx/go-xla/tree/main/xlabuilder) for testing.
 
 ## Example
 
@@ -129,7 +120,7 @@ self-explanatory menu (or provide the flags for a quiet installation)
 ## FAQ
 
 * **When is feature X from PJRT going to be supported ?**
-  GoPJRT doesn't wrap everything—although it does cover the most common operations. 
+  The **go-xla** project doesn't wrap everything—although it does cover the most common operations. 
   The simple ops and structs are auto-generated. But many require hand-writing.
   Please, if it is useful to your project, create an issue; I'm happy to add it. 
   I focus on the needs of GoMLX, but the idea is that it can serve other purposes, and I'm happy to support it.
@@ -152,11 +143,14 @@ Discussion in the [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/
 
 ## Environment Variables
 
-Environment variables that help control or debug how GoPJRT works:
+Environment variables that help control or debug how PJRT works:
 
 * `PJRT_PLUGIN_LIBRARY_PATH`: Path to search for PJRT plugins. 
-  GoPJRT also searches in `/usr/local/lib/gomlx/pjrt`, `${HOME}/.local/lib/gomlx/pjrt`, in
+  The `pjrt` package also searches in `/usr/local/lib/go-xla`, `${HOME}/.local/lib/go-xla`, in
   the standard library paths for the system, and in the paths defined in `$LD_LIBRARY_PATH`.
+  For compatibility with the older version, it also searches in 
+  `/usr/local/lib/gomlx/pjrt`, `${HOME}/.local/lib/gomlx/pjrt`.
+  In MacOS it's the equivalent under `${HOME}/Library/Application Support/`.
 * `XLA_FLAGS`: Used by the C++ PJRT plugins. Documentation is linked by the [Jax XLA_FLAGS page](https://docs.jax.dev/en/latest/xla_flags.html),
   but I found it easier to just set this to "--help" and it prints out the flags.
 * `XLA_DEBUG_OPTIONS`: If set, it is parsed as a `DebugOptions` proto that

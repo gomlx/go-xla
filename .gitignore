@@ -14,15 +14,6 @@ go.work.sum
 .ipynb_checkpoints
 Untitled.ipynb
 
-# Links to C-generated code.
-bazel-bin
-bazel-c
-bazel-gopjrt
-bazel-out
-bazel-mnt
-bazel-testlogs
-gomlx_xla.tar.gz
-
 # VSCode files
 .Trash*
 gomlx.code-workspace

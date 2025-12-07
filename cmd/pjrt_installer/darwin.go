@@ -23,7 +23,7 @@ func init() {
 	installPathSuggestions = append(installPathSuggestions, "/usr/local/", "~/Library/Application Support/GoMLX")
 }
 
-// LinuxValidateVersion checks whether the linux version selected by "-version" exists.
+// DarwinValidateVersion checks whether the Darwin version selected by "-version" exists.
 func DarwinValidateVersion(plugin, version string) error {
 	// "latest" is always valid.
 	if version == "latest" {
