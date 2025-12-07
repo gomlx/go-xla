@@ -8,13 +8,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ReplaceTildeInDir by the user's home directory. Returns dir if it doesn't start with "~".
-func ReplaceTildeInDir(dir string) (string, error) {
+// ReplaceTildeInDir replaces "~" in a directory path with the user's home directory.
+// Returns dir if it doesn't start with "~".
+// It may panic with an error if `dir` has an unknown user (e.g: `~unknown/...`)
+//
+// This function matches the original signature from cmd/pjrt_installer for compatibility.
+// For error-returning version, use ReplaceTildeInDirWithError.
+func ReplaceTildeInDir(dir string) string {
 	if len(dir) == 0 {
-		return dir, nil
+		return dir
 	}
 	if dir[0] != '~' {
-		return dir, nil
+		return dir
 	}
 	var userName string
 	if dir != "~" && !strings.HasPrefix(dir, "~/") {
@@ -33,8 +38,8 @@ func ReplaceTildeInDir(dir string) (string, error) {
 		usr, err = user.Lookup(userName)
 	}
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to lookup home directory for user in path %q", dir)
+		panic(errors.Wrapf(err, "failed to lookup home directory for user in path %q", dir))
 	}
 	homeDir := usr.HomeDir
-	return path.Join(homeDir, dir[1+len(userName):]), nil
+	return path.Join(homeDir, dir[1+len(userName):])
 }

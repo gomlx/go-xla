@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -28,6 +29,7 @@ var (
 			"which is where it downloads the plugin and Nvidia libraries from. "+
 			"For the TPU PJRT this is the version of the \"libtpu\" version in https://pypi.org/project/libtpu/ "+
 			"(e.g.: 0.0.27). ")
+	flagCache = flag.Bool("cache", true, "Use cache to store downloaded files. It defaults to true")
 )
 
 func main() {
@@ -80,7 +82,7 @@ func main() {
 
 	pluginName := *flagPlugin
 	version := *flagVersion
-	installPath := ReplaceTildeInDir(*flagPath)
+	installPath := installer.ReplaceTildeInDir(*flagPath)
 	fmt.Printf("Installing PJRT plugin %s@%s to %s:\n", pluginName, version, installPath)
 
 	pluginInstaller, ok := pluginInstallers[pluginName]
@@ -102,7 +104,7 @@ func ValidateVersion() error {
 }
 
 func ValidatePathPermission() error {
-	installPath := ReplaceTildeInDir(*flagPath)
+	installPath := installer.ReplaceTildeInDir(*flagPath)
 	dir := installPath
 	_, err := os.Stat(dir)
 	if err != nil {
@@ -126,10 +128,10 @@ func ValidatePathPermission() error {
 	if err != nil {
 		return errors.Wrapf(err, "no write permission in directory %q, do you need \"sudo\" ?", dir)
 	}
-	ReportError(f.Close())
+	installer.ReportError(f.Close())
 
 	// Clean up test file
-	ReportError(os.Remove(testFile))
+	installer.ReportError(os.Remove(testFile))
 
 	return nil
 }

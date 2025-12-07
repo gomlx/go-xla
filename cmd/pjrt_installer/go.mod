@@ -1,4 +1,4 @@
-module github.com/gomlx/go-xla/cmd/gopjrt_installer
+module github.com/gomlx/go-xla/cmd/pjrt_installer
 
 go 1.24.0
 
@@ -11,9 +11,12 @@ require (
 	github.com/charmbracelet/huh/spinner v0.0.0-20250929091620-889bfce58d1e
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.1
+	github.com/gomlx/go-xla v0.0.0
 	github.com/pkg/errors v0.9.1
 	k8s.io/klog/v2 v2.130.1
 )
+
+replace github.com/gomlx/go-xla => ../..
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
@@ -25,7 +28,7 @@ require (
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

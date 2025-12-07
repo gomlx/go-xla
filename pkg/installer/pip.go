@@ -1,6 +1,4 @@
-//go:build (linux && amd64) || all
-
-package main
+package installer
 
 import (
 	"encoding/json"
@@ -18,6 +16,7 @@ var (
 	pipPackageLinuxAMD64Glibc231 = regexp.MustCompile(`-manylinux_2_31_x86_64`)
 )
 
+// GetPipInfo retrieves package information from pypi.org for the given package name.
 func GetPipInfo(packageName string) (*PipPackageInfo, error) {
 	url := "https://pypi.org/pypi/" + packageName + "/json"
 
@@ -25,7 +24,11 @@ func GetPipInfo(packageName string) (*PipPackageInfo, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to fetch package info from %s", url)
 	}
-	defer func() { ReportError(resp.Body.Close()) }()
+	defer func() {
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -62,6 +65,7 @@ type PipPackageInfo struct {
 	Releases map[string][]PipReleaseInfo `json:"releases"`
 }
 
+// PipDependency represents a parsed dependency from a PIP package.
 type PipDependency struct {
 	Package                                         string
 	Minimum, LowerBound, Maximum, UpperBound, Exact string
@@ -75,6 +79,7 @@ var depRegex = regexp.MustCompile(`^([\w.-]+)\s*([^;]*)?(?:;\s*(.+))?$`)
 // Matches groups like: [Operator (==, <, >=, etc.)][Version Value]
 var specRegex = regexp.MustCompile(`([<=>!~=]+)([^,]+)`)
 
+// ParseDependencies parses the RequiresDist field into structured PipDependency objects.
 func (info *PipPackageInfo) ParseDependencies() ([]PipDependency, error) {
 	if info.Info.RequiresDist == nil {
 		return nil, nil
@@ -246,3 +251,14 @@ func (dep *PipDependency) IsValid(version string) bool {
 
 	return true
 }
+
+// PipPackageLinuxAMD64 returns the regexp for matching Linux AMD64 packages.
+func PipPackageLinuxAMD64() *regexp.Regexp {
+	return pipPackageLinuxAMD64
+}
+
+// PipPackageLinuxAMD64Glibc231 returns the regexp for matching Linux AMD64 packages with glibc 2.31.
+func PipPackageLinuxAMD64Glibc231() *regexp.Regexp {
+	return pipPackageLinuxAMD64Glibc231
+}
+

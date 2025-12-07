@@ -1,4 +1,4 @@
-package main
+package installer
 
 import (
 	"archive/tar"
@@ -7,13 +7,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/user"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -22,46 +19,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var flagCache = flag.Bool("cache", true, "Use cache to store downloaded files. It defaults to ")
-
 // ReportError prints an error if it is not nil, but otherwise does nothing.
 func ReportError(err error) {
 	if err != nil {
 		klog.Warningf("Error: %v", err)
 	}
-}
-
-// ReplaceTildeInDir by the user's home directory. Returns dir if it doesn't start with "~".
-//
-// It may panic with an error if `dir` has an unknown user (e.g: `~unknown/...`)
-func ReplaceTildeInDir(dir string) string {
-	if len(dir) == 0 {
-		return dir
-	}
-	if dir[0] != '~' {
-		return dir
-	}
-	var userName string
-	if dir != "~" && !strings.HasPrefix(dir, "~/") {
-		sepIdx := strings.IndexRune(dir, '/')
-		if sepIdx == -1 {
-			userName = dir[1:]
-		} else {
-			userName = dir[1:sepIdx]
-		}
-	}
-	var usr *user.User
-	var err error
-	if userName == "" {
-		usr, err = user.Current()
-	} else {
-		usr, err = user.Lookup(userName)
-	}
-	if err != nil {
-		panic(errors.Wrapf(err, "failed to lookup home directory for user in path %q", dir))
-	}
-	homeDir := usr.HomeDir
-	return path.Join(homeDir, dir[1+len(userName):])
 }
 
 // GetCachePath finds and prepares the cache directory for gopjrt.
@@ -91,16 +53,16 @@ func GetCachePath(fileName string) (filePath string, cached bool, err error) {
 //
 // It displays a spinner while downloading and outputs some information about the download.
 //
-// If -cache is set (the default) it will save the file in a cache directory and try to reuse it if already downloaded.
+// If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded.
 //
 // If wantSHA256 is not empty, it will verify the hash of the downloaded file.
 //
 // It returns the path where the file was downloaded, and if the downloaded file is in a cache (so it shouldn't be removed after use).
-func DownloadURLToTemp(url, fileName, wantSHA256 string) (filePath string, cached bool, err error) {
+func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool) (filePath string, cached bool, err error) {
 	// Download the asset to a temporary file
 	var downloadedFile *os.File
 
-	if *flagCache {
+	if useCache {
 		filePath, cached, err = GetCachePath(fileName)
 		if err != nil {
 			return "", false, err
@@ -203,7 +165,7 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string) (filePath string, cache
 		fmt.Printf("- Reusing %s from cache%s\n", filePath, verifiedStatus)
 	} else {
 		fmt.Printf("- Downloaded %s to %s%s\n", downloadedBytesStr, filePath, verifiedStatus)
-		if *flagCache {
+		if useCache {
 			// Now the file is cached.
 			cached = true
 		}
@@ -328,6 +290,7 @@ func extractZipFile(f *zip.File, outputPath string) error {
 	return nil
 }
 
+// GitHubGetLatestVersion returns the latest version tag from the gomlx/gopjrt repository.
 func GitHubGetLatestVersion() (string, error) {
 	const latestURL = "https://api.github.com/repos/gomlx/gopjrt/releases/latest"
 	retries := 0
@@ -558,3 +521,4 @@ func Untar(tarballPath, outputDirPath string) ([]string, error) {
 	}
 	return extractedFiles, nil
 }
+
