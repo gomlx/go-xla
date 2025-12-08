@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"k8s.io/klog/v2"
 )
@@ -21,23 +22,15 @@ func isCuda(name string) bool {
 		strings.Index(strings.ToUpper(name), "NVIDIA") != -1
 }
 
-var hasNvidiaGPUCache sync.
-
 // hasNvidiaGPU tries to guess if there is an actual Nvidia GPU installed (as opposed to only the drivers/PJRT
 // file installed, but no actual hardware).
 // It does that by checking for the presence of the device files in /dev/nvidia*.
-func hasNvidiaGPU() bool {
-	if hasNvidiaGPUCache != nil {
-		return *hasNvidiaGPUCache
-	}
+var hasNvidiaGPU = sync.OnceValue[bool](func() bool {
 	matches, err := filepath.Glob("/dev/nvidia*")
 	if err != nil {
 		klog.Errorf("Failed to figure out if there is an Nvidia GPU installed while searching for files matching \"/dev/nvidia*\": %v", err)
-	}
-	if len(matches) > 0 {
-		hasGPU := true
-		hasNvidiaGPUCache = &hasGPU
-		return hasGPU
+	} else if len(matches) > 0 {
+		return true
 	} else {
 		klog.Infof("No NVidia devices found matching \"/dev/nvidia*\", checking nvidia-smi command instead.")
 	}
@@ -49,9 +42,7 @@ func hasNvidiaGPU() bool {
 		output, cmdErr := cmd.CombinedOutput()
 		if cmdErr == nil {
 			if strings.Contains(string(output), "NVIDIA-SMI") {
-				hasGPU := true
-				hasNvidiaGPUCache = &hasGPU
-				return hasGPU
+				return true
 			}
 		}
 	}
@@ -59,7 +50,7 @@ func hasNvidiaGPU() bool {
 	klog.Infof("nvidia-smi command did not succeed, assuming there are no GPU cards installed in the system. " +
 		"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
 	return false
-}
+})
 
 // cudaPluginCheckDrivers issues a warning on cuda plugins if it cannot find the corresponding nvidia library files.
 // It should be called after the named plugin is loaded.
