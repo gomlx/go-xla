@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || all
+//go:build (linux && amd64) || pjrt_all
 
 package main
 
@@ -15,8 +15,8 @@ func init() {
 	}
 	pluginValues = append(pluginValues, "linux", installer.AmazonLinux)
 	pluginDescriptions = append(pluginDescriptions,
-		"CPU PJRT for Linux/amd64 (glibc >= 2.41",
-		"CPU PJRT for AmazonLinux/amd64 and Ubuntu 22 (GCP host systems for TPUs) (glibc >= 2.35)")
+		"CPU PJRT for Linux/amd64 (glibc >= 2.41)",
+		"CPU PJRT for AmazonLinux/amd64 and Ubuntu 22 (GCP host systems for TPUs) (glibc >= 2.34)")
 	pluginPriorities = append(pluginPriorities, 0, 1)
-	installPathSuggestions = append(installPathSuggestions, "/usr/local/lib/go-xla", "~/.local/lib/go-xla")
+	installPathSuggestions = append(installPathSuggestions, "~/.local/lib/go-xla", "/usr/local/lib/go-xla")
 }

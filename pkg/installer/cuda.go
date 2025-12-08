@@ -20,6 +20,8 @@ import (
 // - Version exists
 // - Author email is from the Jax team
 // - Downloaded files sha256 match the ones on pypi.org
+//
+// If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded.
 func CudaInstall(plugin, version, installPath string, useCache bool) error {
 	// Create the target directory.
 	var err error
@@ -51,6 +53,8 @@ func CudaInstall(plugin, version, installPath string, useCache bool) error {
 // - Version exists
 // - Author email is from the Jax team
 // - Downloaded files sha256 match the ones on pypi.org
+//
+// If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded.
 //
 // Returns the version that was installed -- it can be different if the requested version was "latest", in which case it
 // is translated to the actual version.

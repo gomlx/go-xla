@@ -1,4 +1,4 @@
-//go:build (linux && amd64) || all
+//go:build (linux && amd64) || pjrt_all
 
 package main
 

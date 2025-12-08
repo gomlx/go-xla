@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && amd64
 
 package pjrt
 
@@ -21,7 +21,7 @@ func isCuda(name string) bool {
 		strings.Index(strings.ToUpper(name), "NVIDIA") != -1
 }
 
-var hasNvidiaGPUCache *bool
+var hasNvidiaGPUCache sync.
 
 // hasNvidiaGPU tries to guess if there is an actual Nvidia GPU installed (as opposed to only the drivers/PJRT
 // file installed, but no actual hardware).

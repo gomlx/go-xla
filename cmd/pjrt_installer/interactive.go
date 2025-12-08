@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -82,7 +83,7 @@ func Interact(command string, questions []Question) error {
 		}
 		fmt.Println("Selected flags to run:")
 		var sb strings.Builder
-		sb.WriteString(command)
+		sb.WriteString(filepath.Base(command))
 		for _, question := range questions {
 			_, _ = fmt.Fprintf(&sb, " -%s=%s", question.Flag.Name, question.Flag.Value.String())
 		}

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -23,8 +24,8 @@ var (
 
 	flagPlugin, flagPath *string
 	flagVersion          = flag.String("version", "latest",
-		"In most PJRT this is the Gopjrt release version in https://github.com/gomlx/go-xla (e.g.: v0.8.4) from"+
-			" where to download the plugin. "+
+		"For PJRT for CPUs, this is the https://github.com/gomlx/pjrt-cpu-binaries release version (e.g.: v0.83.1) "+
+			"from where to download the plugin. "+
 			"For the CUDA PJRT this is based on the Jax version in https://pypi.org/project/jax/ (e.g.: 0.7.2), "+
 			"which is where it downloads the plugin and Nvidia libraries from. "+
 			"For the TPU PJRT this is the version of the \"libtpu\" version in https://pypi.org/project/libtpu/ "+
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	// Initialize and set default values for flags
-	klog.InitFlags(nil)
+	// klog.InitFlags(nil)
 
 	// Sort plugins by priority
 	for i := 0; i < len(pluginPriorities); i++ {
@@ -51,16 +52,26 @@ func main() {
 		}
 	}
 
+	// Make installPathSuggestions unique while preserving the order:
+	seen := utils.MakeSet[string](len(installPathSuggestions))
+	writeIdx := 0
+	for _, path := range installPathSuggestions {
+		if !seen.Has(path) {
+			seen.Insert(path)
+			installPathSuggestions[writeIdx] = path
+			writeIdx++
+		}
+	}
+	installPathSuggestions = installPathSuggestions[:writeIdx]
+
 	// Define flags with plugins configured for GOOS/GOARCH used to build this binary:
 	flagPlugin = flag.String("plugin", "", "Plugin to install. Valid values: "+strings.Join(pluginValues, ", "))
-	flagPath = flag.String("path", "~/.local",
+	flagPath = flag.String("path", "",
 		fmt.Sprintf("Installation base path, under which the required libraries and include files are installed. "+
-			"It installs files under lib/ and include/ subdirectories. "+
-			"For the PJRT plugins it creates a sub-directory lib/gomlx/prjt, and in case of CUDA plugins, gomlx/nvidia for "+
-			"Nvidia's matching drivers. Suggestions: %s. "+
+			"For CUDA plugins, it also creates a subdirectory 'nvidia/' to install "+
+			"Nvidia's matching libraries/drivers. Suggestions: %s. "+
 			"It will require the adequate privileges (sudo) if installing in a system directories.",
 			strings.Join(installPathSuggestions, ", ")))
-	*flagPath = installPathSuggestions[0]
 
 	// Parse flags.
 	flag.Parse()
@@ -76,6 +87,10 @@ func main() {
 		}
 		err := Interact(os.Args[0], questions)
 		if err != nil {
+			if err == ErrUserAborted {
+				fmt.Println("Installation aborted.")
+				return
+			}
 			klog.Fatalf("Failed on error: %+v", err)
 		}
 	}

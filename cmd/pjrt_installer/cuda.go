@@ -8,7 +8,6 @@ import (
 
 func init() {
 	for _, plugin := range []string{"cuda13", "cuda12"} {
-		plugin := plugin // capture loop variable
 		pluginInstallers[plugin] = func(plugin, version, installPath string) error {
 			return installer.CudaInstall(plugin, version, installPath, *flagCache)
 		}

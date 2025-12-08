@@ -1,4 +1,4 @@
-//go:build (darwin && arm64) || all
+//go:build (darwin && arm64) || pjrt_all
 
 package main
 
@@ -16,5 +16,5 @@ func init() {
 	pluginValues = append(pluginValues, "darwin")
 	pluginDescriptions = append(pluginDescriptions, "CPU PJRT (darwin/arm64)")
 	pluginPriorities = append(pluginPriorities, 3)
-	installPathSuggestions = append(installPathSuggestions, "/usr/local/lib/go-xla", "~/Library/Application Support/go-xla")
+	installPathSuggestions = append(installPathSuggestions, "~/Library/Application Support/go-xla", "/usr/local/lib/go-xla")
 }
