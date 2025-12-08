@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -107,10 +108,26 @@ func CPUInstall(plugin, version, installPath string, useCache bool) error {
 		return errors.Errorf("failed to extract files from %s", downloadedFile)
 	}
 	fmt.Printf("- Extracted %d file(s):\n", len(extractedFiles))
+	isLinked := false
 	for _, file := range extractedFiles {
 		fmt.Printf("  - %s\n", file)
+		baseFile := filepath.Base(file)
+		if !isLinked && strings.HasPrefix(baseFile, "pjrt_c_api_cpu_") && strings.HasSuffix(baseFile, "_plugin.so") {
+			// Link file to the default CPU plugin, without the version number.
+			linkPath := path.Join(installPath, "pjrt_c_api_cpu_plugin.so")
+			if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+				return errors.Wrap(err, "failed to remove existing link")
+			}
+			if err := os.Symlink(file, linkPath); err != nil {
+				return errors.Wrap(err, "failed to create symlink")
+			}
+			fmt.Printf("    Linked to %s\n", linkPath)
+			isLinked = true
+		}
 	}
-	fmt.Printf("\n✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)\n\n", version, installPath, plugin)
+	fmt.Println()
+	fmt.Printf("✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)", version, installPath, plugin)
+	fmt.Println()
 
 	return nil
 }
