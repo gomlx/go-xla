@@ -8,8 +8,7 @@
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 
 
-
-## Why use go-xla ?
+## 🎯 Why use go-xla ?
 
 The **go-xla** project leverages [OpenXLA's](https://openxla.org/) to (JIT-) compile, optimize, and **accelerate numeric computations**
 (with large data) from Go using various [backends supported by OpenXLA](https://opensource.googleblog.com/2024/03/pjrt-plugin-to-accelerate-machine-learning.html): CPU, GPUs (Nvidia, AMD ROCm*, Intel*, Apple Metal*) and TPUs. 
@@ -31,7 +30,7 @@ One such friendlier API co-developed with **go-xla** is [GoMLX, a Go machine lea
 But **go-xla** may be used as a standalone, for lower level access to XLA and other accelerator use cases—like running
 Jax functions in Go, maybe an "accelerated" image processing or scientific simulation pipeline.
 
-## What is what?
+## 🧭 What is what?
 
 ### **PJRT** - "Pretty much Just another RunTime."
 
@@ -65,9 +64,41 @@ The package [`github.com/gomlx/go-xla/pkg/stablehlo`](https://pkg.go.dev/github.
 provides a Go API for writing StableHLO programs, including _shape inference_, needed to correctly 
 infer the output shape of operations as the program is being built.
 
+## 🗺️ How to use it?
+
+Use the `stablehlo` to define your computation. Then use `pjrt` to compile (once) and execute it.
+
+### [`github.com/gomlx/go-xla/pkg/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/pjrt)
+
+
+
+### [`github.com/gomlx/go-xla/pkg/pjrt`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/pjrt)
+
+The `pjrt` package includes the following main concepts:
+
+* `Plugin`: represents a PJRT plugin. It is created by calling `pjrt.GetPlugin(name)` (where `name` is the name of the plugin).
+  It is the main entry point to the PJRT plugin.
+* `Client`: first thing created after loading a plugin. It seems one can create a singleton `Client` per plugin,
+  it's not very clear to me why one would create more than one `Client`.
+* `LoadedExecutable`: Created when one calls `Client.Compile` a StableHLO program. The program is compiled and optimized
+  to the PJRT target hardware and made ready to run.
+* `Buffer`: Represents a buffer with the input/output data for the computations in the accelerators. There are 
+  methods to transfer it to/from the host memory. They are the inputs and outputs of `LoadedExecutable.Execute`.
+
 ## Example
 
-1. Minimalistic example, that assumes you have your StableHLO code in a variable (`[]byte`) called `stablehloCode`:
+See full code (`stablehlo` + `pjrt`) in [mandelbrot.ipynb notebook](https://github.com/gomlx/go-xla/blob/main/examples/mandelbrot.ipynb),
+which generates the image below:
+
+<a href="https://github.com/gomlx/go-xla/blob/main/examples/mandelbrot.ipynb">
+<img alt="Mandelbrot fractal figure" src="https://github.com/user-attachments/assets/6bf4d0bb-efe6-4b2e-8e8a-af2e34dbb63b" style="width:400px; height:240px"/>
+</a>
+
+Here is a sample of the `stablehlo` code:
+
+
+
+And here how to run the computation with `pjrt`:
 
 ```go
 var flagPluginName = flag.String("plugin", "cuda", "PRJT plugin name or full path")
@@ -84,28 +115,7 @@ outputs[0].Destroy() // Don't wait for the GC, destroy the buffer immediately.
 ...
 ```
 
-2. See [mandelbrot.ipynb notebook](https://github.com/gomlx/go-xla/blob/main/examples/mandelbrot.ipynb) 
-with an example building the computation for a Mandelbrot image using `stablehlo`, 
-it includes a sample of the computation's StableHLO IR.
 
-<a href="https://github.com/gomlx/go-xla/blob/main/examples/mandelbrot.ipynb">
-<img alt="Mandelbrot fractal figure" src="https://github.com/user-attachments/assets/6bf4d0bb-efe6-4b2e-8e8a-af2e34dbb63b" style="width:400px; height:240px"/>
-</a>
-
-## How to use it?
-
-The main package is [`github.com/gomlx/go-xla/pkg/pjrt`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/pjrt), and we'll refer to it as simply `pjrt`.
-
-The `pjrt` package includes the following main concepts:
-
-* `Plugin`: represents a PJRT plugin. It is created by calling `pjrt.GetPlugin(name)` (where `name` is the name of the plugin).
-  It is the main entry point to the PJRT plugin.
-* `Client`: first thing created after loading a plugin. It seems one can create a singleton `Client` per plugin,
-  it's not very clear to me why one would create more than one `Client`.
-* `LoadedExecutable`: Created when one calls `Client.Compile` a StableHLO program. The program is compiled and optimized
-  to the PJRT target hardware and made ready to run.
-* `Buffer`: Represents a buffer with the input/output data for the computations in the accelerators. There are 
-  methods to transfer it to/from the host memory. They are the inputs and outputs of `LoadedExecutable.Execute`.
 
 ## Installation of PJRT plugin
 
@@ -117,7 +127,7 @@ To manually install it, consider using the command line installer with
 `go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest` and follow the
 self-explanatory menu (or provide the flags for a quiet installation)
 
-## FAQ
+## 🤔 FAQ
 
 * **When is feature X from PJRT going to be supported ?**
   The **go-xla** project doesn't wrap everything—although it does cover the most common operations. 
@@ -158,7 +168,19 @@ Environment variables that help control or debug how PJRT works:
   It is not documented how it works in PJRT (e.g., I observed a great slow down when this is set,
   even if set to the default values), but [the proto has some documentation](https://github.com/gomlx/go-xla/blob/main/protos/xla.proto#L40).
 
-## Acknowledgements
+## 💖 Support the Project
+
+If you find this project helpful, please consider 
+[supporting our work through GitHub Sponsors](https://github.com/sponsors/gomlx). 
+
+Your contribution helps us (currently mostly [me](https://github.com/janpfeifer)) 
+maintain our coffee addiction :smiley: and dedicate more time to maintenance
+and add new features for the entire GoMLX ecosystem.
+
+It also helps us acquire access (buying or cloud) to hardware for more portability: e.g.: 
+ROCm, Apple Metal (GPU), Multi-GPU/TPU, AWS Trainium, NVidia DGX Spark, Tenstorrent, etc.
+
+## 💖 Acknowledgements
 
 This project includes a (slightly modified) copy of the OpenXLA's [`pjrt_c_api.h`](https://github.com/openxla/xla/blob/main/xla/pjrt/c/pjrt_c_api.h) file as well as some of the `.proto` files used by `pjrt_c_api.h`.
 
@@ -166,7 +188,9 @@ More importantly, we **gratefully acknowledge the OpenXLA project and team** for
 
 For more information about OpenXLA, please visit their website at [openxla.org](https://openxla.org/), or the GitHub page at [github.com/openxla/xla](https://github.com/openxla/xla)
 
-## Licensing
+## ⚖️ Licensing
+
+> Copyright 2025 Jan Pfeifer
 
 The **go-xla** project is [licensed under the Apache 2.0 license](https://github.com/gomlx/go-xla/blob/main/LICENSE).
 
