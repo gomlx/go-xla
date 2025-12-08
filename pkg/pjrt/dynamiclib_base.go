@@ -114,7 +114,7 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 				name, pluginSearchPaths)
 		}
 	}
-	klog.V(1).Infof("attempting to laod plugin from %s", pluginPath)
+	klog.V(1).Infof("attempting to load plugin from %s", pluginPath)
 
 	var err error
 	handle, err := loadPlugin(pluginPath)
@@ -141,8 +141,8 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 var (
 	// Patterns to extract the name from the plugins.
 	rePluginName = []*regexp.Regexp{
-		regexp.MustCompile(`^.*/pjrt_c_api_(\w+)_plugin.(so|dylib)$`),
-		regexp.MustCompile(`^.*/pjrt[-_]plugin[-_](\w+).(so|dylib)$`),
+		regexp.MustCompile(`^.*/pjrt_c_api_(.+)_plugin.(so|dylib)$`),
+		regexp.MustCompile(`^.*/pjrt[-_]plugin[-_](.+).(so|dylib)$`),
 	}
 )
 
@@ -174,8 +174,9 @@ func AvailablePlugins() (pluginsPaths map[string]string) {
 }
 
 func searchPlugin(searchName string) (path string, found bool) {
-	path, found = searchPlugins(searchName)[searchName]
-	return
+	pluginsFound := searchPlugins(searchName)
+	path, found = pluginsFound[searchName]
+	return path, found
 }
 
 func searchPlugins(searchName string) (pluginsPaths map[string]string) {
