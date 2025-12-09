@@ -144,7 +144,6 @@ func (e *Executable) GetMemoryStats() (onDevice, onHost ExecutableMemoryUsageSta
 	defer e.wrapper.plugin.returnArena(arena)
 
 	var args *C.PJRT_Executable_GetCompiledMemoryStats_Args
-
 	args = arenaAlloc[C.PJRT_Executable_GetCompiledMemoryStats_Args](arena)
 	args.struct_size = C.PJRT_Executable_GetCompiledMemoryStats_Args_STRUCT_SIZE
 	args.executable = e.wrapper.c
