@@ -30,7 +30,8 @@ var (
 			"which is where it downloads the plugin and Nvidia libraries from. "+
 			"For the TPU PJRT this is the version of the \"libtpu\" version in https://pypi.org/project/libtpu/ "+
 			"(e.g.: 0.0.27). ")
-	flagCache = flag.Bool("cache", true, "Use cache to store downloaded files. It defaults to true")
+	flagCache     = flag.Bool("cache", true, "Use cache to store downloaded files. It defaults to true")
+	flagVerbosity = flag.Int("verbosity", int(installer.Verbose), "Verbosity level: 0=quiet, 1=normal, 2=verbose")
 )
 
 func main() {
@@ -75,7 +76,7 @@ func main() {
 
 	// Parse flags.
 	flag.Parse()
-
+	verbosity := installer.VerbosityLevel(*flagVerbosity)
 	if *flagPlugin == "" || *flagPath == "" || *flagVersion == "" {
 		questions := []Question{
 			{Title: "Plugin to install", Flag: flag.CommandLine.Lookup("plugin"),
@@ -106,7 +107,15 @@ func main() {
 	if err != nil {
 		klog.Fatalf("Failed on error: %+v", err)
 	}
-	fmt.Printf("Installing PJRT plugin %s@%s to %s:\n", pluginName, version, installPath)
+
+	switch verbosity {
+	case installer.Verbose:
+		fmt.Printf("Installing PJRT plugin %s@%s to %s:\n", pluginName, version, installPath)
+	case installer.Normal:
+		fmt.Printf("\rInstalling PJRT plugin %s@%s to %s:%s", pluginName, version, installPath, installer.DeleteToEndOfLine)
+	case installer.Quiet:
+		// Nothing
+	}
 
 	pluginInstaller, ok := pluginInstallers[pluginName]
 	if !ok {

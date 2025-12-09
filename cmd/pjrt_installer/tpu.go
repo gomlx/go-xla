@@ -9,7 +9,7 @@ import (
 func init() {
 	for _, plugin := range []string{"tpu"} {
 		pluginInstallers[plugin] = func(plugin, version, installPath string) error {
-			return installer.TPUInstall(plugin, version, installPath, *flagCache)
+			return installer.TPUInstall(plugin, version, installPath, *flagCache, installer.VerbosityLevel(*flagVerbosity))
 		}
 		pluginValidators[plugin] = installer.TPUValidateVersion
 	}

@@ -30,7 +30,7 @@ const BinaryCPUReleasesRepo = "gomlx/pjrt-cpu-binaries"
 // If wantSHA256 is not empty, it will verify the hash of the downloaded file.
 //
 // It returns the path where the file was downloaded, and if the downloaded file is in a cache (so it shouldn't be removed after use).
-func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool) (filePath string, cached bool, err error) {
+func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosity VerbosityLevel) (filePath string, cached bool, err error) {
 	// Download the asset to a temporary file
 	var downloadedFile *os.File
 	var renameTo string
@@ -50,7 +50,7 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool) (filePat
 
 	} else {
 		// Create a temporary file.
-		filePattern := fileName + ".*"
+		filePattern := fileName + ".*.tar.gz"
 		downloadedFile, err = os.CreateTemp("", filePattern)
 		if err != nil {
 			return "", false, errors.Wrap(err, "failed to create temporary file")
@@ -146,15 +146,27 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool) (filePat
 	}
 
 	if cached {
-		fmt.Printf("- Reusing %s from cache%s\n", filePath, verifiedStatus)
+		switch verbosity {
+		case Verbose:
+			fmt.Printf("- Reusing %s from cache%s\n", filePath, verifiedStatus)
+		case Normal:
+			fmt.Printf("\r- Reusing %s from cache%s%s", filePath, verifiedStatus, DeleteToEndOfLine)
+		case Quiet:
+		}
 	} else {
-		fmt.Printf("- Downloaded %s to %s%s\n", downloadedBytesStr, filePath, verifiedStatus)
+		switch verbosity {
+		case Verbose:
+			fmt.Printf("- Downloaded %s to %s%s\n", downloadedBytesStr, filePath, verifiedStatus)
+		case Normal:
+			fmt.Printf("\r- Downloaded %s to %s%s%s", downloadedBytesStr, filePath, verifiedStatus, DeleteToEndOfLine)
+		case Quiet:
+		}
 		if useCache {
 			// Now the file is cached.
 			cached = true
 		}
 	}
-	return
+	return filePath, cached, nil
 }
 
 // ExtractFileFromZip searches for a file named fileName within the zipFilePath

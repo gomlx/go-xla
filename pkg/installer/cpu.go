@@ -65,7 +65,13 @@ func CPUGetDownloadURL(plugin, version string) (url string, err error) {
 }
 
 // CPUInstall the assets on the target directory.
-func CPUInstall(plugin, version, installPath string, useCache bool) error {
+func CPUInstall(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
+	// Sequence to clear the line and move to the next line, dependes on verbosity level.
+	eolSeq := "\n"
+	if verbosity == Normal {
+		eolSeq = DeleteToEndOfLine
+	}
+
 	var err error
 	if version == "latest" || version == "" {
 		version, err = GitHubGetLatestVersion()
@@ -90,7 +96,7 @@ func CPUInstall(plugin, version, installPath string, useCache bool) error {
 
 	// Download the asset to a temporary file.
 	sha256hash := "" // TODO: no hash for github releases. Is there a way to get them (or get a hardcoded table for all versions?)
-	downloadedFile, inCache, err := DownloadURLToTemp(assetURL, fmt.Sprintf("%s_%s", version, assetName), sha256hash, useCache)
+	downloadedFile, inCache, err := DownloadURLToTemp(assetURL, fmt.Sprintf("%s_%s", version, assetName), sha256hash, useCache, verbosity)
 	if err != nil {
 		return err
 	}
@@ -99,7 +105,9 @@ func CPUInstall(plugin, version, installPath string, useCache bool) error {
 	}
 
 	// Extract files
-	fmt.Printf("- Extracting files in %s to %s\n", downloadedFile, installPath)
+	if verbosity != Quiet {
+		fmt.Printf("\r- Extracting files in %s to %s%s", downloadedFile, installPath, eolSeq)
+	}
 	extractedFiles, err := Untar(downloadedFile, installPath)
 	if err != nil {
 		return err
@@ -107,10 +115,18 @@ func CPUInstall(plugin, version, installPath string, useCache bool) error {
 	if len(extractedFiles) == 0 {
 		return errors.Errorf("failed to extract files from %s", downloadedFile)
 	}
-	fmt.Printf("- Extracted %d file(s):\n", len(extractedFiles))
 	isLinked := false
+	if verbosity == Verbose {
+		fmt.Printf("- Extracted %d file(s):\n", len(extractedFiles))
+	}
 	for _, file := range extractedFiles {
-		fmt.Printf("  - %s\n", file)
+		switch verbosity {
+		case Verbose:
+			fmt.Printf("  - %s\n", file)
+		case Normal:
+			fmt.Printf("\r- Extracted %d file(s): %s%s", len(extractedFiles), file, DeleteToEndOfLine)
+		case Quiet:
+		}
 		baseFile := filepath.Base(file)
 		if !isLinked && strings.HasPrefix(baseFile, "pjrt_c_api_cpu_") && strings.HasSuffix(baseFile, "_plugin.so") {
 			// Link file to the default CPU plugin, without the version number.
@@ -121,13 +137,21 @@ func CPUInstall(plugin, version, installPath string, useCache bool) error {
 			if err := os.Symlink(baseFile, linkPath); err != nil {
 				return errors.Wrap(err, "failed to create symlink")
 			}
-			fmt.Printf("    Linked to %s\n", linkPath)
+			if verbosity == Verbose {
+				fmt.Printf("    Linked to %s\n", linkPath)
+			}
 			isLinked = true
 		}
 	}
-	fmt.Println()
-	fmt.Printf("✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)", version, installPath, plugin)
-	fmt.Println()
+	if verbosity == Verbose {
+		fmt.Println()
+	}
+	if verbosity != Quiet {
+		fmt.Printf("\r✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)\n", version, installPath, plugin)
+	}
+	if verbosity == Verbose {
+		fmt.Println()
+	}
 
 	return nil
 }

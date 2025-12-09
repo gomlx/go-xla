@@ -11,6 +11,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
+type VerbosityLevel int
+
+const (
+	Quiet VerbosityLevel = iota
+	Normal
+	Verbose
+)
+
+const DeleteToEndOfLine = "\x1b[J"
+
 // ReportError prints an error if it is not nil, but otherwise does nothing.
 func ReportError(err error) {
 	if err != nil {

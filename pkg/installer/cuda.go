@@ -22,7 +22,7 @@ import (
 // - Downloaded files sha256 match the ones on pypi.org
 //
 // If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded.
-func CudaInstall(plugin, version, installPath string, useCache bool) error {
+func CudaInstall(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
 	// Create the target directory.
 	var err error
 	installPath, err = ReplaceTildeInDir(installPath)
@@ -32,18 +32,24 @@ func CudaInstall(plugin, version, installPath string, useCache bool) error {
 	if err := os.MkdirAll(installPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create install directory in %s", installPath)
 	}
-	version, err = CudaInstallPJRT(plugin, version, installPath, useCache)
+	version, err = CudaInstallPJRT(plugin, version, installPath, useCache, verbosity)
 	if err != nil {
 		return err
 	}
-	if err := CudaInstallNvidiaLibraries(plugin, version, installPath, useCache); err != nil {
+	if err := CudaInstallNvidiaLibraries(plugin, version, installPath, useCache, verbosity); err != nil {
 		return err
 	}
 	cudaVersion := "13"
 	if plugin == "cuda12" {
 		cudaVersion = "12"
 	}
-	fmt.Printf("\n✅ Installed \"cuda\" PJRT and Nvidia libraries based on Jax version %s and CUDA version %s\n\n", version, cudaVersion)
+	if verbosity == Verbose {
+		fmt.Println()
+	}
+	fmt.Printf("\r✅ Installed \"cuda\" PJRT and Nvidia libraries based on Jax version %s and CUDA version %s\n", version, cudaVersion)
+	if verbosity == Verbose {
+		fmt.Println()
+	}
 	return nil
 }
 
@@ -58,7 +64,7 @@ func CudaInstall(plugin, version, installPath string, useCache bool) error {
 //
 // Returns the version that was installed -- it can be different if the requested version was "latest", in which case it
 // is translated to the actual version.
-func CudaInstallPJRT(plugin, version, installPath string, useCache bool) (string, error) {
+func CudaInstallPJRT(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) (string, error) {
 	// Make the directory that will hold the PJRT files.
 	if err := os.MkdirAll(installPath, 0755); err != nil {
 		return "", errors.Wrapf(err, "failed to create PJRT install directory in %s", installPath)
@@ -97,7 +103,7 @@ func CudaInstallPJRT(plugin, version, installPath string, useCache bool) (string
 	}
 
 	sha256hash := releaseInfo.Digests["sha256"]
-	downloadedJaxPJRTWHL, fileCached, err := DownloadURLToTemp(releaseInfo.URL, fmt.Sprintf("go-xla_%s_%s.whl", packageName, version), sha256hash, useCache)
+	downloadedJaxPJRTWHL, fileCached, err := DownloadURLToTemp(releaseInfo.URL, fmt.Sprintf("go-xla_%s_%s.whl", packageName, version), sha256hash, useCache, verbosity)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to download cuda PJRT wheel")
 	}
@@ -108,7 +114,13 @@ func CudaInstallPJRT(plugin, version, installPath string, useCache bool) (string
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to extract CUDA PJRT file from %q wheel", packageName)
 	}
-	fmt.Printf("- Installed %s %s to %s\n", plugin, version, pjrtOutputPath)
+	switch verbosity {
+	case Verbose:
+		fmt.Printf("- Installed %s %s to %s\n", plugin, version, pjrtOutputPath)
+	case Normal:
+		fmt.Printf("\r- Installed %s %s to %s%s", plugin, version, pjrtOutputPath, DeleteToEndOfLine)
+	case Quiet:
+	}
 	return version, nil
 }
 
@@ -158,7 +170,7 @@ func CudaGetPJRTPipInfo(plugin string) (*PipPackageInfo, string, error) {
 }
 
 // CudaInstallNvidiaLibraries installs the required NVIDIA libraries for CUDA.
-func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bool) error {
+func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
 	// Remove any previous version of the nvidia libraries and recreate it.
 	nvidiaLibsDir := filepath.Join(installPath, "nvidia")
 	if err := os.RemoveAll(nvidiaLibsDir); err != nil {
@@ -174,7 +186,9 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch the package info for %s", packageName)
 	}
-	fmt.Println("Dependencies:")
+	if verbosity == Verbose {
+		fmt.Println("Dependencies:")
+	}
 	deps, err := jaxCudaPluginInfo.ParseDependencies()
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse the dependencies for %s", packageName)
@@ -189,7 +203,7 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 
 	// Install the nvidia libraries found in the dependencies.
 	for _, dep := range nvidiaDependencies {
-		err = cudaInstallNvidiaLibrary(nvidiaLibsDir, dep, useCache)
+		err = cudaInstallNvidiaLibrary(nvidiaLibsDir, dep, useCache, verbosity)
 		if err != nil {
 			return err
 		}
@@ -218,7 +232,6 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 
 	// Link libraries that Nvidia is not able to find from the SDK path set.
 	libsPath := path.Dir(installPath)
-	fmt.Printf("libsPath: %q\n", libsPath)
 	switch plugin {
 	case "cuda13":
 		// Source of the symlink relative to the `lib` path.
@@ -237,7 +250,7 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 	return nil
 }
 
-func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache bool) error {
+func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache bool, verbosity VerbosityLevel) error {
 	info, err := GetPipInfo(dep.Package)
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch the package info for %s", dep.Package)
@@ -265,7 +278,7 @@ func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache 
 
 	// Download the ".whl" file (zip file format) for the selected version of the nvidia library..
 	sha256hash := selectedReleaseInfo.Digests["sha256"]
-	downloadedWHL, whlIsCached, err := DownloadURLToTemp(selectedReleaseInfo.URL, fmt.Sprintf("go-xla_%s_%s.whl", dep.Package, selectedVersion), sha256hash, useCache)
+	downloadedWHL, whlIsCached, err := DownloadURLToTemp(selectedReleaseInfo.URL, fmt.Sprintf("go-xla_%s_%s.whl", dep.Package, selectedVersion), sha256hash, useCache, verbosity)
 	if err != nil {
 		return errors.Wrapf(err, "failed to download %s wheel", dep.Package)
 	}
@@ -277,6 +290,11 @@ func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache 
 	if err := ExtractDirFromZip(downloadedWHL, "nvidia", nvidiaLibsDir); err != nil {
 		return errors.Wrapf(err, "failed to extract nvidia libraries from %s", downloadedWHL)
 	}
-	fmt.Printf("- Installed %s@%s\n", dep.Package, selectedVersion)
+	switch verbosity {
+	case Verbose:
+		fmt.Printf("- Installed %s@%s\n", dep.Package, selectedVersion)
+	case Normal:
+		fmt.Printf("\r- Installed %s@%s%s", dep.Package, selectedVersion, DeleteToEndOfLine)
+	}
 	return nil
 }

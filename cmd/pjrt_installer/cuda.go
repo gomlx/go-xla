@@ -9,7 +9,7 @@ import (
 func init() {
 	for _, plugin := range []string{"cuda13", "cuda12"} {
 		pluginInstallers[plugin] = func(plugin, version, installPath string) error {
-			return installer.CudaInstall(plugin, version, installPath, *flagCache)
+			return installer.CudaInstall(plugin, version, installPath, *flagCache, installer.VerbosityLevel(*flagVerbosity))
 		}
 		pluginValidators[plugin] = installer.CudaValidateVersion
 	}

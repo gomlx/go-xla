@@ -18,7 +18,7 @@ import (
 // Checks performed:
 // - Version exists
 // - Downloaded files sha256 match the ones on pypi.org
-func TPUInstall(plugin, version, installPath string, useCache bool) error {
+func TPUInstall(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
 	// Create the target directory.
 	var err error
 	installPath, err = ReplaceTildeInDir(installPath)
@@ -58,7 +58,7 @@ func TPUInstall(plugin, version, installPath string, useCache bool) error {
 	}
 
 	sha256hash := releaseInfo.Digests["sha256"]
-	downloadedJaxPJRTWHL, fileCached, err := DownloadURLToTemp(releaseInfo.URL, fmt.Sprintf("gopjrt_%s_%s.whl", packageName, version), sha256hash, useCache)
+	downloadedJaxPJRTWHL, fileCached, err := DownloadURLToTemp(releaseInfo.URL, fmt.Sprintf("gopjrt_%s_%s.whl", packageName, version), sha256hash, useCache, verbosity)
 	if err != nil {
 		return errors.Wrap(err, "failed to download cuda PJRT wheel")
 	}
@@ -69,9 +69,17 @@ func TPUInstall(plugin, version, installPath string, useCache bool) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to extract TPU PJRT file from %q wheel", packageName)
 	}
-	fmt.Printf("- Installed %s %s to %s\n", plugin, version, pjrtOutputPath)
 
-	fmt.Printf("\n✅ Installed \"tpu\" PJRT based on PyPI version %s\n\n", version)
+	if verbosity == Verbose {
+		fmt.Printf("- Installed %s %s to %s\n", plugin, version, pjrtOutputPath)
+		fmt.Println()
+	}
+	if verbosity != Quiet {
+		fmt.Printf("\r✅ Installed \"tpu\" PJRT based on PyPI version %s\n", version)
+	}
+	if verbosity == Verbose {
+		fmt.Println()
+	}
 	return nil
 }
 

@@ -9,7 +9,7 @@ import (
 func init() {
 	for _, plugin := range []string{"linux", installer.AmazonLinux} {
 		pluginInstallers[plugin] = func(plugin, version, installPath string) error {
-			return installer.CPUInstall(plugin, version, installPath, *flagCache)
+			return installer.CPUInstall(plugin, version, installPath, *flagCache, installer.VerbosityLevel(*flagVerbosity))
 		}
 		pluginValidators[plugin] = installer.CPUValidateVersion
 	}
