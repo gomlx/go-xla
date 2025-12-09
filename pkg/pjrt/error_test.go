@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestError(t *testing.T) {
@@ -23,14 +22,14 @@ func TestError(t *testing.T) {
 
 	// Take program and compile.
 	err := mainFn.Return(fXY)
-	require.NoError(t, err, "Failed to set return value")
+	requireNoError(t, err, "Failed to set return value")
 	compBytes := capture(builder.Build()).Test(t)
 	exec, err := client.Compile().WithStableHLO(compBytes).Done()
-	require.NoErrorf(t, err, "Failed to compile program")
+	requireNoError(t, err, "Failed to compile program")
 
 	// Call with no arguments: should return an error.
 	_, err = exec.Execute().Done()
-	require.ErrorContains(t, err, "PJRT error")
-	require.ErrorContains(t, err, "Execution supplied 0 buffers but compiled program expected 2 buffers")
+	requireErrorContains(t, err, "PJRT error")
+	requireErrorContains(t, err, "Execution supplied 0 buffers but compiled program expected 2 buffers")
 	fmt.Printf("Received expected error: %s", err)
 }

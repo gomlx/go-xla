@@ -10,7 +10,6 @@ import (
 
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
 
@@ -31,7 +30,7 @@ func capture[T any](value T, err error) errTester[T] {
 }
 
 func (e errTester[T]) Test(t *testing.T) T {
-	require.NoError(t, e.err)
+	requireNoError(t, e.err)
 	return e.value
 }
 
@@ -51,14 +50,14 @@ func must1[T any](t T, err error) T {
 func getPJRTClient(t *testing.T) *Client {
 	// PJRT plugin and create a client.
 	plugin, err := GetPlugin(*FlagPluginName)
-	require.NoError(t, err, "Failed to get plugin %q", *FlagPluginName)
+	requireNoError(t, err, "Failed to get plugin %q", *FlagPluginName)
 	attributes := plugin.Attributes()
 	fmt.Printf("Loaded PJRT plugin %s with %d atributes:\n", plugin, len(attributes))
 	for key, value := range attributes {
 		fmt.Printf("\t%s: %+v\n", key, value)
 	}
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	return client
 }
 
@@ -67,7 +66,7 @@ func getPJRTClient(t *testing.T) *Client {
 func compile(t *testing.T, client *Client, comp XlaComputation) (exec *LoadedExecutable) {
 	var err error
 	exec, err = client.Compile().WithComputation(comp).Done()
-	require.NoErrorf(t, err, "Failed to compile program")
+	requireNoError(t, err, "Failed to compile program")
 	return
 }
 
@@ -76,62 +75,62 @@ func compile(t *testing.T, client *Client, comp XlaComputation) (exec *LoadedExe
 // Any errors fail the test.
 func execWithScalars[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input T) T {
 	inputBuffer, err := ScalarToBuffer(client, input)
-	require.NoErrorf(t, err, "Failed to create on-device buffer for input %v", input)
-	defer func() { require.NoError(t, inputBuffer.Destroy()) }()
+	requireNoError(t, err, "Failed to create on-device buffer for input %v", input)
+	defer func() { requireNoError(t, inputBuffer.Destroy()) }()
 
 	outputBuffers, err := exec.Execute(inputBuffer).Done()
-	require.NoErrorf(t, err, "Failed to execute on input %v", input)
-	require.Len(t, outputBuffers, 1, "Expected only one output")
-	defer func() { require.NoError(t, outputBuffers[0].Destroy()) }()
+	requireNoError(t, err, "Failed to execute on input %v", input)
+	assertLen(t, outputBuffers, 1, "Expected only one output")
+	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()
 
 	// Transfer output on-device buffer to a "host" value (in Go).
 	output, err := BufferToScalar[T](outputBuffers[0])
 	fmt.Printf("  > f(%v)=%v\n", input, output)
-	require.NoErrorf(t, err, "Failed to transfer results of %q execution on input %d", exec.Name, input)
+	requireNoError(t, err, "Failed to transfer results of %q execution on input %d", exec.Name, input)
 	return output
 }
 
 func execWithSlices[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input []T) (flat []T, dims []int) {
 	inputBuffer, err := ArrayToBuffer(client, input, len(input))
-	require.NoErrorf(t, err, "Failed to create on-device buffer for input %v", input)
-	defer func() { require.NoError(t, inputBuffer.Destroy()) }()
+	requireNoError(t, err, "Failed to create on-device buffer for input %v", input)
+	defer func() { requireNoError(t, inputBuffer.Destroy()) }()
 
 	outputBuffers, err := exec.Execute(inputBuffer).Done()
-	require.NoErrorf(t, err, "Failed to execute on input %v", input)
-	require.Len(t, outputBuffers, 1, "Expected only one output")
-	defer func() { require.NoError(t, outputBuffers[0].Destroy()) }()
+	requireNoError(t, err, "Failed to execute on input %v", input)
+	assertLen(t, outputBuffers, 1, "Expected only one output")
+	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()
 
 	// Transfer output on-device buffer to a "host" value (in Go).
 	flat, dims, err = BufferToArray[T](outputBuffers[0])
 	fmt.Printf("  > f(%v)=(%T%v) %v\n", input, flat[0], dims, flat)
-	require.NoErrorf(t, err, "Failed to transfer results of %q execution on input %d", exec.Name, input)
+	requireNoError(t, err, "Failed to transfer results of %q execution on input %d", exec.Name, input)
 	return
 }
 
 func execArrayOutput[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (flat []T, dims []int) {
 	outputBuffers := capture(exec.Execute().Done()).Test(t)
-	require.Len(t, outputBuffers, 1, "Expected only one output")
-	defer func() { require.NoError(t, outputBuffers[0].Destroy()) }()
+	assertLen(t, outputBuffers, 1, "Expected only one output")
+	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()
 
 	// Transfer output on-device buffer to a "host" value (in Go).
 	var err error
 	flat, dims, err = BufferToArray[T](outputBuffers[0])
 	var v T
 	fmt.Printf("  > f()=(%T%v) %v\n", v, dims, flat)
-	require.NoErrorf(t, err, "Failed to transfer results of %q execution", exec.Name)
+	requireNoError(t, err, "Failed to transfer results of %q execution", exec.Name)
 	return
 }
 
 // execScalarOutput executes the LoadedExecutable with no inputs, and a scalar output of the given type.
 func execScalarOutput[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (value T) {
 	outputBuffers := capture(exec.Execute().Done()).Test(t)
-	require.Len(t, outputBuffers, 1, "Expected only one output")
-	defer func() { require.NoError(t, outputBuffers[0].Destroy()) }()
+	assertLen(t, outputBuffers, 1, "Expected only one output")
+	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()
 
 	// Transfer output on-device buffer to a "host" value (in Go).
 	var err error
 	value, err = BufferToScalar[T](outputBuffers[0])
 	fmt.Printf("  > f()=(%T) %v\n", value, value)
-	require.NoErrorf(t, err, "Failed to transfer results of %q execution", exec.Name)
+	requireNoError(t, err, "Failed to transfer results of %q execution", exec.Name)
 	return
 }

@@ -64,11 +64,34 @@ package xlabuilder_test
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	. "github.com/gomlx/go-xla/xlabuilder"
 	"testing"
 )
+
+// requireNoError fails the test immediately if err is not nil.
+func requireNoError(t *testing.T, err error, msgAndArgs ...string) {
+	t.Helper()
+	if err != nil {
+		if len(msgAndArgs) > 0 {
+			t.Fatalf("%s: %v", msgAndArgs[0], err)
+		} else {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
+// assertEqual fails the test immediately if expected != actual.
+func assertEqual[T comparable](t *testing.T, expected, actual T, msgAndArgs ...string) {
+	t.Helper()
+	if expected != actual {
+		if len(msgAndArgs) > 0 {
+			t.Fatalf("%s: expected %v, got %v", msgAndArgs[0], expected, actual)
+		} else {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+	}
+}
 
 // TestSimpleOps simply concatenate all unary and then binary ops in a nonsensical computation, just to check
 // that the HLO proto is actually generated -- and that all simple ops run.
@@ -80,73 +103,73 @@ func TestSimpleOps(t *testing.T) {
 
 	// Unary ops:{{range .}}{{if eq .Type "one"}}
 	x, err = {{.Name}}(x)
-	require.NoError(t, err, "Failed to build unary operation {{.Name}}"){{end}}{{end}}
+	requireNoError(t, err, "Failed to build unary operation {{.Name}}"){{end}}{{end}}
 
 	// Binary ops:{{range .}}{{if eq .Type "two"}}
 	x, err = {{.Name}}(x, x)
-	require.NoError(t, err, "Failed to build binary operation {{.Name}}"){{end}}{{end}}
+	requireNoError(t, err, "Failed to build binary operation {{.Name}}"){{end}}{{end}}
 
 	// Binary-comparison op.
 	var result, cmp *Op{{range .}}{{if eq .Type "two_cmp"}}
 	cmp, err = {{.Name}}(x, x)
-	require.NoError(t, err, "Failed to build binary comparison operation {{.Name}}")
+	requireNoError(t, err, "Failed to build binary comparison operation {{.Name}}")
 	if result == nil {
 		result = cmp
 	} else {
 		result, err = LogicalAnd(result, cmp)
-		require.NoError(t, err, "Failed to build logical And operation when aggregating the result from {{.Name}}")
+		requireNoError(t, err, "Failed to build logical And operation when aggregating the result from {{.Name}}")
 	}{{end}}{{end}}
 
 	// Other ops not tested above.
 	x, err = Dot(v, v)
-	require.NoError(t, err, "Failed to build Dot operation")
+	requireNoError(t, err, "Failed to build Dot operation")
 	var c *Op
 	c, err = Complex(x, x)
-	require.NoError(t, err, "Failed to build Complex operation")
+	requireNoError(t, err, "Failed to build Complex operation")
 	imgV, err := Imag(c)
-	require.NoError(t, err, "Failed to build Imag operation")
+	requireNoError(t, err, "Failed to build Imag operation")
 	realV, err := Real(c)
-	require.NoError(t, err, "Failed to build Real operation")
+	requireNoError(t, err, "Failed to build Real operation")
 	same, err := Equal(imgV, realV)
-	require.NoError(t, err, "Failed to build Equal operation")
+	requireNoError(t, err, "Failed to build Equal operation")
 	result, err = LogicalAnd(result, same)
-	require.NoError(t, err, "Failed to build And operation")
+	requireNoError(t, err, "Failed to build And operation")
 
 	result, err = IsFinite(x)
-	require.NoError(t, err, "Failed to build IsFinite operation")
-	require.Equal(t, dtypes.Bool, result.Shape.DType, "IsFinite should return booleans")
+	requireNoError(t, err, "Failed to build IsFinite operation")
+	assertEqual(t, dtypes.Bool, result.Shape.DType, "IsFinite should return booleans")
 
-	require.NoError(t, err, "Failed to build And operation")
+	requireNoError(t, err, "Failed to build And operation")
 	i, err = Clz(i)
-	require.NoError(t, err, "Failed to build Clz operation")
+	requireNoError(t, err, "Failed to build Clz operation")
 
 	i, err = PopulationCount(i)
-	require.NoError(t, err, "Failed to build PopulationCount operation")
+	requireNoError(t, err, "Failed to build PopulationCount operation")
 	same, err = Equal(i, i)
-	require.NoError(t, err, "Failed to build Equal operation")
+	requireNoError(t, err, "Failed to build Equal operation")
 
 	result, err = BitwiseOr(result, same)
-	require.NoError(t, err, "Failed to build Or operation")
+	requireNoError(t, err, "Failed to build Or operation")
 	result, err = BitwiseAnd(result, same)
-	require.NoError(t, err, "Failed to build And operation")
+	requireNoError(t, err, "Failed to build And operation")
 	result, err = BitwiseXor(result, same)
-	require.NoError(t, err, "Failed to build Xor operation")
+	requireNoError(t, err, "Failed to build Xor operation")
 	i, err = BitwiseNot(i)
-	require.NoError(t, err, "Failed to build unary operation BitwiseNot")
+	requireNoError(t, err, "Failed to build unary operation BitwiseNot")
 
 	result, err = LogicalOr(result, same)
-	require.NoError(t, err, "Failed to build Or operation")
+	requireNoError(t, err, "Failed to build Or operation")
 	result, err = LogicalAnd(result, same)
-	require.NoError(t, err, "Failed to build And operation")
+	requireNoError(t, err, "Failed to build And operation")
 	result, err = LogicalXor(result, same)
-	require.NoError(t, err, "Failed to build Xor operation")
+	requireNoError(t, err, "Failed to build Xor operation")
 	i, err = LogicalNot(i)
-	require.NoError(t, err, "Failed to build unary operation LogicalNot")
+	requireNoError(t, err, "Failed to build unary operation LogicalNot")
 
 
 	// Get computation created: result depends on all of them.
 	comp, err := builder.Build(result)
-	require.NoError(t, err, "Failed to build the computation after setting all the ops")
+	requireNoError(t, err, "Failed to build the computation after setting all the ops")
 	fmt.Printf("HloModule proto:\n%s\n\n", comp.TextHLO())
 }
 `))

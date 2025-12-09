@@ -10,14 +10,13 @@ import (
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestScalarDataToRaw(t *testing.T) {
 	rawData, dtype, dimensions := ScalarToRaw(uint32(3))
-	require.Equal(t, dtype, dtypes.Uint32)
-	require.Empty(t, dimensions)
-	require.Equal(t, uint32(3), *(*uint32)(unsafe.Pointer(unsafe.SliceData(rawData))))
+	assertEqual(t, dtype, dtypes.Uint32)
+	assertEmpty(t, dimensions)
+	assertEqual(t, uint32(3), *(*uint32)(unsafe.Pointer(unsafe.SliceData(rawData))))
 }
 
 func testTransfersImpl[T interface {
@@ -27,65 +26,65 @@ func testTransfersImpl[T interface {
 	input := []T{1, 2, 3}
 	fmt.Printf("From %#v\n", input)
 	buffer, err := ArrayToBuffer(client, input, 3, 1)
-	require.NoError(t, err)
-	require.False(t, buffer.IsShared())
+	requireNoError(t, err)
+	assertFalse(t, buffer.IsShared())
 
 	output, outputDims, err := BufferToArray[T](buffer)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	fmt.Printf("\t> output=%#v\n", output)
-	require.Equal(t, input, output)
-	require.Equal(t, []int{3, 1}, outputDims)
+	assertEqualSlice(t, input, output)
+	assertEqualSlice(t, []int{3, 1}, outputDims)
 
 	flat, outputDims, err := buffer.ToFlatDataAndDimensions()
-	require.NoError(t, err)
-	require.Equal(t, input, flat)
-	require.Equal(t, []int{3, 1}, outputDims)
+	requireNoError(t, err)
+	assertEqualSlice(t, input, flat.([]T))
+	assertEqualSlice(t, []int{3, 1}, outputDims)
 
 	gotDevice, err := buffer.Device()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	wantDevice := client.AddressableDevices()[0]
-	require.Equal(t, wantDevice.LocalHardwareID(), gotDevice.LocalHardwareID())
-	require.Equal(t, 0, client.NumForDevice(gotDevice))
+	assertEqual(t, wantDevice.LocalHardwareID(), gotDevice.LocalHardwareID())
+	assertEqual(t, 0, client.NumForDevice(gotDevice))
 
 	// Try an invalid transfer: it should complain about the invalid dtype.
 	_, _, err = BufferToArray[complex128](buffer)
 	fmt.Printf("\t> expected wrong dtype error: %v\n", err)
-	require.Error(t, err)
+	requireError(t, err)
 
 	// Transfer scalars.
 	from := T(13)
 	fmt.Printf("From %T(%v)\n", from, from)
 	buffer, err = ScalarToBuffer(client, from)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	to, err := BufferToScalar[T](buffer)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	fmt.Printf("\t> got %v\n", to)
-	require.Equal(t, from, to)
+	assertEqual(t, from, to)
 
 	// ArrayToBuffer can also be used to transfer a scalar.
 	from = T(19)
 	fmt.Printf("From %T(%v)\n", from, from)
 	buffer, err = ArrayToBuffer(client, []T{from})
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	flatValues, dimensions, err := BufferToArray[T](buffer) // Check that it actually returns a scalar.
-	require.NoError(t, err)
-	require.Len(t, dimensions, 0) // That means, it is a scalar.
+	requireNoError(t, err)
+	assertLen(t, dimensions, 0) // That means, it is a scalar.
 	fmt.Printf("\t> got %v\n", flatValues[0])
-	require.Equal(t, from, flatValues[0])
+	assertEqual(t, from, flatValues[0])
 }
 
 func TestTransfers(t *testing.T) {
 	plugin, err := GetPlugin(*FlagPluginName)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	fmt.Printf("Loaded %s\n", plugin)
 
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	fmt.Printf("%s\n", client)
 
 	devices := client.AddressableDevices()
-	require.NotEmptyf(t, devices, "No addressable devices for client on %s", plugin)
+	assertNotEmpty(t, devices, "No addressable devices for client on %s", plugin)
 
 	testTransfersImpl[float64](t, client)
 	testTransfersImpl[float32](t, client)
@@ -93,16 +92,16 @@ func TestTransfers(t *testing.T) {
 	testTransfersImpl[int8](t, client)
 
 	err = client.Destroy()
-	require.NoErrorf(t, err, "Failed to destroy client on %s", plugin)
+	requireNoError(t, err, "Failed to destroy client on %s", plugin)
 }
 
 func TestBufferProperties(t *testing.T) {
 	plugin, err := GetPlugin(*FlagPluginName)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	fmt.Printf("Loaded %s\n", plugin)
 
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	fmt.Printf("%s\n", client)
 
 	{ // float32[3,4]
@@ -110,35 +109,35 @@ func TestBufferProperties(t *testing.T) {
 		data := make([]float32, dims[0]*dims[1])
 
 		buf, err := ArrayToBuffer(client, data, dims...)
-		require.NoError(t, err)
+		requireNoError(t, err)
 		bufDims, err := buf.Dimensions()
-		require.NoError(t, err)
-		require.Equal(t, dims, bufDims)
+		requireNoError(t, err)
+		assertEqualSlice(t, dims, bufDims)
 		dtype, err := buf.DType()
-		require.NoError(t, err)
-		require.Equal(t, dtypes.Float32, dtype)
+		requireNoError(t, err)
+		assertEqual(t, dtypes.Float32, dtype)
 	}
 
 	{ // Scalar uint8
 		buf, err := ScalarToBuffer(client, uint8(3))
-		require.NoError(t, err)
+		requireNoError(t, err)
 		bufDims, err := buf.Dimensions()
-		require.NoError(t, err)
-		require.Zero(t, len(bufDims))
+		requireNoError(t, err)
+		assertZero(t, len(bufDims))
 		dtype, err := buf.DType()
-		require.NoError(t, err)
-		require.Equal(t, dtypes.Uint8, dtype)
+		requireNoError(t, err)
+		assertEqual(t, dtypes.Uint8, dtype)
 	}
 }
 
 func TestBufferCopyToDevice(t *testing.T) {
 	plugin, err := GetPlugin(*FlagPluginName)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	defer func() {
 		err := client.Destroy()
-		require.NoError(t, err)
+		requireNoError(t, err)
 	}()
 
 	devices := client.AddressableDevices()
@@ -150,35 +149,35 @@ func TestBufferCopyToDevice(t *testing.T) {
 	device0 := devices[0]
 	from := float32(42.0)
 	bufferDev0, err := ScalarToBufferOnDeviceNum(client, 0, from)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer func() {
 		err := bufferDev0.Destroy()
-		require.NoError(t, err)
+		requireNoError(t, err)
 	}()
 
 	// Verify it's on device 0
 	bufferDevice, err := bufferDev0.Device()
-	require.NoError(t, err)
-	require.Equal(t, device0.LocalHardwareID(), bufferDevice.LocalHardwareID())
+	requireNoError(t, err)
+	assertEqual(t, device0.LocalHardwareID(), bufferDevice.LocalHardwareID())
 
 	// Copy buffer to the second device.
 	device1 := devices[1]
 	bufferDev1, err := bufferDev0.CopyToDevice(device1)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer func() {
 		err := bufferDev1.Destroy()
-		require.NoError(t, err)
+		requireNoError(t, err)
 	}()
 
 	// Verify the new buffer is on device 1.
 	bufferDevice, err = bufferDev1.Device()
-	require.NoError(t, err)
-	require.Equal(t, device1.LocalHardwareID(), bufferDevice.LocalHardwareID())
+	requireNoError(t, err)
+	assertEqual(t, device1.LocalHardwareID(), bufferDevice.LocalHardwareID())
 
 	// Verify the data is the same.
 	to, err := BufferToScalar[float32](bufferDev1)
-	require.NoError(t, err)
-	require.Equal(t, from, to)
+	requireNoError(t, err)
+	assertEqual(t, from, to)
 }
 
 var flagForceSharedBuffer = flag.Bool(
@@ -212,7 +211,7 @@ func TestCreateViewOfDeviceBuffer(t *testing.T) {
 	storage := AlignedAlloc(shape.Memory(), BufferAlignment)
 	defer AlignedFree(storage)
 	inputBuffer, err := client.CreateViewOfDeviceBuffer(storage, dtype, shape.Dimensions)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer func() {
 		err := inputBuffer.Destroy()
 		if err != nil {
@@ -224,27 +223,27 @@ func TestCreateViewOfDeviceBuffer(t *testing.T) {
 	for ii := range flatData {
 		flatData[ii] = float32(ii)
 	}
-	require.True(t, inputBuffer.IsShared())
+	assertTrue(t, inputBuffer.IsShared())
 
 	results, err := exec.Execute(inputBuffer).DonateNone().Done()
-	require.NoError(t, err)
-	require.Len(t, results, 1)
+	requireNoError(t, err)
+	assertLen(t, results, 1)
 
 	gotFlat, gotDims, err := BufferToArray[float32](results[0])
-	require.NoError(t, err)
-	require.Equal(t, shape.Dimensions, gotDims)
-	require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, gotFlat)
+	requireNoError(t, err)
+	assertEqualSlice(t, shape.Dimensions, gotDims)
+	assertEqualSlice(t, []float32{1, 2, 3, 4, 5, 6}, gotFlat)
 
 	// Change the buffer directly, and see that we can reuse the buffer in PJRT, without the extra transfer.
 	flatData[1] = 11
 	results, err = exec.Execute(inputBuffer).DonateNone().Done()
-	require.NoError(t, err)
-	require.Len(t, results, 1)
+	requireNoError(t, err)
+	assertLen(t, results, 1)
 	gotFlat, gotDims, err = BufferToArray[float32](results[0])
-	require.NoError(t, err)
-	require.Equal(t, shape.Dimensions, gotDims)
-	require.Equal(t, []float32{1, 12, 3, 4, 5, 6}, gotFlat)
-	require.NoError(t, inputBuffer.Destroy())
+	requireNoError(t, err)
+	assertEqualSlice(t, shape.Dimensions, gotDims)
+	assertEqualSlice(t, []float32{1, 12, 3, 4, 5, 6}, gotFlat)
+	requireNoError(t, inputBuffer.Destroy())
 }
 
 func TestNewSharedBuffer(t *testing.T) {
@@ -273,7 +272,7 @@ func TestNewSharedBuffer(t *testing.T) {
 
 	// Input is created as a "Device Buffer View"
 	inputBuffer, flatAny, err := client.NewSharedBuffer(dtype, shape.Dimensions)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer func() {
 		err := inputBuffer.Destroy()
 		if err != nil {
@@ -285,28 +284,28 @@ func TestNewSharedBuffer(t *testing.T) {
 	for ii := range flatData {
 		flatData[ii] = float32(ii)
 	}
-	require.True(t, inputBuffer.IsShared())
+	assertTrue(t, inputBuffer.IsShared())
 
 	results, err := exec.Execute(inputBuffer).DonateNone().Done()
-	require.NoError(t, err)
-	require.Len(t, results, 1)
+	requireNoError(t, err)
+	assertLen(t, results, 1)
 
 	gotFlat, gotDims, err := BufferToArray[float32](results[0])
-	require.NoError(t, err)
-	require.Equal(t, shape.Dimensions, gotDims)
-	require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, gotFlat)
+	requireNoError(t, err)
+	assertEqualSlice(t, shape.Dimensions, gotDims)
+	assertEqualSlice(t, []float32{1, 2, 3, 4, 5, 6}, gotFlat)
 
 	// Change the buffer directly, and see that we can reuse the buffer in PJRT, without the extra transfer.
 	flatData[1] = 11
 	results, err = exec.Execute(inputBuffer).DonateNone().Done()
-	require.NoError(t, err)
-	require.Len(t, results, 1)
+	requireNoError(t, err)
+	assertLen(t, results, 1)
 	gotFlat, gotDims, err = BufferToArray[float32](results[0])
-	require.NoError(t, err)
-	require.Equal(t, shape.Dimensions, gotDims)
-	require.Equal(t, []float32{1, 12, 3, 4, 5, 6}, gotFlat)
+	requireNoError(t, err)
+	assertEqualSlice(t, shape.Dimensions, gotDims)
+	assertEqualSlice(t, []float32{1, 12, 3, 4, 5, 6}, gotFlat)
 
-	require.NoError(t, inputBuffer.Destroy())
+	requireNoError(t, inputBuffer.Destroy())
 }
 
 func TestBufferData(t *testing.T) {
@@ -335,7 +334,7 @@ func TestBufferData(t *testing.T) {
 
 	// Input is created as a "Device Buffer View"
 	inputBuffer, flatAny, err := client.NewSharedBuffer(dtype, shape.Dimensions)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer func() {
 		err := inputBuffer.Destroy()
 		if err != nil {
@@ -347,15 +346,15 @@ func TestBufferData(t *testing.T) {
 	for ii := range flatData {
 		flatData[ii] = float32(ii)
 	}
-	require.True(t, inputBuffer.IsShared())
+	assertTrue(t, inputBuffer.IsShared())
 
 	results, err := exec.Execute(inputBuffer).DonateNone().Done()
-	require.NoError(t, err)
-	require.Len(t, results, 1)
+	requireNoError(t, err)
+	assertLen(t, results, 1)
 
 	flatOutput, err := results[0].Data()
-	require.NoError(t, err)
-	require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, flatOutput.([]float32))
+	requireNoError(t, err)
+	assertEqualSlice(t, []float32{1, 2, 3, 4, 5, 6}, flatOutput.([]float32))
 }
 
 func TestBufferDestroyAfterClient(t *testing.T) {
@@ -366,22 +365,22 @@ func TestBufferDestroyAfterClient(t *testing.T) {
 
 	// Create buffer
 	buffer1, err := ScalarToBuffer(client, float32(7))
-	require.NoError(t, err)
+	requireNoError(t, err)
 	buffer2, err := ScalarToBuffer(client, float32(42))
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	// Destroy buffer1 before the client is destroyed.
-	require.NotPanics(t, func() {
+	requireNotPanics(t, func() {
 		err = buffer1.Destroy()
 	})
 
 	// Destroy the client.
 	err = client.Destroy()
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	// Destroy buffer2 after the client is destroyed: it should be safe!
-	require.NotPanics(t, func() {
+	requireNotPanics(t, func() {
 		err = buffer2.Destroy()
 	})
-	require.NoError(t, err)
+	requireNoError(t, err)
 }

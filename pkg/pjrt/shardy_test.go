@@ -7,16 +7,15 @@ import (
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestShardy(t *testing.T) {
 	plugin, err := pjrt.GetPlugin(*pjrt.FlagPluginName)
-	require.NoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
+	requireNoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
 	fmt.Printf("Loaded %s\n", plugin)
 	fmt.Printf("\t- Attributes=%+v\n", plugin.Attributes())
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	fmt.Printf("	client: %s\n", client)
 
 	// We will test it with 2 devices.
@@ -47,7 +46,7 @@ func TestShardy(t *testing.T) {
 			WithShardy(2).
 			WithDeviceAssignment(deviceAssignment).
 			Done()
-		require.NoErrorf(t, err, "failed to compile program: \n%s", program)
+		requireNoError(t, err, "failed to compile program: \n%s", program)
 		defer func() {
 			err := loadedExec.Destroy()
 			if err != nil {
@@ -65,7 +64,7 @@ func TestShardy(t *testing.T) {
 			FromFlatDataWithDimensions([]float32{0, 0.1, 0.2}, []int{1, 3}).
 			Done())
 		outputs, err := loadedExec.Execute(x0, x1).DonateAll().Done()
-		require.NoErrorf(t, err, "failed to execute program: \n%s", program)
+		requireNoError(t, err, "failed to execute program: \n%s", program)
 
 		// Check results.
 		requireBuffersEqual(t, []FlatAndDims{
@@ -91,21 +90,27 @@ func requireBuffersEqual(t *testing.T, expected []FlatAndDims, got []*pjrt.Buffe
 			}
 		}
 	}()
-	require.Len(t, got, len(expected))
+	assertLen(t, got, len(expected))
 	for i, b := range got {
 		gotFlat, gotDims, err := b.ToFlatDataAndDimensions()
+		requireNoError(t, err, "failed to get buffer contents for output #%d", i)
 		expectedShape, err := shapes.FromAnyValue(expected[i].Flat)
-		require.NoErrorf(t, err, "failed to get shape for output #%d: %v", i, expected[i].Flat)
+		requireNoError(t, err, "failed to get shape for output #%d: %v", i, expected[i].Flat)
 		dtype := expectedShape.DType
 		fmt.Printf("\t - output #%d:\n\t   - Got: dims=%v, flat_values=%v\n", i, gotDims, gotFlat)
 		fmt.Printf("\t   - Want(%s): dims=%v, flat_values=%v\n", dtype, expected[i].Dims, expected[i].Flat)
-		require.NoErrorf(t, err, "failed to get buffer contents for output #%d, expected flat value %v", i, expected[i].Flat)
-		require.Equalf(t, expected[i].Dims, gotDims, "output #%d dims don't match", i)
+		requireNoError(t, err, "failed to get buffer contents for output #%d, expected flat value %v", i, expected[i].Flat)
+		assertEqualSlice(t, expected[i].Dims, gotDims, "output #%d dims don't match", i)
 		switch dtype {
 		case dtypes.Float64, dtypes.Float32:
-			require.InDeltaSlicef(t, expected[i].Flat, gotFlat, 1e-4, "output #%d flat values don't match", i)
+			switch v := expected[i].Flat.(type) {
+			case []float32:
+				assertInDeltaSlice(t, v, gotFlat.([]float32), 1e-4, "output #%d flat values don't match", i)
+			case []float64:
+				assertInDeltaSlice(t, v, gotFlat.([]float64), 1e-4, "output #%d flat values don't match", i)
+			}
 		default:
-			require.Equalf(t, expected[i].Flat, gotFlat, "output #%d flat values don't match", i)
+			assertDeepEqual(t, expected[i].Flat, gotFlat, "output #%d flat values don't match", i)
 		}
 	}
 }

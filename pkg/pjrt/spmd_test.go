@@ -9,7 +9,6 @@ import (
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func panicf(format string, args ...any) {
@@ -55,11 +54,11 @@ module @TestDistributedAllReduce_multiple_values__different_dtype attributes {st
 func TestCollectiveAllReduce(t *testing.T) {
 	// PJRT plugin and create a client.
 	plugin, err := pjrt.GetPlugin(*pjrt.FlagPluginName)
-	require.NoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
+	requireNoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
 	fmt.Printf("Loaded %s\n", plugin)
 	fmt.Printf("\t- Attributes=%+v\n", plugin.Attributes())
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	fmt.Printf("	client: %s\n", client)
 
 	// Verify that we have enough devices.
@@ -74,7 +73,7 @@ func TestCollectiveAllReduce(t *testing.T) {
 		WithStableHLO(allReduceProgram).
 		WithSPMD(2).
 		Done()
-	require.NoErrorf(t, err, "Failed to compile program")
+	requireNoError(t, err, "Failed to compile program")
 	fmt.Printf("Compiled program: name=%s, #outputs=%d\n", loadedExec.Name, loadedExec.NumOutputs)
 }
 
@@ -83,11 +82,11 @@ func TestCollectiveAllReduce(t *testing.T) {
 func TestSPMD(t *testing.T) {
 	// PJRT plugin and create a client.
 	plugin, err := pjrt.GetPlugin(*pjrt.FlagPluginName)
-	require.NoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
+	requireNoError(t, err, "Failed to get plugin %q", *pjrt.FlagPluginName)
 	fmt.Printf("Loaded %s\n", plugin)
 	fmt.Printf("\t- Attributes=%+v\n", plugin.Attributes())
 	client, err := plugin.NewClient(nil)
-	require.NoErrorf(t, err, "Failed to create a client on %s", plugin)
+	requireNoError(t, err, "Failed to create a client on %s", plugin)
 	fmt.Printf("	client: %s\n", client)
 
 	// List devices.
@@ -97,9 +96,9 @@ func TestSPMD(t *testing.T) {
 	for deviceNum, device := range addressableDevices {
 		hardwareId := device.LocalHardwareID()
 		addressable, err := device.IsAddressable()
-		require.NoError(t, err)
+		requireNoError(t, err)
 		desc, err := device.GetDescription()
-		require.NoError(t, err)
+		requireNoError(t, err)
 		fmt.Printf("\tDevice #%d: hardwareId=%d, addressable=%v, description=%s\n",
 			deviceNum, hardwareId, addressable, desc.DebugString())
 	}
@@ -108,7 +107,7 @@ func TestSPMD(t *testing.T) {
 	fmt.Println()
 	fmt.Printf("Device assignment for SPMD:\n")
 	spmdDefaultAssignment, err := client.DefaultDeviceAssignment(numReplicas, 1)
-	require.NoError(t, err, "Failed to get default device assignment")
+	requireNoError(t, err, "Failed to get default device assignment")
 	fmt.Printf("\tWith %d devices: %v\n", numReplicas, spmdDefaultAssignment)
 	replicaGroups := [][]int{spmdDefaultAssignment}
 
@@ -123,16 +122,16 @@ func TestSPMD(t *testing.T) {
 		rhs := must1(reductionFn.NamedInput("rhs", shapes.Make(dtypes.F32)))
 		must(reductionFn.Return(must1(stablehlo.Add(lhs, rhs))))
 		reducedReplicas, err := stablehlo.AllReduce([]*stablehlo.Value{x}, replicaGroups, reductionFn)
-		require.NoError(t, err, "Failed operation CollectiveAllReduce")
+		requireNoError(t, err, "Failed operation CollectiveAllReduce")
 		zero := must1(mainFn.ConstantFromScalar(float32(0)))
 		sum, err := stablehlo.Reduce(reducedReplicas[0], zero, reductionFn, 0)
-		require.NoError(t, err, "Failed operation Reduce")
+		requireNoError(t, err, "Failed operation Reduce")
 		err = mainFn.Return(sum)
-		require.NoError(t, err, "Failed operation Return")
+		requireNoError(t, err, "Failed operation Return")
 
 		// Get computation created.
 		compBytes, err := builder.Build()
-		require.NoError(t, err, "Failed to build StableHLO from ops.")
+		requireNoError(t, err, "Failed to build StableHLO from ops.")
 		fmt.Printf("\nStableHLO:\n%s\n", string(compBytes))
 
 		// Compile program.
@@ -141,9 +140,9 @@ func TestSPMD(t *testing.T) {
 			WithStableHLO(compBytes).
 			WithSPMD(numReplicas).
 			Done()
-		require.NoErrorf(t, err, "Failed to compile program")
+		requireNoError(t, err, "Failed to compile program")
 		_, _, deviceAssignments, err := loadedExec.GetDeviceAssignment()
-		require.NoError(t, err, "Failed to get device assignment for execution")
+		requireNoError(t, err, "Failed to get device assignment for execution")
 
 		// Test values:
 		fmt.Printf("f(x_r) = Reduce_sum(CollectiveAllReduce_sum(x_r)):\n")
@@ -156,34 +155,34 @@ func TestSPMD(t *testing.T) {
 				FromFlatDataWithDimensions(input, []int{2}).
 				ToDeviceNum(deviceAssignments[ii]).
 				Done()
-			require.NoErrorf(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, ii)
+			requireNoError(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, ii)
 		}
 
 		// Execute: it returns the output on-device buffer(s).
 		outputBuffers, err := loadedExec.Execute(inputBuffers...).Done()
-		require.NoErrorf(t, err, "Failed to execute SPMD computation")
-		require.Lenf(t, outputBuffers, numReplicas, "Expected %d outputs, got %d", numReplicas, len(outputBuffers))
+		requireNoError(t, err, "Failed to execute SPMD computation")
+		assertLen(t, outputBuffers, numReplicas, "Expected %d outputs, got %d", numReplicas, len(outputBuffers))
 
 		// Transfer output on-device buffer to a "host" value (in Go).
 		output, err := pjrt.BufferToScalar[float32](outputBuffers[0])
-		require.NoErrorf(t, err, "Failed to transfer results of execution")
+		requireNoError(t, err, "Failed to transfer results of execution")
 
 		// Print and check value is what we wanted.
 		fmt.Printf("\tResult for %d replicas is = %g\n", numReplicas, output)
 		want := float32(numReplicas)
 		want = (want * (want + 1) / 2) * 1.1
-		require.InDelta(t, output, want, 0.001)
+		assertInDelta(t, float64(want), float64(output), 0.001)
 
 		// Release inputBuffers -- and don't wait for the GC.
 		for _, inputBuffer := range inputBuffers {
-			require.NoError(t, inputBuffer.Destroy())
+			requireNoError(t, inputBuffer.Destroy())
 		}
 		for _, outputBuffer := range outputBuffers {
-			require.NoError(t, outputBuffer.Destroy())
+			requireNoError(t, outputBuffer.Destroy())
 		}
 	})
 
 	// Destroy the client and leave.
 	err = client.Destroy()
-	require.NoErrorf(t, err, "Failed to destroy client on %s", plugin)
+	requireNoError(t, err, "Failed to destroy client on %s", plugin)
 }

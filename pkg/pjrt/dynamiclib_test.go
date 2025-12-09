@@ -23,36 +23,37 @@ package pjrt
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 // TestLoadNamedPlugin loads the *FlagPluginName plugin, which defaults to "cpu", that should be made available.
 func TestLoadNamedPlugin(t *testing.T) {
 	plugin, err := loadNamedPlugin(*FlagPluginName)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	fmt.Printf("Loaded %s\n", plugin)
 	fmt.Printf("\tattributes: %v\n", plugin.attributes)
 
 	// Checks cache works.
 	plugin2, err := loadNamedPlugin(*FlagPluginName)
-	require.NoError(t, err)
-	require.Equal(t, plugin, plugin2)
+	requireNoError(t, err)
+	assertEqual(t, plugin, plugin2)
 	plugin3, err := loadNamedPlugin(plugin2.Path()) // Try by using the absolute path, should return the same plugin.
-	require.NoError(t, err)
-	require.Equal(t, plugin2, plugin3)
+	requireNoError(t, err)
+	assertEqual(t, plugin2, plugin3)
 
 	// Checks non-existent (yet) plugin.
 	plugin, err = loadNamedPlugin("milliways")
 	fmt.Printf("Loading milliways plugin, expected error: %v\n", err)
-	require.Error(t, err)
+	requireError(t, err)
 }
 
 // TestAvailablePlugins requires that PJRT CPU plugin be available.
 func TestAvailablePlugins(t *testing.T) {
 	plugins := AvailablePlugins()
 	fmt.Printf("Available plugins: %v\n", plugins)
-	require.NotEqualf(t, "", plugins[*FlagPluginName], "Can not find %q plugin", *FlagPluginName)
+	if plugins[*FlagPluginName] == "" {
+		t.Fatalf("Can not find %q plugin", *FlagPluginName)
+	}
 }
 
 // TestSuppressAbseilLoggingHack never fails, since errors are simply logged.

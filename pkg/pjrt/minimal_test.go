@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/go-xla/internal/protos/hlo"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
+	"math"
 	"os"
 	"runtime"
 	"testing"
@@ -87,21 +87,29 @@ func TestMinimal(t *testing.T) {
 	for ii, input := range inputs {
 		// Transfer input to an on-device buffer.
 		inputBuffer, err := ScalarToBufferOnDeviceNum(client, 0, input)
-		require.NoErrorf(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, 0)
+		requireNoError(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, 0)
 
 		// Execute: it returns the output on-device buffer(s).
 		outputBuffers, err := loadedExec.Execute(inputBuffer).OnDeviceByNum(0).Done()
-		require.NoErrorf(t, err, "Failed to execute on input %d, deviceNum=%d", input, 0)
+		requireNoError(t, err, "Failed to execute on input %d, deviceNum=%d", input, 0)
 
 		// Transfer output on-device buffer to a "host" value (in Go).
 		output, err := BufferToScalar[float32](outputBuffers[0])
-		require.NoErrorf(t, err, "Failed to transfer results of execution on input %d", input)
+		requireNoError(t, err, "Failed to transfer results of execution on input %d", input)
 
 		// Print and check value is what we wanted.
 		fmt.Printf("\tf(x=%g) = %g\n", input, output)
-		require.InDelta(t, output, wants[ii], 0.001)
+		assertInDelta(t, float64(wants[ii]), float64(output), 0.001)
 
 		// Release inputBuffer -- and don't wait for the GC.
-		require.NoError(t, inputBuffer.Destroy())
+		requireNoError(t, inputBuffer.Destroy())
+	}
+}
+
+// assertInDeltaFloat32 is a helper for float32 values.
+func assertInDeltaFloat32(t *testing.T, expected, actual float32, delta float64) {
+	t.Helper()
+	if math.Abs(float64(expected)-float64(actual)) > delta {
+		t.Fatalf("expected %v to be within %v of %v", actual, delta, expected)
 	}
 }
