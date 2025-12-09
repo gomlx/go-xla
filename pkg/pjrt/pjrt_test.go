@@ -5,6 +5,8 @@ package pjrt
 import (
 	"flag"
 	"fmt"
+	"os"
+	"runtime"
 
 	"testing"
 
@@ -43,6 +45,19 @@ func must(err error) {
 func must1[T any](t T, err error) T {
 	must(err)
 	return t
+}
+
+func TestMain(m *testing.M) {
+	// Run all tests
+	result := m.Run()
+
+	// Force GC before the program exits and the profile is written
+	for range 10 {
+		runtime.GC()
+	}
+
+	// Exit with the result
+	os.Exit(result)
 }
 
 // getPJRTClient loads a PJRT plugin and create a client to run tests on.

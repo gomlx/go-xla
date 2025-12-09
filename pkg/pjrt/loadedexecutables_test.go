@@ -34,12 +34,15 @@ func TestDonatableConfig(t *testing.T) {
 	fmt.Printf("OnHost: %+v\n", exec.OnHostMemoryUsageStats)
 
 	// Test the ExecutionConfig:
-	c := exec.Execute(nil, nil, nil)                         // nil values, we are not going to actually execute it.
+	c := exec.Execute(nil, nil, nil)                          // nil values, we are not going to actually execute it.
 	assertEqualSlice(t, []int{0, 1, 2}, c.nonDonatableInputs) // None of the inputs to be donated by default.
-	c = c.Donate(1)                                          // Donate 1.
+	c = c.Donate(1)                                           // Donate 1.
 	assertEqualSlice(t, []int{0, 2}, c.nonDonatableInputs)
 	c = c.Donate(0) // Donate 0.
 	assertEqualSlice(t, []int{2}, c.nonDonatableInputs)
 	c = c.Donate(0) // Donate 0 again.
 	assertEqualSlice(t, []int{2}, c.nonDonatableInputs)
+
+	err = client.Destroy()
+	requireNoError(t, err, "Failed to destroy the client")
 }
