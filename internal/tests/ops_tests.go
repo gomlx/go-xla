@@ -74,12 +74,12 @@ func pjrtClientsIterator(t *testing.T) iter.Seq2[string, *pjrt.Client] {
 			if err != nil {
 				t.Fatalf("failed to load plugin %q: %v", pluginName, err)
 			}
-			klog.Infof("Plugin: %s", plugin)
+			fmt.Printf("Plugin: %s", plugin)
 			client, err := plugin.NewClient(nil)
 			if err != nil {
 				t.Fatalf("failed to create client for plugin %q: %v", pluginName, err)
 			}
-			klog.Infof("Client %s (version %s): %d devices",
+			fmt.Printf("- Client %s (version %s): %d devices",
 				client.Platform(), client.PlatformVersion(), client.NumDevices())
 			done := yield(pluginName, client)
 			if err := client.Destroy(); err != nil {

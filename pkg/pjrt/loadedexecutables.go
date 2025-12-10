@@ -77,7 +77,7 @@ type loadedExecutableC struct {
 }
 
 func (wrapper *loadedExecutableC) Destroy() error {
-	if wrapper == nil || wrapper.plugin == nil || wrapper.c == nil {
+	if wrapper == nil || wrapper.plugin == nil || wrapper.plugin.api == nil || wrapper.c == nil {
 		// Already destroyed, no-op.
 		return nil
 	}

@@ -61,7 +61,7 @@ func newExecutable(plugin *Plugin, cExecutable *C.PJRT_Executable) *Executable {
 }
 
 func (wrapper *executableWrapper) IsValid() bool {
-	return wrapper != nil && wrapper.c != nil && wrapper.plugin != nil
+	return wrapper != nil && wrapper.c != nil && wrapper.plugin != nil && wrapper.plugin.api != nil
 }
 
 func (wrapper *executableWrapper) Destroy() error {

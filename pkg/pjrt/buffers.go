@@ -20,7 +20,8 @@ import (
 
 // Buffer is a reference to an on-device array storage (buffer).
 type Buffer struct {
-	wrapper *bufferWrapper
+	wrapper        *bufferWrapper
+	wrapperCleanUp runtime.Cleanup
 
 	// For "shared buffers", with a direct pointer to the underlying data.
 	// This is nil for non-shared-buffers.
@@ -47,12 +48,25 @@ func (wrapper *bufferWrapper) IsValid() bool {
 }
 
 func (wrapper *bufferWrapper) Destroy() error {
-	if wrapper == nil || wrapper.plugin == nil || wrapper.c == nil || wrapper.plugin.api == nil {
+	if wrapper == nil {
+		return nil
+	}
+	defer func() {
+		// Make sure sharedBuffer is freed, even if plugin or client has been reset.
+		if wrapper.sharedRawStorage != nil {
+			// Shared storage can only be freed after the buffer is destroyed.
+			AlignedFree(wrapper.sharedRawStorage)
+			wrapper.sharedRawStorage = nil
+		}
+	}()
+
+	if wrapper.plugin == nil || wrapper.c == nil || wrapper.plugin.api == nil {
 		// Already destroyed, no-op.
 		return nil
 	}
 	if !wrapper.client.IsValid() {
 		// Client is already destroyed, assume buffer is also destroyed.
+		buffersAlive.Add(-1)
 		return nil
 	}
 	defer runtime.KeepAlive(wrapper)
@@ -68,11 +82,6 @@ func (wrapper *bufferWrapper) Destroy() error {
 	wrapper.client = nil
 	err := toError(plugin, C.call_PJRT_Buffer_Destroy(plugin.api, args))
 	buffersAlive.Add(-1)
-	if wrapper.sharedRawStorage != nil {
-		// Shared storage can only be freed after the buffer is destroyed.
-		AlignedFree(wrapper.sharedRawStorage)
-		wrapper.sharedRawStorage = nil
-	}
 	return err
 }
 
@@ -90,7 +99,7 @@ func newBuffer(client *Client, cBuffer *C.PJRT_Buffer) *Buffer {
 		// DEBUG: creationStackTrace: errors.New("bufferCreation"),
 	}
 	buffersAlive.Add(1)
-	runtime.AddCleanup(b, func(wrapper *bufferWrapper) {
+	b.wrapperCleanUp = runtime.AddCleanup(b, func(wrapper *bufferWrapper) {
 		err := wrapper.Destroy()
 		if err != nil {
 			klog.Errorf("pjrt.Buffer.Destroy failed: %v", err)
@@ -106,6 +115,7 @@ func (b *Buffer) Destroy() error {
 		return nil
 	}
 	err := b.wrapper.Destroy()
+	b.wrapperCleanUp.Stop()
 	return err
 }
 

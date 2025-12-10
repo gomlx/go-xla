@@ -29,18 +29,16 @@ func cSizeOf[T any]() C.size_t {
 
 // cMalloc allocates a T in the C heap and initializes it to zero.
 // It must be manually freed with cFree() by the user.
-func cMalloc[T any]() (ptr *T) {
+func cMalloc[T any]() *T {
 	size := cSizeOf[T]()
-	cPtr := (*T)(C.calloc(1, size))
-	return cPtr
+	return (*T)(C.calloc(1, size))
 }
 
 // cMallocArray allocates space to hold n copies of T in the C heap and initializes it to zero.
 // It must be manually freed with C.free() by the user.
-func cMallocArray[T any](n int) (ptr *T) {
+func cMallocArray[T any](n int) *T {
 	size := cSizeOf[T]()
-	cPtr := (*T)(C.calloc(C.size_t(n), size))
-	return cPtr
+	return (*T)(C.calloc(C.size_t(n), size))
 }
 
 // cMallocArrayFromSlice allocates space to hold n copies of T in the C heap and copy over the slice.
@@ -58,7 +56,7 @@ func cMallocArrayFromSlice[T any](values []T) (ptr *T) {
 func cMallocArrayAndSet[T any](n int, setFn func(i int) T) (ptr *T) {
 	ptr = cMallocArray[T](n)
 	slice := unsafe.Slice(ptr, n)
-	for ii := 0; ii < n; ii++ {
+	for ii := range n {
 		slice[ii] = setFn(ii)
 	}
 	return ptr

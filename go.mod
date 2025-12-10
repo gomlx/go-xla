@@ -1,6 +1,6 @@
 module github.com/gomlx/go-xla
 
-go 1.24.0
+go 1.24.3
 
 toolchain go1.24.6
 
@@ -19,6 +19,7 @@ require (
 )
 
 require (
+	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect

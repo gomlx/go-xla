@@ -7,7 +7,6 @@ import (
 	"os"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
@@ -16,7 +15,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var flagMemProfileRate = flag.Int("mem_profile_rate", 0, "If > 0, set to runtime.MemProfileRate. The default is 512*1024.")
+var (
+	flagMemProfileRate  = flag.Int("mem_profile_rate", 0, "If > 0, set to runtime.MemProfileRate. The default is 512*1024.")
+	flagE2ERepeatBuilds = flag.Int("e2e_repeat_builds", 1, "Number of times to repeat the end-to-end graph building and execution.")
+	flagE2ERepeatExecs  = flag.Int("e2e_repeat_execs", 1, "Number of times to repeat the end-to-end graph execution (multiplied by --e2e_repeat_builds).")
+)
 
 func init() {
 	klog.InitFlags(nil)
@@ -31,14 +34,10 @@ func TestMain(m *testing.M) {
 	result := m.Run()
 
 	// Force GC before the program exits and the profile is written
-	for range 3 {
+	pjrt.FreeAll()
+	for range 20 {
 		runtime.GC()
 	}
-	time.Sleep(time.Second)
-	for range 10 {
-		runtime.GC()
-	}
-
 	os.Exit(result)
 }
 
@@ -98,92 +97,111 @@ func TestEndToEnd(t *testing.T) {
 		}
 		fmt.Println()
 
-		for portableIdx, portableName := range []string{"fixed", "portable"} {
+		for portableIdx, portableName := range []string{"fixed-device", "portable"} {
 			isPortable := portableIdx == 1
-
 			t.Run(portableName, func(t *testing.T) {
-				// f(x) = x^2+1
-				builder := stablehlo.New("x_times_x_plus_1") // Use valid identifier for module name
-				scalarF32 := shapes.Make(dtypes.F32)         // Scalar float32 shape
+				fmt.Printf("- %s:\n", portableName)
+				for range *flagE2ERepeatBuilds {
+					// f(x) = x^2+1
+					builder := stablehlo.New("x_times_x_plus_1") // Use valid identifier for module name
+					scalarF32 := shapes.Make(dtypes.F32)         // Scalar float32 shape
 
-				// Create a main function and define its inputs.
-				mainFn := builder.Main()
-				x, err := mainFn.NamedInput("x", scalarF32)
-				requireNoError(t, err, "Failed to create a named input for x")
+					// Create a main function and define its inputs.
+					mainFn := builder.Main()
+					x, err := mainFn.NamedInput("x", scalarF32)
+					requireNoError(t, err, "Failed to create a named input for x")
 
-				// Build computation graph
-				fX, err := stablehlo.Multiply(x, x)
-				requireNoError(t, err, "Failed operation Mul")
+					// Build computation graph
+					fX, err := stablehlo.Multiply(x, x)
+					requireNoError(t, err, "Failed operation Mul")
 
-				one, err := mainFn.ConstantFromScalar(float32(1))
-				requireNoError(t, err, "Failed to create a constant for 1")
+					one, err := mainFn.ConstantFromScalar(float32(1))
+					requireNoError(t, err, "Failed to create a constant for 1")
 
-				fX, err = stablehlo.Add(fX, one)
-				requireNoError(t, err, "Failed operation Add")
-				err = mainFn.Return(fX) // Set the return value for the main function
-				requireNoError(t, err, "Failed to set return value")
+					fX, err = stablehlo.Add(fX, one)
+					requireNoError(t, err, "Failed operation Add")
+					err = mainFn.Return(fX) // Set the return value for the main function
+					requireNoError(t, err, "Failed to set return value")
 
-				// Get computation created.
-				compBytes, err := builder.Build()
-				requireNoError(t, err, "Failed to build StableHLO from ops.")
-				fmt.Printf("StableHLO:\n%s\n", string(compBytes))
+					// Get computation created.
+					compBytes, err := builder.Build()
+					requireNoError(t, err, "Failed to build StableHLO from ops.")
+					fmt.Printf("StableHLO:\n%s\n", string(compBytes))
 
-				// Compile program: the default compilation is "portable", meaning it can be executed by any device.
-				var loadedExec *pjrt.LoadedExecutable
-				var deviceAssignment []int
-				if !isPortable {
-					deviceAssignment = []int{0}
-				}
-				loadedExec, err = client.Compile().
-					WithStableHLO(compBytes).
-					WithDeviceAssignment(deviceAssignment).
-					Done()
-				requireNoError(t, err, "Failed to compile program")
-				fmt.Printf("Compiled program: name=%s, #outputs=%d\n", loadedExec.Name, loadedExec.NumOutputs)
+					// Compile program: the default compilation is "portable", meaning it can be executed by any device.
+					var loadedExec *pjrt.LoadedExecutable
+					var deviceAssignment []int
+					if !isPortable {
+						deviceAssignment = []int{0}
+					}
+					loadedExec, err = client.Compile().
+						WithStableHLO(compBytes).
+						WithDeviceAssignment(deviceAssignment).
+						Done()
+					requireNoError(t, err, "Failed to compile program")
+					fmt.Printf("Compiled program: name=%s, #outputs=%d\n", loadedExec.Name, loadedExec.NumOutputs)
 
-				// Test devices and values.
-				inputs := []float32{0.1, 1, 3, 4, 5}
-				wants := []float32{1.01, 2, 10, 17, 26}
-				fmt.Printf("f(x) = x^2 + 1:\n")
-				numDevices := client.NumDevices()
-				if !isPortable {
-					// Only use device 0
-					numDevices = 1
-				}
-				for deviceNum := range client.NumDevices() {
-					fmt.Printf(" Device #%d:\n", deviceNum)
-					for ii, input := range inputs {
-						// For single-device tests we use always the same device.
+					// Portable execution should not have a fixed assignment.
+					if isPortable {
 						_, _, deviceAssignment, err := loadedExec.GetDeviceAssignment()
 						requireNoError(t, err, "Failed to get device assignment for execution")
 						if deviceAssignment != nil {
 							t.Fatal("default computation is 'portable', meaning there should be no device assignment")
 						}
-
-						// Transfer input to an on-device buffer.
-						inputBuffer, err := pjrt.ScalarToBufferOnDeviceNum(client, deviceNum, input)
-						requireNoError(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, deviceNum)
-
-						// Execute: it returns the output on-device buffer(s).
-						outputBuffers, err := loadedExec.Execute(inputBuffer).OnDeviceByNum(deviceNum).Done()
-						requireNoError(t, err, "Failed to execute on input %g, deviceNum=%d", input, deviceNum)
-
-						// Transfer output on-device buffer to a "host" value (in Go).
-						output, err := pjrt.BufferToScalar[float32](outputBuffers[0])
-						requireNoError(t, err, "Failed to transfer results of execution on input %g", input)
-
-						// Print and check value is what we wanted.
-						fmt.Printf("\tf(x=%g) = %g\n", input, output)
-						assertInDelta(t, float64(wants[ii]), float64(output), 0.001)
-
-						// Release inputBuffer -- and don't wait for the GC.
-						requireNoError(t, inputBuffer.Destroy())
 					}
-				}
 
-				// We can now free the loadedExec (no need to wait for the GC).
-				requireNoError(t, loadedExec.Destroy())
-			})
-		}
-	})
+					// Test devices and values.
+					inputs := []float32{0.1, 1, 3, 4, 5}
+					wants := []float32{1.01, 2, 10, 17, 26}
+					fmt.Printf("f(x) = x^2 + 1:\n")
+					devicesToTest := client.NumDevices()
+					if !isPortable {
+						// Only use device 0
+						devicesToTest = 1
+					}
+					for deviceNum := range devicesToTest {
+						if devicesToTest > 1 {
+							fmt.Printf(" Device #%d:\n", deviceNum)
+						}
+						for range *flagE2ERepeatExecs {
+							for ii, input := range inputs {
+								// Transfer input to an on-device buffer.
+								inputBuffer, err := pjrt.ScalarToBufferOnDeviceNum(client, deviceNum, input)
+								requireNoError(t, err, "Failed to create on-device buffer for input %v, deviceNum=%d", input, deviceNum)
+
+								// Execute: it returns the output on-device buffer(s).
+								var outputBuffers []*pjrt.Buffer
+								if isPortable {
+									outputBuffers, err = loadedExec.Execute(inputBuffer).OnDeviceByNum(deviceNum).Done()
+								} else {
+									outputBuffers, err = loadedExec.Execute(inputBuffer).Done()
+								}
+								requireNoError(t, err, "Failed to execute on input %g, deviceNum=%d", input, deviceNum)
+								if len(outputBuffers) != 1 {
+									fmt.Printf("Expected 1 output buffer, got %d", len(outputBuffers))
+									t.Fail()
+								}
+
+								// Transfer output on-device buffer to a "host" value (in Go).
+								output, err := pjrt.BufferToScalar[float32](outputBuffers[0])
+								requireNoError(t, err, "Failed to transfer results of execution on input %g", input)
+
+								// Print and check value is what we wanted.
+								fmt.Printf("\tf(x=%g) = %g\n", input, output)
+								assertInDelta(t, float64(wants[ii]), float64(output), 0.001)
+
+								// Release inputBuffer and outputBuffers -- and don't wait for the GC.
+								requireNoError(t, inputBuffer.Destroy())
+								requireNoError(t, outputBuffers[0].Destroy())
+							} // for range inputs
+							// fmt.Printf("pjrt.BuffersAlive()=%d\n", pjrt.BuffersAlive())
+						} // for range -e2e_repeat_execs
+					} // for range devices (if portable)
+
+					// We can now free the loadedExec (no need to wait for the GC).
+					requireNoError(t, loadedExec.Destroy())
+				} // for range -e2e_repeat_builds
+			}) // t.Run(fixed/protable)
+		} // fixed/portable
+	}) // iterateClientsAndTest -- iterate clients.
 }

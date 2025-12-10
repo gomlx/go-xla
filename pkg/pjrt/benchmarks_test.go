@@ -61,7 +61,7 @@ func TestBenchArena(t *testing.T) {
 	testFns := make([]benchmarks.NamedFunction, 4*len(numAllocationsList))
 	const repeats = 10
 	idxFn := 0
-	for _, allocType := range []string{"arena", "arenaPool", "malloc", "go+pinner"} {
+	for _, allocType := range []string{"arenaPool", "arena", "malloc", "go+pinner"} {
 		for _, numAllocations := range numAllocationsList {
 			testFns[idxFn].Name = fmt.Sprintf("%s/%s/%d", t.Name(), allocType, numAllocations)
 			var fn func()

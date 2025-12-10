@@ -276,3 +276,15 @@ func suppressLogging() (newFd int, err error) {
 	os.Stderr = os.NewFile(uintptr(newFd), "stderr")
 	return
 }
+
+// FreeAll frees all plugins resources.
+// You should call this only if you are no longer going to use PJRT.
+// Useful for debugging memory leaks, this should release the plugins resources -- for these cases
+// you should first free buffers, clients and only the plugins.
+func FreeAll() {
+	muPlugins.Lock()
+	defer muPlugins.Unlock()
+	for _, p := range loadedPlugins {
+		p.Free()
+	}
+}

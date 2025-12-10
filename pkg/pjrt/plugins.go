@@ -10,9 +10,11 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"unsafe"
 
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // Plugin represents a loaded PJRT plugin that can be used to compile and execute StableHLO code.
@@ -73,6 +75,10 @@ func pjrtPluginAttributes(plugin *Plugin) (NamedValuesMap, error) {
 // newPlugin creates a new plugin from the api pointer.
 // Internal: use GetPlugin instead.
 func newPlugin(name, pluginPath string, api *C.PJRT_Api, dllHandle dllHandleWrapper) (*Plugin, error) {
+	arenaPools, err := newArenaPools()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create arena pools")
+	}
 	plugin := &Plugin{
 		name:             name,
 		path:             pluginPath,
@@ -80,9 +86,9 @@ func newPlugin(name, pluginPath string, api *C.PJRT_Api, dllHandle dllHandleWrap
 		dllHandle:        dllHandle,
 		UseStableHLO:     os.Getenv("GOPJRT_NO_STABLE_HLO") == "",
 		UseTextStableHLO: os.Getenv("GOPJRT_TEXT_STABLE_HLO") != "",
-		arenaPools:       newArenaPools(),
+		arenaPools:       arenaPools,
 	}
-	err := pjrtPluginInitialize(plugin)
+	err = pjrtPluginInitialize(plugin)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "initializing PJRT getPlugin %q", name)
 	}
@@ -179,4 +185,26 @@ func (p *Plugin) getArena(size int) *arenaContainer {
 // It also resets the arena.
 func (p *Plugin) returnArena(a *arenaContainer) {
 	p.arenaPools.Return(a)
+}
+
+// Free plugin resources.
+func (p *Plugin) Free() {
+	if p.arenaPools != nil {
+		p.arenaPools.Free()
+		p.arenaPools = nil
+	}
+	if p.dllHandle != nil {
+		// dllHandle will be nil for pre-loaded plugins.
+		err := p.dllHandle.Close()
+		if err != nil {
+			klog.Errorf("Failed to unload PJRT (%s): %+v", p.path, err)
+		}
+		p.dllHandle = nil
+	}
+	p.api = nil
+
+	// Makes sure the arenas allocated get freed immediately.
+	for range 10 {
+		runtime.GC()
+	}
 }
