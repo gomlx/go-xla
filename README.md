@@ -122,7 +122,9 @@ It also auto-installs Nvidia PJRT plugin and required libraries if it's present.
 
 To manually install it, or if you want a specific version, consider using the command line installer with 
 `go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest` and follow the
-self-explanatory menu (or provide the flags for a quiet installation)
+self-explanatory menu (or provide the flags for a quiet installation). 
+Or run it with `go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -autoinstall`.
+
 
 ## 🤔 FAQ
 
