@@ -63,15 +63,21 @@ func CudaInstall(plugin, version, installPath string, useCache bool, verbosity V
 	if err := os.MkdirAll(installPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create install directory in %s", installPath)
 	}
+
+	// Remove any previous version of the nvidia libraries and recreate it.
 	nvidiaSubdir := filepath.Join(installPath, "nvidia")
-	if err := os.MkdirAll(nvidiaSubdir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create install directory in %s", nvidiaSubdir)
+	if err := os.RemoveAll(nvidiaSubdir); err != nil {
+		return errors.Wrapf(err, "failed to remove existing nvidia libraries directory %s", nvidiaSubdir)
 	}
+
+	// Install PJRT plugin.
 	version, err = CudaInstallPJRT(plugin, version, nvidiaSubdir, useCache, verbosity)
 	if err != nil {
 		return err
 	}
-	if err := CudaInstallNvidiaLibraries(plugin, version, installPath, useCache, verbosity); err != nil {
+
+	// Pinstall required Nvidia libraries.
+	if err := CudaInstallNvidiaLibraries(plugin, version, nvidiaSubdir, useCache, verbosity); err != nil {
 		return err
 	}
 	cudaVersion := "13"
@@ -205,16 +211,7 @@ func CudaGetPJRTPipInfo(plugin string) (*PipPackageInfo, string, error) {
 }
 
 // CudaInstallNvidiaLibraries installs the required NVIDIA libraries for CUDA.
-func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
-	// Remove any previous version of the nvidia libraries and recreate it.
-	nvidiaLibsDir := filepath.Join(installPath, "nvidia")
-	if err := os.RemoveAll(nvidiaLibsDir); err != nil {
-		return errors.Wrapf(err, "failed to remove existing nvidia libraries directory %s", nvidiaLibsDir)
-	}
-	if err := os.MkdirAll(nvidiaLibsDir, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create nvidia libraries directory in %s", nvidiaLibsDir)
-	}
-
+func CudaInstallNvidiaLibraries(plugin, version, nvidiaSubdir string, useCache bool, verbosity VerbosityLevel) error {
 	// Find required nvidia packages:
 	packageName := "jax-" + plugin + "-plugin"
 	jaxCudaPluginInfo, err := GetPipInfo(packageName)
@@ -238,14 +235,14 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 
 	// Install the nvidia libraries found in the dependencies.
 	for _, dep := range nvidiaDependencies {
-		err = cudaInstallNvidiaLibrary(nvidiaLibsDir, dep, useCache, verbosity)
+		err = cudaInstallNvidiaLibrary(nvidiaSubdir, dep, useCache, verbosity)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Create a link to the binary ptxas, required by the nvidia libraries.
-	nvidiaBinPath := filepath.Join(nvidiaLibsDir, "bin")
+	nvidiaBinPath := filepath.Join(nvidiaSubdir, "bin")
 	if err := os.MkdirAll(nvidiaBinPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create nvidia bin directory in %s", nvidiaBinPath)
 	}
@@ -254,9 +251,9 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 	var ptxasPath string
 	switch plugin {
 	case "cuda12":
-		ptxasPath = filepath.Join(nvidiaLibsDir, "cuda_nvcc/bin/ptxas")
+		ptxasPath = filepath.Join(nvidiaSubdir, "cuda_nvcc/bin/ptxas")
 	case "cuda13":
-		ptxasPath = filepath.Join(nvidiaLibsDir, "cu13/bin/ptxas")
+		ptxasPath = filepath.Join(nvidiaSubdir, "cu13/bin/ptxas")
 	default:
 		return errors.Errorf("version validation not implemented for plugin %q in version %s", plugin, version)
 	}
@@ -266,7 +263,7 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 	}
 
 	// Link libraries that Nvidia is not able to find from the SDK path set.
-	libsPath := path.Dir(installPath)
+	libsPath := path.Dir(path.Dir(nvidiaSubdir))
 	switch plugin {
 	case "cuda13":
 		// Source of the symlink relative to the `lib` path.
@@ -285,7 +282,7 @@ func CudaInstallNvidiaLibraries(plugin, version, installPath string, useCache bo
 	return nil
 }
 
-func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache bool, verbosity VerbosityLevel) error {
+func cudaInstallNvidiaLibrary(nvidiaSubdir string, dep PipDependency, useCache bool, verbosity VerbosityLevel) error {
 	info, err := GetPipInfo(dep.Package)
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch the package info for %s", dep.Package)
@@ -322,7 +319,7 @@ func cudaInstallNvidiaLibrary(nvidiaLibsDir string, dep PipDependency, useCache 
 	}
 
 	// Extract all files under "nvidia/" for this package.
-	if err := ExtractDirFromZip(downloadedWHL, "nvidia", nvidiaLibsDir); err != nil {
+	if err := ExtractDirFromZip(downloadedWHL, "nvidia", nvidiaSubdir); err != nil {
 		return errors.Wrapf(err, "failed to extract nvidia libraries from %s", downloadedWHL)
 	}
 	switch verbosity {

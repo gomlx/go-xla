@@ -250,7 +250,6 @@ func ExtractDirFromZip(zipFilePath, dirInZipFile, outputPath string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
