@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
@@ -27,6 +28,7 @@ func init() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	installer.AutoInstall("", true, installer.VerbosityLevel(1))
 
 	if *flagMemProfileRate > 0 {
 		runtime.MemProfileRate = *flagMemProfileRate

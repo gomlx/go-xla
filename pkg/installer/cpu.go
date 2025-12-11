@@ -7,10 +7,27 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/pkg/errors"
 )
 
 const AmazonLinux = "amazonlinux"
+
+func init() {
+	autoInstallers["cpu"] = CPUAutoInstall
+}
+
+// CPUAutoInstall installs the latest version of the CPU PJRT if not yet installed.
+func CPUAutoInstall(installPath string, useCache bool, verbosity VerbosityLevel) error {
+	version := pjrt.DefaultCPUVersion
+	pjrtPluginPath := path.Join(installPath, fmt.Sprintf("pjrt_c_api_cpu_%s_plugin.so", version))
+	_, err := os.Stat(pjrtPluginPath)
+	if err == nil {
+		// Already installed.
+		return nil
+	}
+	return CPUInstall("linux", version, installPath, useCache, verbosity)
+}
 
 // CPUValidateVersion checks whether the linux version selected by "-version" exists.
 func CPUValidateVersion(plugin, version string) error {

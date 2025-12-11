@@ -96,8 +96,6 @@ which generates the image below:
 
 Here is a sample of the `stablehlo` code:
 
-
-
 And here how to run the computation with `pjrt`:
 
 ```go
@@ -115,15 +113,14 @@ outputs[0].Destroy() // Don't wait for the GC, destroy the buffer immediately.
 ...
 ```
 
-
-
 ## Installation of PJRT plugin
 
 Most programs may simply add a call `installer.AutoInstall()` and it will automatically download the PJRT plugin
-to the user's local home (`${HOME}/.local/lib/go-xla/` in Linux), if not installed already.
-So there is nothing to do.
+to the user's local home (`${HOME}/.local/lib/go-xla/` in Linux, `${HOME}/Library/Application Support/go-xla` in MacOS), 
+if not installed already. 
+It also auto-installs Nvidia PJRT plugin and required libraries if it's present.
 
-To manually install it, consider using the command line installer with 
+To manually install it, or if you want a specific version, consider using the command line installer with 
 `go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest` and follow the
 self-explanatory menu (or provide the flags for a quiet installation)
 

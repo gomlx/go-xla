@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -40,6 +41,32 @@ var HasNvidiaGPU = sync.OnceValue[bool](func() bool {
 	}
 	return strings.Contains(string(output), "NVIDIA-SMI")
 })
+
+func init() {
+	autoInstallers["cuda"] = CudaAutoInstall
+}
+
+// CudaAutoInstall installs the latest version of the CUDA PJRT and Nvidia libraries
+// if not yet installed, and there is an actual Nvidia GPU installed.
+//
+// It uses HasNvidiaGPU to see if there is an actual Nvidia GPU installed.
+func CudaAutoInstall(installPath string, useCache bool, verbosity VerbosityLevel) error {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		// Only supported on Linux/amd64.
+		return nil
+	}
+	pjrtPluginPath := path.Join(installPath, "nvidia", "pjrt_c_api_cuda_plugin.so")
+	_, err := os.Stat(pjrtPluginPath)
+	if err == nil {
+		// Already installed.
+		return nil
+	}
+	if !HasNvidiaGPU() {
+		// No need to install anything.
+		return nil
+	}
+	return CudaInstall("cuda13", "latest", installPath, useCache, verbosity)
+}
 
 // CudaInstall installs the cuda PJRT from the Jax PIP packages, using pypi.org distributed files.
 //
