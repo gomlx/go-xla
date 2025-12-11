@@ -48,7 +48,11 @@ var HasNvidiaGPU = sync.OnceValue[bool](func() bool {
 // - Author email is from the Jax team
 // - Downloaded files sha256 match the ones on pypi.org
 //
-// If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded.
+// # If useCache is true, it will save the file in a cache directory and try to reuse it if already downloaded
+//
+// The installPath parameter should be to the .../lib/go-xla directory. The pjrt plugin itself will be installed
+// under the .../lib/go-xla/nvidia directory -- it needs to be there due to path resolution issues with the
+// plugin/Nvidia libraries.
 func CudaInstall(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
 	// Create the target directory.
 	var err error
@@ -59,7 +63,11 @@ func CudaInstall(plugin, version, installPath string, useCache bool, verbosity V
 	if err := os.MkdirAll(installPath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create install directory in %s", installPath)
 	}
-	version, err = CudaInstallPJRT(plugin, version, installPath, useCache, verbosity)
+	nvidiaSubdir := filepath.Join(installPath, "nvidia")
+	if err := os.MkdirAll(nvidiaSubdir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create install directory in %s", nvidiaSubdir)
+	}
+	version, err = CudaInstallPJRT(plugin, version, nvidiaSubdir, useCache, verbosity)
 	if err != nil {
 		return err
 	}
