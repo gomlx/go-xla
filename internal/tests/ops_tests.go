@@ -69,7 +69,9 @@ func pjrtNumClients() int {
 
 func pjrtClientsIterator(t *testing.T) iter.Seq2[string, *pjrt.Client] {
 	return func(yield func(string, *pjrt.Client) bool) {
-		for _, pluginName := range getPluginNames() {
+		pluginNames := getPluginNames()
+		fmt.Printf("Plugins: %v\n", pluginNames)
+		for _, pluginName := range pluginNames {
 			plugin, err := pjrt.GetPlugin(pluginName)
 			if err != nil {
 				t.Fatalf("failed to load plugin %q: %v", pluginName, err)
@@ -79,13 +81,13 @@ func pjrtClientsIterator(t *testing.T) iter.Seq2[string, *pjrt.Client] {
 			if err != nil {
 				t.Fatalf("failed to create client for plugin %q: %v", pluginName, err)
 			}
-			fmt.Printf("- Client %s (version %s): %d devices",
+			fmt.Printf("- Client %s (version %s): %d devices\n",
 				client.Platform(), client.PlatformVersion(), client.NumDevices())
-			done := yield(pluginName, client)
+			ok := yield(pluginName, client)
 			if err := client.Destroy(); err != nil {
 				t.Fatalf("failed to destroy client: %v", err)
 			}
-			if done {
+			if !ok {
 				return
 			}
 		}
