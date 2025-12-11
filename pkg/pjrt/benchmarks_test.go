@@ -1,7 +1,7 @@
 package pjrt
 
 // To run benchmarks: (and fix to P-Cores if running on a Intel i9-12900K)
-//	go test -c . && taskset 0xFF ./pjrt.test -test.v -test.run=Bench -test.count=1
+//	go test -c . && taskset 0xFF ./pjrt.test -test.v -test.run=Bench -test.count=1 -bench_duration=5s
 //
 // See results in https://docs.google.com/spreadsheets/d/1ikpJH6rVVHq8ES-IA8U4lkKH4XsTSpRyZewXwGTgits/edit?gid=1369069161#gid=1369069161
 import (
@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	flagBenchDuration = flag.Duration("bench_duration", 1*time.Second, "Benchmark duration")
+	flagBenchDuration = flag.Duration("bench_duration", 0*time.Second, "Benchmark duration, leave as 0 and it won't run")
 
 	// testShapes used during benchmarks executing small computation graphs.
 	testShapes = []shapes.Shape{
@@ -33,6 +33,10 @@ var (
 // TestBenchCGO benchmarks a minimal CGO call.
 func TestBenchCGO(t *testing.T) {
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -50,6 +54,10 @@ func TestBenchCGO(t *testing.T) {
 // Benchmark tests different methods to create temporary pointers to be passed to CGO.
 func TestBenchArena(t *testing.T) {
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -129,6 +137,10 @@ func TestBenchBufferFromHost(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		t.SkipNow()
+	}
 	plugin := must1(GetPlugin(*FlagPluginName))
 	client := must1(plugin.NewClient(nil))
 	defer runtime.KeepAlive(client)
@@ -171,6 +183,10 @@ func TestBenchBufferToHost(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		t.SkipNow()
+	}
 	plugin := must1(GetPlugin(*FlagPluginName))
 	client := must1(plugin.NewClient(nil))
 	defer runtime.KeepAlive(client)
@@ -210,6 +226,10 @@ func TestBenchBufferToHost(t *testing.T) {
 // BenchmarkAdd1Execution benchmarks the execution time for a minimal program.
 func TestBenchAdd1Execution(t *testing.T) {
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -276,6 +296,10 @@ func TestBenchAdd1Execution(t *testing.T) {
 //	TestBenchAdd1Div2Execution/shape=(Float32)[1000 1000]       38.513µs        36.434µs        86.827µs
 func TestBenchAdd1Div2Execution(t *testing.T) {
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -345,6 +369,10 @@ func TestBenchAdd1Div2Execution(t *testing.T) {
 //	TestBenchAdd1Div2Execution/shape=(Float32)[1000 1000]       38.513µs        36.434µs        86.827µs
 func TestBenchMeanNormalizedExecution(t *testing.T) {
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if *flagBenchDuration == 0 {
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
