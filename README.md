@@ -10,7 +10,7 @@
 
 ## 🎯 Why use go-xla ?
 
-<img align="right" width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/346d8b1b-8bf0-4f95-938d-bc13fdca630b" />
+<img align="right" width="220px" height="220px" alt="GoMLX Gopher" src="https://github.com/user-attachments/assets/346d8b1b-8bf0-4f95-938d-bc13fdca630b" />
 
 The **go-xla** project leverages [OpenXLA's](https://openxla.org/) to (JIT-) compile, optimize, and **accelerate numeric computations**
 (with large data) from Go using various [backends supported by OpenXLA](https://opensource.googleblog.com/2024/03/pjrt-plugin-to-accelerate-machine-learning.html): CPU, GPUs (Nvidia, AMD ROCm*, Intel*, Apple Metal*) and TPUs. 
