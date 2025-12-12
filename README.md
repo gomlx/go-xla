@@ -19,7 +19,7 @@ And because [Jax](https://docs.jax.dev/en/latest/), [TensorFlow](https://www.ten
 [optionally PyTorch](https://pytorch.org/xla/release/2.3/index.html) run on XLA, it is possible to run Jax functions in Go with **go-xla**, 
 and probably TensorFlow and PyTorch as well.
 
-The **go-xla** porject aims to be minimalist and robust: it provides well-maintained, extensible Go wrappers for
+The **go-xla** project aims to be minimalist and robust: it provides well-maintained, extensible Go wrappers for
 [OpenXLA's StableHLO](https://openxla.org/#stablehlo) and [OpenXLA's PJRT](https://openxla.org/#pjrt). 
 
 The APIs are not very "ergonomic" (error handling everywhere), but it's expected to be a stable building block for
