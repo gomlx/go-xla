@@ -1,3 +1,7 @@
+# v0.1.2
+
+* Removed external dependency to `github.com/charmbracelet/huh/spinner`.
+
 # v0.1.1
 
 * Removed left-over debug message.

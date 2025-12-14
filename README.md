@@ -200,6 +200,11 @@ Environment variables that help control or debug how PJRT works:
   It is not documented how it works in PJRT (e.g., I observed a great slow down when this is set,
   even if set to the default values), but [the proto has some documentation](https://github.com/gomlx/go-xla/blob/main/protos/xla.proto#L40).
 
+## For go-xla developers
+
+* [Benchmarks on different strategies with CGO (Tab "Arena")](https://docs.google.com/spreadsheets/d/1ikpJH6rVVHq8ES-IA8U4lkKH4XsTSpRyZewXwGTgits/edit?gid=1008590518#gid=1008590518)
+* [Execution benchmarks minimal programs (Tab "Basic XLA Metrics")](https://docs.google.com/spreadsheets/d/1ikpJH6rVVHq8ES-IA8U4lkKH4XsTSpRyZewXwGTgits/edit?gid=1369069161#gid=1369069161)
+
 ## 💖 Support the Project
 
 If you find this project helpful, please consider 
