@@ -1,11 +1,13 @@
 package installer
 
 import (
+	"fmt"
 	"os"
 	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -82,4 +84,40 @@ func ReplaceTildeInDir(dir string) (string, error) {
 	}
 	homeDir := usr.HomeDir
 	return path.Join(homeDir, dir[1+len(userName):]), nil
+}
+
+// formatBytes formats bytes into a human-readable string (e.g., 1.5 MB)
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for ; b >= div*unit && exp < 5; div *= unit {
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// truncateToWidth truncates a string to a given width, adding ellipsis in the middle if necessary.
+func truncateToWidth(s string, width int) string {
+	sLen := utf8.RuneCountInString(s)
+	if sLen < width {
+		return s
+	}
+
+	// Convert to runes to slice safely (avoid cutting multi-byte chars)
+	r := []rune(s)
+
+	// Extreme cases.
+	if width <= 3 {
+		return string(r[:width])
+	}
+
+	// Truncate in the middle and add ellipsis, ensuring we fit exactly
+	copy(r[width/2+2:], r[sLen-(width/2-2):])
+	r[width/2-1] = '.'
+	r[width/2] = '.'
+	r[width/2+1] = '.'
+	return string(r[:width-3]) + "…"
 }

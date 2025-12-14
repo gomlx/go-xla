@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh/spinner"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -29,8 +28,10 @@ const BinaryCPUReleasesRepo = "gomlx/pjrt-cpu-binaries"
 //
 // If wantSHA256 is not empty, it will verify the hash of the downloaded file.
 //
-// It returns the path where the file was downloaded, and if the downloaded file is in a cache (so it shouldn't be removed after use).
-func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosity VerbosityLevel) (filePath string, cached bool, err error) {
+// It returns the path where the file was downloaded, and if the downloaded file is in a cache
+// (so it shouldn't be removed after use).
+func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosity VerbosityLevel) (
+	filePath string, cached bool, err error) {
 	// Download the asset to a temporary file
 	var downloadedFile *os.File
 	var renameTo string
@@ -62,9 +63,9 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosit
 	if !cached {
 		// Actually download the file.
 		var bytesDownloaded int64
-		spinnerErr := spinner.New().
+		spinnerErr := NewSpinner().
 			Title(fmt.Sprintf("Downloading %s….", url)).
-			Action(func() {
+			Action(func(titleChange chan<- string) {
 				var resp *http.Response
 				resp, err = http.Get(url)
 				if err != nil {
@@ -73,7 +74,30 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosit
 				}
 				defer func() { ReportError(resp.Body.Close()) }()
 
-				bytesDownloaded, err = io.Copy(downloadedFile, resp.Body)
+				// Copy 1MB at a time, update the title with current bytes downloaded
+				const bufSize = 1024 * 1024 // 1MB
+				buffer := make([]byte, bufSize)
+				bytesDownloaded = 0
+				for {
+					n, readErr := resp.Body.Read(buffer)
+					if n > 0 {
+						written, writeErr := downloadedFile.Write(buffer[:n])
+						if writeErr != nil {
+							err = errors.Wrapf(writeErr, "failed to write to file %s", downloadedFile.Name())
+							break
+						}
+						bytesDownloaded += int64(written)
+						// Update spinner title
+						titleChange <- fmt.Sprintf("Downloading %s (%s) ...", url, formatBytes(bytesDownloaded))
+					}
+					if readErr == io.EOF {
+						break
+					}
+					if readErr != nil {
+						err = errors.Wrapf(readErr, "failed to download asset %s", url)
+						break
+					}
+				}
 				if err != nil {
 					err = errors.Wrapf(err, "failed to write asset %s to temporary file %s", url, downloadedFile.Name())
 					return
@@ -82,24 +106,12 @@ func DownloadURLToTemp(url, fileName, wantSHA256 string, useCache bool, verbosit
 			}).
 			Run()
 		if spinnerErr != nil {
-			err = errors.Wrapf(spinnerErr, "failed run spinner for download from %s", url)
-			return
+			return "", false, errors.Wrapf(spinnerErr, "failed run spinner for download from %s", url)
 		}
 		if err != nil {
 			return "", false, err
 		}
-
-		// Print the downloaded size
-		switch {
-		case bytesDownloaded < 1024:
-			downloadedBytesStr = fmt.Sprintf("%d B", bytesDownloaded)
-		case bytesDownloaded < 1024*1024:
-			downloadedBytesStr = fmt.Sprintf("%.1f KB", float64(bytesDownloaded)/1024)
-		case bytesDownloaded < 1024*1024*1024:
-			downloadedBytesStr = fmt.Sprintf("%.1f MB", float64(bytesDownloaded)/(1024*1024))
-		default:
-			downloadedBytesStr = fmt.Sprintf("%.1f GB", float64(bytesDownloaded)/(1024*1024*1024))
-		}
+		downloadedBytesStr = formatBytes(bytesDownloaded)
 	}
 
 	// Verify SHA256 hash if provided -- also for cached files.
