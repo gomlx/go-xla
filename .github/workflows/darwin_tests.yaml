@@ -23,7 +23,7 @@ jobs:
 
       - name: Test with AutoInstall CPU PJRT plugin
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
 
@@ -38,7 +38,7 @@ jobs:
 
       - name: Test
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export LD_LIBRARY_PATH=/usr/local/lib
           go test ./pkg/...
