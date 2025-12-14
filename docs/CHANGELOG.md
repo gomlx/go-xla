@@ -1,6 +1,7 @@
 # v0.1.2
 
-* Removed external dependency to `github.com/charmbracelet/huh/spinner`.
+* Removed external dependency to `github.com/charmbracelet/huh/spinner` from `pkg/installer`.
+* Split `cmd/pjrt_installer` into its own module (its own `go.mod`), to limit default `go-xla` "apparent" dependencies.
 
 # v0.1.1
 
