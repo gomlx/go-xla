@@ -9,10 +9,9 @@ import (
 	"math/bits"
 	"reflect"
 	"runtime"
-	"time"
 	"unsafe"
 
-	"github.com/AlexsanderHamir/GenPool/pool"
+	"github.com/gomlx/go-xla/internal/pool"
 )
 
 // arenaContainer implements a trivial arena object to speed up allocations that will be used in CGO calls.
@@ -27,9 +26,7 @@ import (
 //
 // The Plugin object also provides an arenaPool that improves things a bit.
 type arenaContainer struct {
-	next       *arenaContainer
-	usageCount int64
-	shardIndex int
+	next *arenaContainer
 
 	data          *arenaData
 	size, current int
@@ -37,28 +34,13 @@ type arenaContainer struct {
 	cPointer      *byte
 }
 
-// GetNext returns the next object in the pool's linked list
-func (a *arenaContainer) GetNext() *arenaContainer { return a.next }
-
-// SetNext sets the next object in the pool's linked list
-func (a *arenaContainer) SetNext(next *arenaContainer) { a.next = next }
-
-// GetUsageCount returns the number of times this object has been used
-func (a *arenaContainer) GetUsageCount() int64 { return a.usageCount }
-
-// IncrementUsage increments the usage count of this object
-func (a *arenaContainer) IncrementUsage() { a.usageCount++ }
-
-// ResetUsage resets the usage count to 0
-func (a *arenaContainer) ResetUsage() { a.usageCount = 0 }
-
-// SetShardIndex sets the shard index for this object
-func (a *arenaContainer) SetShardIndex(index int) {
-	a.shardIndex = index
+func (a *arenaContainer) Next() *arenaContainer {
+	return a.next
 }
 
-// GetShardIndex returns the shard index for this object
-func (a *arenaContainer) GetShardIndex() int { return a.shardIndex }
+func (a *arenaContainer) SetNext(next *arenaContainer) {
+	a.next = next
+}
 
 // arenaData is an indirection so we can use runtime.AddCleanUp.
 type arenaData struct {
@@ -155,25 +137,14 @@ const (
 	maxPooledArenaSize = 16 * 1024 * 1024
 )
 
-var arenaCleanupPolicy = pool.CleanupPolicy{
-	Enabled:       true,
-	Interval:      10 * time.Minute,
-	MinUsageCount: 20, // eviction happens below this number of usage per object
-}
-
 // arenaPools manages pools of arenaContainer objects with power-of-2 sizes.
 // It provides fast, concurrent-safe allocation and reuse of arena objects.
 //
-// It uses GenPool (and not sync.Pool) because we want to the arenas to live longer.
-// See discussions in [1], [2], [3]
-//
-// [1] https://victoriametrics.com/blog/go-sync-pool/
-// [2] https://alexsanderhamir.medium.com/beyond-sync-pool-exploring-object-pool-designs-for-different-workloads-aaab60937277
-// [3] https://www.reddit.com/r/golang/comments/1lvjmar/genpool_a_faster_tunable_alternative_to_syncpool/
+// It uses internal/pool (and not sync.Pool) because we want to the arenas to live longer.
 type arenaPools struct {
 	// pools[i] contains arenas of size 2^(i+11), where i=0 is DefaultArenaSize (2048 = 2^11)
 	// and the maximum is 16MB (2^24).
-	pools []*pool.ShardedPool[arenaContainer, *arenaContainer]
+	pools []*pool.Pool[arenaContainer, *arenaContainer]
 
 	// minShift is the bit position for DefaultArenaSize (11 for 2048)
 	minShift int
@@ -189,28 +160,18 @@ func newArenaPools() (*arenaPools, error) {
 	numPools := maxShift - minShift + 1
 
 	ap := &arenaPools{
-		// pools:    make([]sync.Pool, numPools),
-		pools:    make([]*pool.ShardedPool[arenaContainer, *arenaContainer], numPools),
+		pools:    make([]*pool.Pool[arenaContainer, *arenaContainer], numPools),
 		minShift: minShift,
 		maxShift: maxShift,
 	}
 
 	for poolIdx := range numPools {
 		poolSize := 1 << (poolIdx + minShift)
-		config := pool.Config[arenaContainer, *arenaContainer]{
-			Cleanup: arenaCleanupPolicy,
-			Allocator: func() *arenaContainer {
-				arena := newArena(poolSize)
-				arena.poolIndex = poolIdx
-				return arena
-			},
-			Cleaner: func(a *arenaContainer) { a.Reset() },
-		}
-		p, err := pool.NewPoolWithConfig(config)
-		if err != nil {
-			return nil, err
-		}
-		ap.pools[poolIdx] = p
+		ap.pools[poolIdx] = pool.New[arenaContainer, *arenaContainer](func() *arenaContainer {
+			arena := newArena(poolSize)
+			arena.poolIndex = poolIdx
+			return arena
+		})
 	}
 	return ap, nil
 }
@@ -239,8 +200,7 @@ func (ap *arenaPools) Get(targetSize int) *arenaContainer {
 	poolIndex := shift - ap.minShift
 
 	// Try to get from the pool.
-	arena := ap.pools[poolIndex].Get()
-	return arena
+	return ap.pools[poolIndex].Get()
 }
 
 // Return returns an arenaContainer to the pool for reuse.
@@ -259,13 +219,12 @@ func (ap *arenaPools) Return(arena *arenaContainer) {
 	}
 
 	// Reset and return to the pool.
+	arena.Reset()
 	ap.pools[arena.poolIndex].Put(arena)
 }
 
 // Free pools.
 func (ap *arenaPools) Free() {
-	for _, p := range ap.pools {
-		p.Close()
-	}
+	// internal/pool pools cannot be closed/freed.
 	ap.pools = nil
 }
