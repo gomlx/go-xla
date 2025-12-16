@@ -9,17 +9,22 @@ import (
 	"time"
 )
 
+type MyObject struct {
+	ID   int
+	next *MyObject
+}
+
+func (o *MyObject) Next() *MyObject        { return o.next }
+func (o *MyObject) SetNext(next *MyObject) { o.next = next }
+
 func TestPool(t *testing.T) {
 	// Object to pool.
-	type MyObject struct {
-		ID int
-	}
 
 	var counter int32
 	// Create a pool that assigns a unique ID to each new object.
-	pool := New(func() *PoolNode[*MyObject] {
+	pool := New(func() *MyObject {
 		id := atomic.AddInt32(&counter, 1)
-		return &PoolNode[*MyObject]{Item: &MyObject{ID: int(id)}}
+		return &MyObject{ID: int(id)}
 	})
 
 	const numGoroutines = 500
@@ -33,10 +38,6 @@ func TestPool(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numIterations; j++ {
 				node := pool.Get()
-				if node.Item == nil {
-					// Should not happen as NewFunc is provided.
-					t.Error("Got nil Item")
-				}
 
 				// Simulate work
 				time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
@@ -60,30 +61,26 @@ func TestPool(t *testing.T) {
 	if totalCreated > numGoroutines+int32(runtime.GOMAXPROCS(0))*2 {
 		t.Logf("Warning: High number of objects created: %d (expected around %d)", totalCreated, numGoroutines)
 	}
-    // We can't strictly assert the upper bound because scheduling is non-deterministic,
-    // but it should definitely be less than numGoroutines * numIterations.
-    if totalCreated >= int32(numGoroutines*numIterations) {
-        t.Errorf("Pool seems ineffective: created %d objects for %d requests", totalCreated, numGoroutines*numIterations)
-    }
+	// We can't strictly assert the upper bound because scheduling is non-deterministic,
+	// but it should definitely be less than numGoroutines * numIterations.
+	if totalCreated >= int32(numGoroutines*numIterations) {
+		t.Errorf("Pool seems ineffective: created %d objects for %d requests", totalCreated, numGoroutines*numIterations)
+	}
 
-    // Verify basic properties
-    node := pool.Get()
-    if node == nil {
-        t.Fatal("Get returned nil")
-    }
-    pool.Put(node)
+	// Verify basic properties
+	node := pool.Get()
+	if node == nil {
+		t.Fatal("Get returned nil")
+	}
+	pool.Put(node)
 }
 
 func BenchmarkPool(b *testing.B) {
-    type MyObject struct {
-        val int
-    }
-    p := New(func() *PoolNode[*MyObject] { return &PoolNode[*MyObject]{Item: &MyObject{}} })
-
-    b.RunParallel(func(pb *testing.PB) {
-        for pb.Next() {
-            n := p.Get()
-            p.Put(n)
-        }
-    })
+	pool := New(func() *MyObject { return &MyObject{ID: 7} })
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := pool.Get()
+			pool.Put(n)
+		}
+	})
 }

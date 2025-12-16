@@ -1,4 +1,4 @@
-//go:build race
+//go:build race_mu
 
 package pool
 
