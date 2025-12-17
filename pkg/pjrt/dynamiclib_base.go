@@ -141,8 +141,8 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 var (
 	// Patterns to extract the name from the plugins.
 	rePluginName = []*regexp.Regexp{
-		regexp.MustCompile(`^.*/pjrt_c_api_(.+)_plugin.(so|dylib)$`),
-		regexp.MustCompile(`^.*/pjrt[-_]plugin[-_](.+).(so|dylib)$`),
+		regexp.MustCompile(`^.*[/\\]pjrt_c_api_(.+)_plugin.(so|dylib|dll)$`),
+		regexp.MustCompile(`^.*[/\\]pjrt[-_]plugin[-_](.+).(so|dylib|dll)$`),
 	}
 )
 
@@ -194,8 +194,9 @@ func searchPlugins(searchName string) (pluginsPaths map[string]string) {
 	for _, pluginPath := range pluginSearchPaths {
 		for _, pattern := range []string{
 			"pjrt-plugin-*.so", "pjrt_plugin_*.so", "pjrt_c_api_*_plugin.so",
-			"pjrt-plugin-*.dylib", "pjrt_plugin_*.dylib", "pjrt_c_api_*_plugin.dylib"} {
-			candidates, err := filepath.Glob(path.Join(pluginPath, pattern))
+			"pjrt-plugin-*.dylib", "pjrt_plugin_*.dylib", "pjrt_c_api_*_plugin.dylib",
+			"pjrt-plugin-*.dll", "pjrt_plugin_*.dll", "pjrt_c_api_*_plugin.dll"} {
+			candidates, err := filepath.Glob(filepath.Join(pluginPath, pattern))
 			if err != nil {
 				continue
 			}
