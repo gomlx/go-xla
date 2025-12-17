@@ -1,0 +1,61 @@
+name: "Tests(windows/amd64)"
+
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Test with AutoInstall CPU PJRT plugin
+        run: |
+          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
+
+      - name: Install PJRT plugin
+        run: |
+          (cd ./cmd/pjrt_installer && go work init && go work use . '..\..' && go install .)
+          export CPU_VERSION="$(sed -n 's/.*var DefaultCPUVersion = "\(.*\)".*/\1/p' ./internal/utils/utils.go)"
+          env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin cpu -version "${CPU_VERSION}" -path '~\AppData\Local\go-xla'
+          echo "Contents for go-xla:"
+          ls -la "${HOME}/AppData/Local/go-xla"
+          echo "-----------"
+          echo
+
+      - name: Test
+        run: |
+          go test ./pkg/...
+          go test ./internal/tests/...

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -275,8 +276,27 @@ func extractZipFile(f *zip.File, outputPath string) error {
 	}
 	defer func() { ReportError(rc.Close()) }()
 
+	// Use the file mode from the zip entry
+	fMode := f.Mode()
+	if fMode == 0 {
+		// Fallback if zip doesn't have mode set
+		fMode = 0644
+	}
+
+	// On windows, if the file exists and is read-only, remove it first to avoid "access is denied" errors.
+	if runtime.GOOS == "windows" {
+		if _, statErr := os.Stat(outputPath); statErr == nil {
+			// Try to make file writable in case it's read-only
+			if chmodErr := os.Chmod(outputPath, 0666); chmodErr != nil {
+				// Ignore error, try remove anyway
+			}
+			// Remove file to allow overwrite
+			_ = os.Remove(outputPath) // Ignore error: attempt to remove in case it helps
+		}
+	}
+
 	// Create the output file
-	outFile, err := os.Create(outputPath)
+	outFile, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fMode)
 	if err != nil {
 		return err
 	}
@@ -411,7 +431,7 @@ func GitHubDownloadReleaseAssets(repo string, version string) ([]string, error) 
 	// Extract .tar.gz download URLs
 	var urls []string
 	for _, asset := range release.Assets {
-		if strings.HasSuffix(asset.BrowserDownloadURL, ".tar.gz") {
+		if strings.HasSuffix(asset.BrowserDownloadURL, ".tar.gz") || strings.HasSuffix(asset.BrowserDownloadURL, ".zip") {
 			urls = append(urls, asset.BrowserDownloadURL)
 		}
 	}
@@ -575,5 +595,57 @@ func Untar(tarballPath, outputDirPath string) ([]string, error) {
 			klog.Errorf("Skipping unsupported type: %c for file %s\n", header.Typeflag, header.Name)
 		}
 	}
+	return extractedFiles, nil
+}
+
+// Unzip takes a path to a zip file and an output directory.
+// It returns a list of extracted files and any error encountered.
+func Unzip(zipPath, outputDirPath string) ([]string, error) {
+	// Make sure the output directory is absolute.
+	if !filepath.IsAbs(outputDirPath) {
+		var err error
+		outputDirPath, err = filepath.Abs(outputDirPath)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Unzip failed to get absolute path for output directory %q", outputDirPath)
+		}
+	}
+
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open zip file %s", zipPath)
+	}
+	defer func() { ReportError(r.Close()) }()
+
+	var extractedFiles []string
+
+	for _, f := range r.File {
+		// Clean the targetPath and make sure it falls within outputDirPath.
+		targetPath := filepath.Join(outputDirPath, f.Name)
+		targetPath = filepath.Clean(targetPath)
+		if !strings.HasPrefix(targetPath, outputDirPath) {
+			return nil, errors.Errorf("zip entry path is unsafe: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			// Create directory
+			if err := os.MkdirAll(targetPath, f.Mode()); err != nil {
+				return nil, errors.Wrapf(err, "failed to create directory %s", targetPath)
+			}
+			extractedFiles = append(extractedFiles, targetPath)
+			continue
+		}
+
+		// Create parent directories if they don't exist
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return nil, errors.Wrapf(err, "failed to create directory %s", filepath.Dir(targetPath))
+		}
+
+		// Handle regular files using the helper
+		if err := extractZipFile(f, targetPath); err != nil {
+			return nil, errors.Wrapf(err, "failed to extract file %s", targetPath)
+		}
+		extractedFiles = append(extractedFiles, targetPath)
+	}
+
 	return extractedFiles, nil
 }

@@ -1,5 +1,10 @@
 package utils
 
+// DefaultCPUVersion is the default version of the CPU PJRT plugin to use with
+// this go-xla release, against which it was tested.
+// Exported in pkg/pjrt, but a copy is kept here to pkg/installer can include it without pulling the whole of PJRT.
+var DefaultCPUVersion = "v0.83.3"
+
 // NormalizeIdentifier converts the name of an identifier (function name or function input parameter
 // name) to a valid one: only letters, digits, and underscores are allowed.
 //

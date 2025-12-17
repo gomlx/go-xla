@@ -1,4 +1,4 @@
-name: "Tests(linux)"
+name: "Tests(linux/amd64, ubuntu latest)"
 
 permissions:
   # read|write|none
@@ -48,8 +48,8 @@ jobs:
         shell: bash
         run: |
           (cd ./cmd/pjrt_installer && go install .)
-          export CPU_VERSION="$(sed -n 's/.*var DefaultCPUVersion = "\(.*\)".*/\1/p' ./pkg/pjrt/cpuversion.go)"
-          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin linux -version "${CPU_VERSION}" -path /usr/local/lib/go-xla
+          export CPU_VERSION="$(sed -n 's/.*var DefaultCPUVersion = "\(.*\)".*/\1/p' ./internal/utils/utils.go)"
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin cpu -version "${CPU_VERSION}" -path /usr/local/lib/go-xla
         # When adding static linking or dynamic linking at load time:
         # sudo ln -sf /usr/local/lib/go-xla/libpjrt* /usr/lib/x86_64-linux-gnu/
 

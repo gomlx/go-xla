@@ -40,7 +40,6 @@ import "C"
 import (
 	"bufio"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -82,7 +81,7 @@ func osDefaultLibraryPaths() []string {
 
 	// Prefix LD_LIBRARY_PATH to non-absolute entries.
 	for ldPath := range strings.SplitSeq(os.Getenv("LD_LIBRARY_PATH"), ":") {
-		if ldPath == "" || !path.IsAbs(ldPath) {
+		if ldPath == "" || !filepath.IsAbs(ldPath) {
 			// No empty or relative paths.
 			continue
 		}
@@ -243,4 +242,19 @@ func SuppressAbseilLoggingHack(fn func()) {
 	}
 
 	fn()
+}
+
+func suppressLogging() (newFd int, err error) {
+	newFd, err = syscall.Dup(2)
+	if err != nil {
+		err = errors.Wrap(err, "failed to duplicate (syscall.Dup) file descriptor 2 (stderr) in order to silence abseil logging")
+		return
+	}
+	err = syscall.Close(2)
+	if err != nil {
+		klog.Errorf("failed to syscall.Close(2): %v", err)
+		err = nil // Report, but continue.
+	}
+	os.Stderr = os.NewFile(uintptr(newFd), "stderr")
+	return
 }

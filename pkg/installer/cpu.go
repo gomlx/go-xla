@@ -11,9 +11,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/go-xla/pkg/pjrt"
+	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/pkg/errors"
 )
+
+var CPUSupportedPlatforms = []string{
+	"linux_amd64", "linux_arm64",
+	"darwin_arm64",
+	"windows_amd64",
+}
 
 const AmazonLinux = "amazonlinux"
 
@@ -24,7 +30,7 @@ func init() {
 // CPUAutoInstall installs the latest version of the CPU PJRT if not yet installed.
 // goxlaInstallPath is expected to be a "lib/go-xla" directory, under which the PJRT plugin is installed.
 func CPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) error {
-	version := pjrt.DefaultCPUVersion
+	version := utils.DefaultCPUVersion
 	pjrtPluginPath := path.Join(goxlaInstallPath, fmt.Sprintf("pjrt_c_api_cpu_%s_plugin.so", version))
 	_, err := os.Stat(pjrtPluginPath)
 	if err == nil {
@@ -32,32 +38,8 @@ func CPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityL
 		return nil
 	}
 
-	switch runtime.GOOS {
-	case "darwin":
-		if runtime.GOARCH != "arm64" {
-			// Only support arm64 on Darwin, nothing to auto-install for other architectures.
-			return nil
-		}
-		return CPUInstall("darwin", version, goxlaInstallPath, useCache, verbosity)
-	case "linux":
-		if runtime.GOARCH != "amd64" {
-			// Only support amd64 on Linux, nothing to auto-install for other architectures.
-			return nil
-		}
-		platform := "linux"
-		// Detect if we need to use amazonlinux binaries for older glibc systems.
-		major, minor, err := detectGlibcVersion()
-		if err != nil {
-			return errors.WithMessage(err, "failed to detect glibc version")
-		}
-		if err == nil && major == 2 && minor < 42 {
-			platform = AmazonLinux
-		}
-		return CPUInstall(platform, version, goxlaInstallPath, useCache, verbosity)
-	default:
-		// Not supported for other OSes yet.
-		return nil
-	}
+	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
+	return CPUInstall(platform, version, goxlaInstallPath, useCache, verbosity)
 }
 
 var glibcVersionRegex = regexp.MustCompile(`^ldd\s+\(.*\)\s+(\d+)\.(\d+)$`)
@@ -81,13 +63,13 @@ func detectGlibcVersion() (major int, minor int, err error) {
 }
 
 // CPUValidateVersion checks whether the linux version selected by "-version" exists.
-func CPUValidateVersion(plugin, version string) error {
+func CPUValidateVersion(platform, version string) error {
 	// "latest" is always valid.
 	if version == "latest" {
 		return nil
 	}
 
-	_, err := CPUGetDownloadURL(plugin, version)
+	_, err := CPUGetDownloadURL(platform, version)
 	if err != nil {
 		versions, versionsErr := GitHubGetVersions(BinaryCPUReleasesRepo)
 		if versionsErr != nil {
@@ -102,7 +84,7 @@ func CPUValidateVersion(plugin, version string) error {
 }
 
 // CPUGetDownloadURL returns the download URL for the given version and plugin.
-func CPUGetDownloadURL(plugin, version string) (url string, err error) {
+func CPUGetDownloadURL(platform, version string) (url string, err error) {
 	var assets []string
 	assets, err = GitHubDownloadReleaseAssets(BinaryCPUReleasesRepo, version)
 	if err != nil {
@@ -112,28 +94,22 @@ func CPUGetDownloadURL(plugin, version string) (url string, err error) {
 		return "", errors.Errorf("version %q not found", version)
 	}
 
-	var wantAsset string
-	switch plugin {
-	case "linux":
-		wantAsset = "pjrt_cpu_linux_amd64.tar.gz"
-	case AmazonLinux:
-		wantAsset = "pjrt_cpu_amazonlinux_amd64.tar.gz"
-	case "darwin":
-		wantAsset = "pjrt_cpu_darwin_arm64.tar.gz"
-	default:
-		return "", errors.Errorf("version validation not implemented for plugin %q in version %s", plugin, version)
+	extension := ".tar.gz"
+	if strings.Contains(platform, "windows") {
+		extension = ".zip"
 	}
+	wantAsset := fmt.Sprintf("pjrt_cpu_%s%s", platform, extension)
 	for _, assetURL := range assets {
 		if strings.HasSuffix(assetURL, "/"+wantAsset) {
 			return assetURL, nil
 		}
 	}
 	return "", errors.Errorf("Plugin %q version %q doesn't seem to have the required asset (%q) -- "+
-		"assets found: %v", plugin, version, wantAsset, assets)
+		"assets found: %v", platform, version, wantAsset, assets)
 }
 
 // CPUInstall the assets on the target directory.
-func CPUInstall(plugin, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
+func CPUInstall(platform, version, installPath string, useCache bool, verbosity VerbosityLevel) error {
 	// Sequence to clear the line and move to the next line, dependes on verbosity level.
 	eolSeq := "\n"
 	if verbosity == Normal {
@@ -147,7 +123,7 @@ func CPUInstall(plugin, version, installPath string, useCache bool, verbosity Ve
 			return err
 		}
 	}
-	assetURL, err := CPUGetDownloadURL(plugin, version)
+	assetURL, err := CPUGetDownloadURL(platform, version)
 	if err != nil {
 		return err
 	}
@@ -176,7 +152,12 @@ func CPUInstall(plugin, version, installPath string, useCache bool, verbosity Ve
 	if verbosity != Quiet {
 		fmt.Printf("\r- Extracting files in %s to %s%s", downloadedFile, installPath, eolSeq)
 	}
-	extractedFiles, err := Untar(downloadedFile, installPath)
+	var extractedFiles []string
+	if strings.HasSuffix(downloadedFile, ".zip") {
+		extractedFiles, err = Unzip(downloadedFile, installPath)
+	} else {
+		extractedFiles, err = Untar(downloadedFile, installPath)
+	}
 	if err != nil {
 		return err
 	}
@@ -196,26 +177,43 @@ func CPUInstall(plugin, version, installPath string, useCache bool, verbosity Ve
 		case Quiet:
 		}
 		baseFile := filepath.Base(file)
-		if !isLinked && strings.HasPrefix(baseFile, "pjrt_c_api_cpu_") && strings.HasSuffix(baseFile, "_plugin.so") {
-			// Link file to the default CPU plugin, without the version number.
-			linkPath := path.Join(installPath, "pjrt_c_api_cpu_plugin.so")
-			if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
-				return errors.Wrap(err, "failed to remove existing link")
+		if !isLinked {
+			if strings.HasPrefix(baseFile, "pjrt_c_api_cpu_") && strings.HasSuffix(baseFile, "_plugin.so") {
+				// For Linux/Darwin:
+				// Link file to the default CPU plugin, without the version number.
+				linkPath := filepath.Join(installPath, "pjrt_c_api_cpu_plugin.so")
+				if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+					return errors.Wrap(err, "failed to remove existing link")
+				}
+				if err := os.Symlink(baseFile, linkPath); err != nil {
+					return errors.Wrap(err, "failed to create symlink")
+				}
+				if verbosity == Verbose {
+					fmt.Printf("    Linked to %s\n", linkPath)
+				}
+				isLinked = true
+
+			} else if strings.HasPrefix(baseFile, "pjrt_c_api_cpu_") && strings.HasSuffix(baseFile, "_plugin.dll") {
+				// Windows version of the CPU plugin.
+				linkPath := filepath.Join(installPath, "pjrt_c_api_cpu_plugin.dll")
+				if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+					return errors.Wrap(err, "failed to remove existing link")
+				}
+				if err := os.Symlink(baseFile, linkPath); err != nil {
+					return errors.Wrap(err, "failed to create symlink")
+				}
+				if verbosity == Verbose {
+					fmt.Printf("    Linked to %s\n", linkPath)
+				}
+				isLinked = true
 			}
-			if err := os.Symlink(baseFile, linkPath); err != nil {
-				return errors.Wrap(err, "failed to create symlink")
-			}
-			if verbosity == Verbose {
-				fmt.Printf("    Linked to %s\n", linkPath)
-			}
-			isLinked = true
 		}
 	}
 	if verbosity == Verbose {
 		fmt.Println()
 	}
 	if verbosity != Quiet {
-		fmt.Printf("\r✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)\n", version, installPath, plugin)
+		fmt.Printf("\r✅ Installed XLA's PJRT for CPU %s to %s (platform: %s)\n", version, installPath, platform)
 	}
 	if verbosity == Verbose {
 		fmt.Println()

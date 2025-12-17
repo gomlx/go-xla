@@ -18,20 +18,17 @@ package pjrt
 
 /*
 #include <stdlib.h>
-#include <dlfcn.h>
 #include "pjrt_c_api.h"
 #include "common.h"
 */
 import "C"
 import (
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -95,7 +92,7 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 	if plugin, found := loadedPlugins[name]; found {
 		return plugin, nil
 	}
-	if path.IsAbs(name) {
+	if filepath.IsAbs(name) {
 		for _, plugin := range loadedPlugins {
 			if plugin.Path() == name {
 				return plugin, nil
@@ -105,12 +102,12 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 
 	// Search path to plugin -- except if name is an absolute path.
 	pluginPath := name
-	if !path.IsAbs(pluginPath) {
+	if !filepath.IsAbs(pluginPath) {
 		var found bool
 		pluginPath, found = searchPlugin(name)
 		if !found {
 			return nil, errors.Errorf("plugin name %q not found in paths %v: set PJRT_PLUGIN_LIBRARY_PATH to an specific path(s) to search; "+
-				"plugins should be named pjrt_c_api_<name>_plugin.so (or .dylib for Darwin)",
+				"plugins should be named pjrt_c_api_<name>_plugin.so (or .dylib for Darwin, or .dll for Windows)",
 				name, pluginSearchPaths)
 		}
 	}
@@ -141,8 +138,8 @@ func loadNamedPlugin(name string) (*Plugin, error) {
 var (
 	// Patterns to extract the name from the plugins.
 	rePluginName = []*regexp.Regexp{
-		regexp.MustCompile(`^.*/pjrt_c_api_(.+)_plugin.(so|dylib)$`),
-		regexp.MustCompile(`^.*/pjrt[-_]plugin[-_](.+).(so|dylib)$`),
+		regexp.MustCompile(`^.*[/\\]pjrt_c_api_(.+)_plugin.(so|dylib|dll)$`),
+		regexp.MustCompile(`^.*[/\\]pjrt[-_]plugin[-_](.+).(so|dylib|dll)$`),
 	}
 )
 
@@ -194,8 +191,9 @@ func searchPlugins(searchName string) (pluginsPaths map[string]string) {
 	for _, pluginPath := range pluginSearchPaths {
 		for _, pattern := range []string{
 			"pjrt-plugin-*.so", "pjrt_plugin_*.so", "pjrt_c_api_*_plugin.so",
-			"pjrt-plugin-*.dylib", "pjrt_plugin_*.dylib", "pjrt_c_api_*_plugin.dylib"} {
-			candidates, err := filepath.Glob(path.Join(pluginPath, pattern))
+			"pjrt-plugin-*.dylib", "pjrt_plugin_*.dylib", "pjrt_c_api_*_plugin.dylib",
+			"pjrt-plugin-*.dll", "pjrt_plugin_*.dll", "pjrt_c_api_*_plugin.dll"} {
+			candidates, err := filepath.Glob(filepath.Join(pluginPath, pattern))
 			if err != nil {
 				continue
 			}
@@ -259,21 +257,6 @@ func checkPlugin(name, pluginPath string) (err error) {
 		err = errors.Errorf("loaded PJRT plugin for %q, but it returned a nil plugin!?", pluginPath)
 		return
 	}
-	return
-}
-
-func suppressLogging() (newFd int, err error) {
-	newFd, err = syscall.Dup(2)
-	if err != nil {
-		err = errors.Wrap(err, "failed to duplicate (syscall.Dup) file descriptor 2 (stderr) in order to silence abseil logging")
-		return
-	}
-	err = syscall.Close(2)
-	if err != nil {
-		klog.Errorf("failed to syscall.Close(2): %v", err)
-		err = nil // Report, but continue.
-	}
-	os.Stderr = os.NewFile(uintptr(newFd), "stderr")
 	return
 }
 

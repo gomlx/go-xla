@@ -9,13 +9,12 @@ require (
 	github.com/charmbracelet/huh/spinner v0.0.0-20251124111010-6575a6e28cb3
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/gomlx/go-xla v0.1.2
+	github.com/gomlx/go-xla v0.1.4-0.20251217134619-744d4d4dee0c
 	github.com/pkg/errors v0.9.1
 	k8s.io/klog/v2 v2.130.1
 )
 
 require (
-	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect

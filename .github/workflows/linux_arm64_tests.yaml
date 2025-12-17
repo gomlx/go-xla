@@ -1,0 +1,87 @@
+name: "Tests(linux/arm64)"
+
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Test with AutoInstall CPU PJRT plugin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
+
+      # See file pkg/pjrt/cpuversion.go for the default version of the CPU PJRT plugin to use.
+      - name: Install PJRT plugin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          (cd ./cmd/pjrt_installer && go install .)
+          export CPU_VERSION="$(sed -n 's/.*var DefaultCPUVersion = "\(.*\)".*/\1/p' ./internal/utils/utils.go)"
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin cpu -version "${CPU_VERSION}" -path /usr/local/lib/go-xla
+        # When adding static linking or dynamic linking at load time:
+        # sudo ln -sf /usr/local/lib/go-xla/libpjrt* /usr/lib/x86_64-linux-gnu/
+
+      - name: Test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go test ./pkg/...
+          go test ./internal/tests/...
+
+      # - name: Go Coverage Badge
+      #   if: github.ref == 'refs/heads/main'
+      #   uses: tj-actions/coverage-badge-go@v2
+      #   with:
+      #     green: 80
+      #     filename: docs/coverage.out
+
+      # - name: Commit README.md changes
+      #   if: github.ref == 'refs/heads/main'
+      #   run: |
+      #     if git diff --quiet -- 'README.md' ; then
+      #       echo "README.md not modified."
+      #     else
+      #       git config --local user.email "action@github.com"
+      #       git config --local user.name "GitHub Action"
+      #       git add README.md
+      #       git commit -m "chore: Updated coverage badge."
+      #     fi
+
+      # - name: Push Changes
+      #   if: github.ref == 'refs/heads/main'
+      #   uses: ad-m/github-push-action@master
+      #   with:
+      #     github_token: ${{ github.token }}
+      #     branch: ${{ github.ref }}

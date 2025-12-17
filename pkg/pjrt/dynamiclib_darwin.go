@@ -27,7 +27,6 @@ import "C"
 
 import (
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -59,7 +58,7 @@ func osDefaultLibraryPaths() []string {
 	// Standard environment variables.
 	for _, varName := range []string{"DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"} {
 		for ldPath := range strings.SplitSeq(os.Getenv(varName), string(os.PathListSeparator)) {
-			if ldPath == "" || !path.IsAbs(ldPath) {
+			if ldPath == "" || !filepath.IsAbs(ldPath) {
 				// No empty or relative paths.
 				continue
 			}
@@ -180,4 +179,19 @@ func SuppressAbseilLoggingHack(fn func()) {
 	}
 
 	fn()
+}
+
+func suppressLogging() (newFd int, err error) {
+	newFd, err = syscall.Dup(2)
+	if err != nil {
+		err = errors.Wrap(err, "failed to duplicate (syscall.Dup) file descriptor 2 (stderr) in order to silence abseil logging")
+		return
+	}
+	err = syscall.Close(2)
+	if err != nil {
+		klog.Errorf("failed to syscall.Close(2): %v", err)
+		err = nil // Report, but continue.
+	}
+	os.Stderr = os.NewFile(uintptr(newFd), "stderr")
+	return
 }

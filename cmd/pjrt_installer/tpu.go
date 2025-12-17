@@ -7,14 +7,12 @@ import (
 )
 
 func init() {
-	for _, plugin := range []string{"tpu"} {
-		pluginInstallers[plugin] = func(plugin, version, installPath string) error {
-			return installer.TPUInstall(plugin, version, installPath, *flagCache, installer.VerbosityLevel(*flagVerbosity))
-		}
-		pluginValidators[plugin] = installer.TPUValidateVersion
+	pluginName := "tpu"
+	pluginInstallers[pluginName] = func(plugin, version, installPath string) error {
+		return installer.TPUInstall(plugin, version, installPath, *flagCache, installer.VerbosityLevel(*flagVerbosity))
 	}
-	pluginValues = append(pluginValues, "tpu")
-	pluginDescriptions = append(pluginDescriptions,
-		"TPU PJRT for Linux/amd64 host machines (glibc >= 2.31)")
+	pluginValidators[pluginName] = installer.TPUValidateVersion
+	pluginValues = append(pluginValues, pluginName)
+	pluginDescriptions = append(pluginDescriptions, "TPU PJRT (linux/amd64)")
 	pluginPriorities = append(pluginPriorities, 20)
 }

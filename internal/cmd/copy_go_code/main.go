@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/gomlx/go-xla/internal/must"
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/gomlx/go-xla/internal/must"
 )
 
 var (
@@ -47,7 +49,7 @@ func main() {
 
 	// Find the original file
 	originalPath := *flagOriginalGoFile
-	if !path.IsAbs(originalPath) {
+	if !filepath.IsAbs(originalPath) {
 		currentPath := must.M1(os.Getwd())
 		for {
 			originalPath = path.Join(currentPath, *flagOriginalGoFile)

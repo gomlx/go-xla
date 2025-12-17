@@ -2,15 +2,15 @@ package pjrt
 
 /*
 #include <stdlib.h>
-#include <dlfcn.h>
 #include "pjrt_c_api.h"
 #include "gen_api_calls.h"
 #include "gen_new_struct.h"
 */
 import "C"
 import (
-	"github.com/pkg/errors"
 	"unsafe"
+
+	"github.com/pkg/errors"
 )
 
 // pjrtErrorDestroy calls C.PJRT_Error_Destroy.

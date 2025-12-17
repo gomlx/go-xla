@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/gomlx/go-xla/internal/utils"
@@ -43,6 +44,12 @@ func main() {
 
 	// Initialize and set default values for flags
 	// klog.InitFlags(nil)
+
+	if len(pluginValues) == 0 {
+		klog.Fatalf("No known plugins for %s/%s found, sorry. "+
+			"Please, create an issue in github.com/gomlx/go-xla to add support to your platform.",
+			runtime.GOOS, runtime.GOARCH)
+	}
 
 	// Sort plugins by priority
 	for i := 0; i < len(pluginPriorities); i++ {
@@ -85,6 +92,11 @@ func main() {
 			klog.Fatalf("Failed on error: %+v", err)
 		}
 		return
+	}
+
+	// Backward compatibility: older OS based name renamed to the simple "cpu".
+	if slices.Contains([]string{"linux", "darwin", installer.AmazonLinux}, *flagPlugin) {
+		*flagPlugin = "cpu"
 	}
 
 	if *flagPlugin == "" || *flagPath == "" || *flagVersion == "" {

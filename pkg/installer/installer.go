@@ -47,33 +47,44 @@ var (
 // - verbosity: the verbosity level to use. 0=quiet, 1=normal (1 log line per plugin installed), 2=verbose.
 func AutoInstall(installPath string, useCache bool, verbosity VerbosityLevel) error {
 	if installPath == "" {
-		homeDir, err := os.UserHomeDir()
+		var err error
+		installPath, err = DefaultHomeLibPath()
 		if err != nil {
-			return errors.Wrap(err, "failed to get user home directory")
-		}
-		switch runtime.GOOS {
-		case "linux":
-			installPath = filepath.Join(homeDir, ".local", "lib")
-		case "darwin":
-			installPath = filepath.Join(homeDir, "Library", "Application Support")
-		default:
-			return errors.Errorf("auto-install not supported on platform %s/%s", runtime.GOOS, runtime.GOARCH)
+			return err
 		}
 	}
 	goxlaInstallPath := filepath.Join(installPath, "go-xla")
 	var firstErr error
 	for installerName, installer := range autoInstallers {
 		if err := installer(goxlaInstallPath, useCache, verbosity); err != nil {
-			if err != nil {
-				err = errors.WithMessagef(err, "failed to auto-install %q", installerName)
-				if firstErr == nil {
-					firstErr = err
-				} else {
-					// Log the error, continue with the next installer.
-					klog.Errorf("AutoInstall error: %+v\n", err)
-				}
+			err = errors.WithMessagef(err, "failed to auto-install %q", installerName)
+			if firstErr == nil {
+				firstErr = err
+			} else {
+				// Log the error, continue with the next installer.
+				klog.Errorf("AutoInstall error: %+v\n", err)
 			}
 		}
 	}
 	return firstErr
+}
+
+// DefaultHomeLibPath returns the default user-local library directory ("~/.local/lib" in Linux)
+//
+// This is the directory used by AutoInstall if the installPath is empty.
+func DefaultHomeLibPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch runtime.GOOS {
+	case "linux":
+		return filepath.Join(homeDir, ".local", "lib"), nil
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support"), nil
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Local"), nil
+	default:
+		return "", errors.Errorf("auto-install not supported on platform %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
 }

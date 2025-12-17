@@ -36,7 +36,7 @@ func TestBenchCGO(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -57,7 +57,7 @@ func TestBenchArena(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -138,7 +138,7 @@ func TestBenchBufferFromHost(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -184,7 +184,7 @@ func TestBenchBufferToHost(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -229,7 +229,7 @@ func TestBenchAdd1Execution(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -299,7 +299,7 @@ func TestBenchAdd1Div2Execution(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
@@ -372,7 +372,7 @@ func TestBenchMeanNormalizedExecution(t *testing.T) {
 		t.SkipNow()
 	}
 	if *flagBenchDuration == 0 {
-		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds")
+		fmt.Printf("Skipping benchmark, duration is set to 0. Set -bench_duration=5s to run it for 5 seconds\n")
 		t.SkipNow()
 	}
 	plugin := must1(GetPlugin(*FlagPluginName))
