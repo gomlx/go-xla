@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -280,6 +281,18 @@ func extractZipFile(f *zip.File, outputPath string) error {
 	if fMode == 0 {
 		// Fallback if zip doesn't have mode set
 		fMode = 0644
+	}
+
+	// On windows, if the file exists and is read-only, remove it first to avoid "access is denied" errors.
+	if runtime.GOOS == "windows" {
+		if _, statErr := os.Stat(outputPath); statErr == nil {
+			// Try to make file writable in case it's read-only
+			if chmodErr := os.Chmod(outputPath, 0666); chmodErr != nil {
+				// Ignore error, try remove anyway
+			}
+			// Remove file to allow overwrite
+			_ = os.Remove(outputPath) // Ignore error: attempt to remove in case it helps
+		}
 	}
 
 	// Create the output file
