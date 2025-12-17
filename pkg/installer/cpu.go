@@ -152,7 +152,12 @@ func CPUInstall(platform, version, installPath string, useCache bool, verbosity 
 	if verbosity != Quiet {
 		fmt.Printf("\r- Extracting files in %s to %s%s", downloadedFile, installPath, eolSeq)
 	}
-	extractedFiles, err := Untar(downloadedFile, installPath)
+	var extractedFiles []string
+	if strings.HasSuffix(downloadedFile, ".zip") {
+		extractedFiles, err = Unzip(downloadedFile, installPath)
+	} else {
+		extractedFiles, err = Untar(downloadedFile, installPath)
+	}
 	if err != nil {
 		return err
 	}
