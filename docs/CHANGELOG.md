@@ -1,3 +1,8 @@
+# Next
+
+* Updated installer library/cli to support linux/arm64 and windows/amd64. 
+  Generalized CPU installation.
+
 # v0.1.3
 
 * Replaced GenPool by the `internal/pool.Pool`: it simplifies a bit, a bit faster and one less

@@ -15,7 +15,7 @@ func init() {
 	}
 	pluginValues = append(pluginValues, "cuda13", "cuda12")
 	pluginDescriptions = append(pluginDescriptions,
-		"CUDA PJRT for Linux/amd64, using CUDA 13",
-		"CUDA PJRT for Linux/amd64, using CUDA 12, deprecated")
+		"CUDA PJRT (linux/amd64), using CUDA 13",
+		"CUDA PJRT (linux/amd64), using CUDA 12, deprecated")
 	pluginPriorities = append(pluginPriorities, 10, 11)
 }

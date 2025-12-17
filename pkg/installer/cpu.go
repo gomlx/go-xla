@@ -15,6 +15,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var CPUSupportedPlatforms = []string{
+	"linux_amd64", "linux_arm64",
+	"darwin_arm64",
+	"windows_amd64",
+}
+
 const AmazonLinux = "amazonlinux"
 
 func init() {
@@ -57,13 +63,13 @@ func detectGlibcVersion() (major int, minor int, err error) {
 }
 
 // CPUValidateVersion checks whether the linux version selected by "-version" exists.
-func CPUValidateVersion(plugin, version string) error {
+func CPUValidateVersion(platform, version string) error {
 	// "latest" is always valid.
 	if version == "latest" {
 		return nil
 	}
 
-	_, err := CPUGetDownloadURL(plugin, version)
+	_, err := CPUGetDownloadURL(platform, version)
 	if err != nil {
 		versions, versionsErr := GitHubGetVersions(BinaryCPUReleasesRepo)
 		if versionsErr != nil {
