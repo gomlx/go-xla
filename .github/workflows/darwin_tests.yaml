@@ -34,7 +34,7 @@ jobs:
         run: |
           (cd ./cmd/pjrt_installer && go install .)
           export CPU_VERSION="$(sed -n 's/.*var DefaultCPUVersion = "\(.*\)".*/\1/p' ./pkg/pjrt/cpuversion.go)"
-          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin darwin -version "${CPU_VERSION}" -path /usr/local/lib/go-xla
+          sudo env GH_TOKEN=$GH_TOKEN $(go env GOPATH)/bin/pjrt_installer -plugin cpu -version "${CPU_VERSION}" -path /usr/local/lib/go-xla
 
       - name: Test
         env:
