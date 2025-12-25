@@ -264,6 +264,42 @@ func (s Shape) Clone() (s2 Shape) {
 	return
 }
 
+// WithUniformQuantization returns a new shape with the given quantization metadata.
+//
+// The same as:
+//
+//	s.Quantization = shapes.UniformQuantization(storageType, expressedType, scale, zeroPoint).
+//	s.DType = expressedType.
+func (s Shape) WithUniformQuantization(storageType, expressedType dtypes.DType, scale float64, zeroPoint int64) Shape {
+	if s.Quantization != nil {
+		panic(errors.Errorf("shape %s already has quantization metadata", s))
+	}
+	return Shape{
+		DType:        expressedType,
+		Dimensions:   s.Dimensions,
+		TupleShapes:  s.TupleShapes,
+		Quantization: UniformQuantization(storageType, expressedType, scale, zeroPoint),
+	}
+}
+
+// WithQuantization returns a new shape with the given quantization metadata.
+//
+// The same as:
+//
+//	s.Quantization = quantization.
+//	s.DType = quantization.ExpressedType.
+func (s Shape) WithQuantization(quantization *Quantization) Shape {
+	if s.Quantization != nil {
+		panic(errors.Errorf("shape %s already has quantization metadata", s))
+	}
+	return Shape{
+		DType:        quantization.ExpressedType,
+		Dimensions:   s.Dimensions,
+		TupleShapes:  s.TupleShapes,
+		Quantization: quantization,
+	}
+}
+
 // GobSerialize shape in binary format.
 func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(e any) {

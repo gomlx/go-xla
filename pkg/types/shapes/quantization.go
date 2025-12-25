@@ -36,6 +36,18 @@ type Quantization struct {
 	BlockSizes []int64
 }
 
+// UniformQuantization returns a new Quantization metadata for per-tensor (global) quantization.
+// In this mode, a single scale and zero-point are applied to the entire tensor.
+func UniformQuantization(storageType, expressedType dtypes.DType, scale float64, zeroPoint int64) *Quantization {
+	return &Quantization{
+		StorageType:   storageType,
+		ExpressedType: expressedType,
+		Scales:        []float64{scale},
+		ZeroPoints:    []int64{zeroPoint},
+		// QuantizedAxes and BlockSizes are left nil/empty for per-tensor mode.
+	}
+}
+
 // ToStableHLO renders the Quantization type to StableHLO.
 // The format is: !quant.uniform<StorageType:ExpressedType[:AxisInfo], {Params}>
 func (q *Quantization) ToStableHLO() string {

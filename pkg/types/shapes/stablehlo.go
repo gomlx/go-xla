@@ -51,6 +51,11 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 		}
 		w("x")
 	}
-	w("%s>", s.DType.ToStableHLO())
+	if s.Quantization != nil {
+		w("%s", s.Quantization.ToStableHLO())
+	} else {
+		w("%s", s.DType.ToStableHLO())
+	}
+	w(">")
 	return err
 }
