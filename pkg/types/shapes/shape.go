@@ -289,9 +289,6 @@ func (s Shape) WithUniformQuantization(storageType, expressedType dtypes.DType, 
 //	s.Quantization = quantization.
 //	s.DType = quantization.ExpressedType.
 func (s Shape) WithQuantization(quantization *Quantization) Shape {
-	if s.Quantization != nil {
-		panic(errors.Errorf("shape %s already has quantization metadata", s))
-	}
 	return Shape{
 		DType:        quantization.ExpressedType,
 		Dimensions:   s.Dimensions,

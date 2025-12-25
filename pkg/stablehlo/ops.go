@@ -23,6 +23,9 @@ func (fn *Function) addOp(opType optypes.OpType, outputShape shapes.Shape, input
 		Inputs:   inputs,
 		Outputs:  []*Value{fn.newValue(outputShape)},
 	}
+	// Set the statement reference and output index for the output value
+	stmt.Outputs[0].stmt = stmt
+	stmt.Outputs[0].outputIndex = 0
 	fn.Statements = append(fn.Statements, stmt)
 	return stmt
 }
@@ -39,6 +42,11 @@ func (fn *Function) addMultiOp(opType optypes.OpType, outputShapes []shapes.Shap
 		OpType:   opType,
 		Inputs:   inputs,
 		Outputs:  outputs,
+	}
+	// Set the statement reference and output index for each output value
+	for i := range outputs {
+		outputs[i].stmt = stmt
+		outputs[i].outputIndex = i
 	}
 	fn.Statements = append(fn.Statements, stmt)
 	return stmt
