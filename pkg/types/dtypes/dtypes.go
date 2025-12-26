@@ -188,37 +188,37 @@ func (dtype DType) Memory() uintptr {
 	return uintptr(dtype.Size())
 }
 
-// Pre-generate constant reflect.TypeOf for convenience.
+// Pre-generate constant reflect.TypeFor for convenience.
 var (
-	float32Type  = reflect.TypeOf(float32(0))
-	float64Type  = reflect.TypeOf(float64(0))
-	float16Type  = reflect.TypeOf(float16.Float16(0))
-	bfloat16Type = reflect.TypeOf(bfloat16.BFloat16(0))
+	float32Type  = reflect.TypeFor[float32]()
+	float64Type  = reflect.TypeFor[float64]()
+	float16Type  = reflect.TypeFor[float16.Float16]()
+	bfloat16Type = reflect.TypeFor[bfloat16.BFloat16]()
 )
 
 // GoType returns the Go `reflect.Type` corresponding to the tensor DType.
 func (dtype DType) GoType() reflect.Type {
 	switch dtype {
 	case Int64:
-		return reflect.TypeOf(int64(0))
+		return reflect.TypeFor[int64]()
 	case Int32:
-		return reflect.TypeOf(int32(0))
+		return reflect.TypeFor[int32]()
 	case Int16:
-		return reflect.TypeOf(int16(0))
+		return reflect.TypeFor[int16]()
 	case Int8:
-		return reflect.TypeOf(int8(0))
+		return reflect.TypeFor[int8]()
 
 	case Uint64:
-		return reflect.TypeOf(uint64(0))
+		return reflect.TypeFor[uint64]()
 	case Uint32:
-		return reflect.TypeOf(uint32(0))
+		return reflect.TypeFor[uint32]()
 	case Uint16:
-		return reflect.TypeOf(uint16(0))
+		return reflect.TypeFor[uint16]()
 	case Uint8:
-		return reflect.TypeOf(uint8(0))
+		return reflect.TypeFor[uint8]()
 
 	case Bool:
-		return reflect.TypeOf(true)
+		return reflect.TypeFor[bool]()
 
 	case Float16:
 		return float16Type
@@ -230,9 +230,9 @@ func (dtype DType) GoType() reflect.Type {
 		return float64Type
 
 	case Complex64:
-		return reflect.TypeOf(complex64(0))
+		return reflect.TypeFor[complex64]()
 	case Complex128:
-		return reflect.TypeOf(complex128(0))
+		return reflect.TypeFor[complex128]()
 
 	default:
 		// This should never happen, except if someone entered an invalid DType number beyond the values

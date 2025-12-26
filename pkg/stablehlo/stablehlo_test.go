@@ -135,6 +135,40 @@ func TestBuilder(t *testing.T) {
 			t.Fatal("programs don't match")
 		}
 	})
+
+	t.Run("quantization", func(t *testing.T) {
+		builder := New(t.Name())
+		fn := builder.Main()
+		// Create two constants
+		c1 := must(fn.ConstantFromScalar(float32(2.0)))
+		c2 := must(fn.ConstantFromScalar(float32(3.0)))
+		// Multiply them
+		product := must(Multiply(c1, c2))
+		// Change quantization on the output
+		quantization := shapes.UniformQuantization(dtypes.Int8, dtypes.Float32, 0.025, 0)
+		product, err := product.WithQuantization(quantization)
+		if err != nil {
+			t.Fatalf("expected no error from WithQuantization, got %v", err)
+		}
+		if err := fn.Return(product); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		program := string(must(builder.Build()))
+		fmt.Printf("%s program:\n%s", t.Name(), program)
+		want := `module @TestBuilder_quantization {
+  func.func @main() -> tensor<!quant.uniform<i8:f32, 0.025:0>> {
+    %0 = "stablehlo.constant"() { value = dense<2.0> : tensor<f32> } : () -> tensor<f32>
+    %1 = "stablehlo.constant"() { value = dense<3.0> : tensor<f32> } : () -> tensor<f32>
+    %2 = "stablehlo.multiply"(%0, %1) : (tensor<f32>, tensor<f32>) -> tensor<!quant.uniform<i8:f32, 0.025:0>>
+    "stablehlo.return"(%2) : (tensor<!quant.uniform<i8:f32, 0.025:0>>) -> ()
+  }
+}
+`
+		if program != want {
+			fmt.Printf("  Failed. Wanted the following program:\n%s", want)
+			t.Fatal("programs don't match")
+		}
+	})
 }
 
 func TestBuilder_Errors(t *testing.T) {

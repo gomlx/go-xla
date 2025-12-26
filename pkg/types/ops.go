@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
@@ -134,7 +133,7 @@ func (f FloatPrecisionType) ToStableHLO() string {
 	if f.TF32 {
 		return "tf32"
 	}
-	return utils.DTypeToStableHLO(f.DType)
+	return f.DType.ToStableHLO()
 }
 
 // DotGeneralAlgorithm defines fine-control of the algorithm used for the dot product.
