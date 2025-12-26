@@ -2,12 +2,15 @@ package shapes
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 )
 
 // Quantization represents the metadata for a !quant.uniform type.
+//
+// Note: **experimental**, it is not supported by standard CPU PJRT.
 type Quantization struct {
 	// StorageType is the integer type used in memory (e.g., dtypes.Int8, dtypes.Uint4).
 	StorageType dtypes.DType
@@ -87,7 +90,7 @@ func (q *Quantization) ToStableHLO() string {
 	w(", ")
 
 	// 3. Parameters (Scales and ZeroPoints)
-	if len(q.Scales) > 1 {
+	if len(q.QuantizedAxes) > 0 {
 		w("{")
 		for i := range q.Scales {
 			if i > 0 {
@@ -102,6 +105,21 @@ func (q *Quantization) ToStableHLO() string {
 	}
 	w(">")
 	return sb.String()
+}
+
+// Clone returns a new deep copy of the Quantization.
+func (q *Quantization) Clone() *Quantization {
+	if q == nil {
+		return nil
+	}
+	return &Quantization{
+		StorageType:   q.StorageType,
+		ExpressedType: q.ExpressedType,
+		Scales:        slices.Clone(q.Scales),
+		ZeroPoints:    slices.Clone(q.ZeroPoints),
+		QuantizedAxes: slices.Clone(q.QuantizedAxes),
+		BlockSizes:    slices.Clone(q.BlockSizes),
+	}
 }
 
 // String representation of quantization, for now uses the StableHLO representation.

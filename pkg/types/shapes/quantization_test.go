@@ -70,7 +70,7 @@ func TestQuantization_ToStableHLO(t *testing.T) {
 				Scales:        []float64{0.1},
 				ZeroPoints:    []int64{0},
 			},
-			want: "!quant.uniform<i8:f32:{0:1, 1:32}, 0.1:0>",
+			want: "!quant.uniform<i8:f32:{0:1, 1:32}, {0.1:0}>",
 		},
 	}
 
