@@ -261,6 +261,7 @@ func (s Shape) Clone() (s2 Shape) {
 			s2.TupleShapes = append(s2.TupleShapes, subShape.Clone())
 		}
 	}
+	s2.Quantization = s.Quantization.Clone()
 	return
 }
 
