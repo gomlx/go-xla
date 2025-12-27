@@ -49,6 +49,7 @@ const (
 	Fft
 	Floor
 	Gather
+	If
 	Imag
 	IsFinite
 	Iota
@@ -89,6 +90,7 @@ const (
 	Tan
 	Tanh
 	Transpose
+	While
 	Xor
 
 	// Here the ones not implemented yet, please add an issue in the repo if you need them.
@@ -108,7 +110,6 @@ const (
 	DynamicReshape
 	GetDimensionSize
 	GetTupleElement
-	If
 	Infeed
 	OptimizationBarrier
 	Outfeed
@@ -121,7 +122,6 @@ const (
 	Tuple
 	UniformDequantize
 	UniformQuantize
-	While
 
 	// Last should always be kept the last, it is used as a counter/marker for .
 	Last

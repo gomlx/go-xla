@@ -1973,3 +1973,55 @@ func While(initialStates, condInputs, condOutputs, bodyInputs, bodyOutputs []sha
 
 	return outputs, nil
 }
+
+// If performs shape inference for the stablehlo.if operation.
+//
+// The If operation selects between two branches based on a scalar boolean predicate.
+// Both branches must have no inputs and must produce outputs with matching shapes.
+//
+// Parameters:
+//   - pred: Shape of the predicate (must be scalar bool)
+//   - trueBranchInputs: Input shapes for true branch (must be empty)
+//   - trueBranchOutputs: Output shapes from true branch
+//   - falseBranchInputs: Input shapes for false branch (must be empty)
+//   - falseBranchOutputs: Output shapes from false branch (must match trueBranchOutputs)
+//
+// Returns:
+//   - outputs: The output shapes (same as branch outputs)
+//   - err: Error if validation fails
+func If(pred shapes.Shape, trueBranchInputs, trueBranchOutputs, falseBranchInputs, falseBranchOutputs []shapes.Shape) (outputs []shapes.Shape, err error) {
+	// Validate pred is scalar bool
+	if !pred.IsScalar() || pred.DType != dtypes.Bool {
+		return nil, errors.Errorf("If predicate must be a scalar bool, got %s", pred)
+	}
+
+	// Validate branches have no inputs (per StableHLO spec)
+	if len(trueBranchInputs) != 0 {
+		return nil, errors.Errorf("If true_branch must have no inputs, got %d", len(trueBranchInputs))
+	}
+	if len(falseBranchInputs) != 0 {
+		return nil, errors.Errorf("If false_branch must have no inputs, got %d", len(falseBranchInputs))
+	}
+
+	// Validate branches have same number of outputs
+	if len(trueBranchOutputs) != len(falseBranchOutputs) {
+		return nil, errors.Errorf("If branches must have same number of outputs, true_branch has %d, false_branch has %d",
+			len(trueBranchOutputs), len(falseBranchOutputs))
+	}
+
+	// Validate branch outputs have matching shapes
+	for i := range trueBranchOutputs {
+		if !trueBranchOutputs[i].Equal(falseBranchOutputs[i]) {
+			return nil, errors.Errorf("If branch outputs[%d] must match, true_branch has %s, false_branch has %s",
+				i, trueBranchOutputs[i], falseBranchOutputs[i])
+		}
+	}
+
+	// Output shapes are the same as branch outputs
+	outputs = make([]shapes.Shape, len(trueBranchOutputs))
+	for i, s := range trueBranchOutputs {
+		outputs[i] = s.Clone()
+	}
+
+	return outputs, nil
+}

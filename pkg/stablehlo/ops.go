@@ -3271,3 +3271,76 @@ func While(condFn, bodyFn *Function, initialStates ...*Value) ([]*Value, error) 
 
 	return stmt.Outputs, nil
 }
+
+// If selects between two branches based on a scalar boolean predicate.
+//
+// The If operation evaluates exactly one of the two branches based on the predicate value:
+//   - If pred is true, the true_branch is executed
+//   - If pred is false, the false_branch is executed
+//
+// Parameters:
+//   - pred: A scalar boolean value that determines which branch to execute.
+//   - trueBranch: A function to execute when pred is true.
+//     Created with Function.Closure(). Must have no inputs and return one or more values.
+//   - falseBranch: A function to execute when pred is false.
+//     Created with Function.Closure(). Must have no inputs and return the same number
+//     of values with matching shapes as trueBranch.
+//
+// Returns:
+//   - The outputs from whichever branch was executed.
+//
+// Example (select max or min based on condition):
+//
+//	a := must(fn.ConstantFromScalar(float32(5.0)))
+//	b := must(fn.ConstantFromScalar(float32(3.0)))
+//	useMax := must(fn.ConstantFromScalar(true))
+//
+//	trueBranch := fn.Closure()
+//	maxVal := must(trueBranch.ConstantFromScalar(float32(5.0))) // or compute max(a,b)
+//	trueBranch.Return(maxVal)
+//
+//	falseBranch := fn.Closure()
+//	minVal := must(falseBranch.ConstantFromScalar(float32(3.0))) // or compute min(a,b)
+//	falseBranch.Return(minVal)
+//
+//	result, err := If(useMax, trueBranch, falseBranch)
+func If(pred *Value, trueBranch, falseBranch *Function) ([]*Value, error) {
+	op := optypes.If
+	fn := pred.fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	// Validate pred is a scalar bool
+	if !pred.shape.IsScalar() || pred.shape.DType != dtypes.Bool {
+		return nil, errors.Errorf("If predicate must be a scalar bool, got %s", pred.shape)
+	}
+
+	// Validate branch functions are closures of the current function
+	if trueBranch.Parent != fn {
+		return nil, errors.Errorf("cannot add operation %s because trueBranch is not a StableHLO closure of %s",
+			op, fn.Name)
+	}
+	if falseBranch.Parent != fn {
+		return nil, errors.Errorf("cannot add operation %s because falseBranch is not a StableHLO closure of %s",
+			op, fn.Name)
+	}
+
+	// Perform shape inference
+	outputsShapes, err := shapeinference.If(
+		pred.shape,
+		valuesToShapes(trueBranch.Inputs), valuesToShapes(trueBranch.Outputs),
+		valuesToShapes(falseBranch.Inputs), valuesToShapes(falseBranch.Outputs))
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the statement
+	stmt := fn.addMultiOp(op, outputsShapes, []*Value{pred})
+	// StableHLO if expects true_branch first, then false_branch
+	stmt.AddFunctionParameter("true_branch", trueBranch)
+	stmt.AddFunctionParameter("false_branch", falseBranch)
+
+	return stmt.Outputs, nil
+}
