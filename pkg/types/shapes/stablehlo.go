@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // ToStableHLO returns the ToStableHLO representation of the shape's type.
@@ -20,7 +18,6 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 	var err error
 	w := func(format string, args ...any) {
 		if err != nil {
-			// No op if an error was encountered earlier
 			return
 		}
 		_, err = fmt.Fprintf(writer, format, args...)
@@ -59,11 +56,14 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 		}
 		w("x")
 	}
-	w("%s", utils.DTypeToStableHLO(s.DType))
-
 	// NOTE: Bounds encoding is disabled because XLA HLO translation doesn't support
 	// dynamic_broadcast_in_dim and dynamic_reshape with bounded dynamism.
 	// We use a different approach: use static shapes when extractable from constant computations.
+	if s.Quantization != nil {
+		w("%s", s.Quantization.ToStableHLO())
+	} else {
+		w("%s", s.DType.ToStableHLO())
+	}
 	w(">")
 	return err
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/pkg/errors"
 )
 
 // Value represents a value in a StableHLO program, like `%0` or `%arg0`.
@@ -22,6 +23,12 @@ type Value struct {
 	name       string
 	shape      shapes.Shape
 	Attributes map[string]any
+
+	// stmt is the statement that created this value. It is nil for function input parameters.
+	stmt *Statement
+
+	// outputIndex is the index of this value in stmt.Outputs. It is only valid when stmt != nil.
+	outputIndex int
 }
 
 // Shape returns the shape of the value.
@@ -53,4 +60,31 @@ func ConvertToValidName(name string) string {
 		}
 	}
 	return result
+}
+
+// WithQuantization sets the quantization parameters for this value.
+// It updates the quantization metadata on the value's shape, which will be reflected
+// in the StableHLO output.
+//
+// This method can only be called on values that were created by operations (not on
+// function input parameters). Parameter values cannot have their quantization changed
+// as they are external inputs.
+//
+// Returns an error if:
+//   - The value is a function input parameter (stmt == nil)
+//   - The quantization parameter is nil
+func (v *Value) WithQuantization(q *shapes.Quantization) (*Value, error) {
+	if v.stmt == nil {
+		return nil, errors.Errorf("cannot change quantization on parameter value %s (parameter values cannot have their quantization changed)", v.name)
+	}
+	if q == nil {
+		return nil, errors.New("quantization cannot be nil")
+	}
+
+	// Update the shape's quantization
+	// Note: v and stmt.Outputs[v.outputIndex] are the same Value object, so updating v.shape
+	// automatically updates the shape in the statement's output as well.
+	v.shape.Quantization = q
+
+	return v, nil
 }

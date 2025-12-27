@@ -204,6 +204,9 @@ func (fn *Function) ConstantFromScalar(value any) (*Value, error) {
 		},
 		Outputs: []*Value{fn.newValue(shape)},
 	}
+	// Set the statement reference and output index for the output value
+	c.Outputs[0].stmt = c
+	c.Outputs[0].outputIndex = 0
 	fn.Statements = append(fn.Statements, c)
 	return c.Outputs[0], nil
 }
@@ -229,6 +232,9 @@ func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (
 		Attributes: make(map[string]any, 1),
 		Outputs:    []*Value{fn.newValue(shape)},
 	}
+	// Set the statement reference and output index for the output value
+	c.Outputs[0].stmt = c
+	c.Outputs[0].outputIndex = 0
 	var err error
 	if shape.IsScalar() {
 		c.Attributes["value"], err = newTensorLiteralFromFlatAndDimensions(flatV.Index(0).Interface())

@@ -84,8 +84,9 @@ import (
 type Shape struct {
 	DType           dtypes.DType
 	Dimensions      []int
-	DimensionBounds []int   // Upper bounds for dynamic dimensions (when Dimensions[i] < 0). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
-	TupleShapes     []Shape // Shapes of the tuple, if this is a tuple.
+	DimensionBounds []int         // Upper bounds for dynamic dimensions (when Dimensions[i] < 0). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
+	TupleShapes     []Shape       // Shapes of the tuple, if this is a tuple.
+	Quantization    *Quantization // Quantization metadata for quantized types.
 }
 
 // Make returns a Shape structure filled with the values given.
@@ -260,7 +261,41 @@ func (s Shape) Clone() (s2 Shape) {
 			s2.TupleShapes = append(s2.TupleShapes, subShape.Clone())
 		}
 	}
+	s2.Quantization = s.Quantization.Clone()
 	return
+}
+
+// WithUniformQuantization returns a new shape with the given quantization metadata.
+//
+// The same as:
+//
+//	s.Quantization = shapes.UniformQuantization(storageType, expressedType, scale, zeroPoint).
+//	s.DType = expressedType.
+func (s Shape) WithUniformQuantization(storageType, expressedType dtypes.DType, scale float64, zeroPoint int64) Shape {
+	if s.Quantization != nil {
+		panic(errors.Errorf("shape %s already has quantization metadata", s))
+	}
+	return Shape{
+		DType:        expressedType,
+		Dimensions:   s.Dimensions,
+		TupleShapes:  s.TupleShapes,
+		Quantization: UniformQuantization(storageType, expressedType, scale, zeroPoint),
+	}
+}
+
+// WithQuantization returns a new shape with the given quantization metadata.
+//
+// The same as:
+//
+//	s.Quantization = quantization.
+//	s.DType = quantization.ExpressedType.
+func (s Shape) WithQuantization(quantization *Quantization) Shape {
+	return Shape{
+		DType:        quantization.ExpressedType,
+		Dimensions:   s.Dimensions,
+		TupleShapes:  s.TupleShapes,
+		Quantization: quantization,
+	}
 }
 
 // GobSerialize shape in binary format.

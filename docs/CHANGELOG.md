@@ -1,6 +1,11 @@
 # Next
 
 * Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+* Quantization:
+  - Add Quantization field to shapes.Shape.
+  - Add i2, i4, ui2 and ui4 DTypes.
+  - Add UniformQuantize() and UniformDequantize() ops.
+  - Add Value.WithOutputElementType() to allow change of quantization parameters for operations.
 
 # v0.1.4
 

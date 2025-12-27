@@ -25,6 +25,9 @@ func (fn *Function) addOp(opType optypes.OpType, outputShape shapes.Shape, input
 		Inputs:   inputs,
 		Outputs:  []*Value{fn.newValue(outputShape)},
 	}
+	// Set the statement reference and output index for the output value
+	stmt.Outputs[0].stmt = stmt
+	stmt.Outputs[0].outputIndex = 0
 	fn.Statements = append(fn.Statements, stmt)
 	return stmt
 }
@@ -41,6 +44,11 @@ func (fn *Function) addMultiOp(opType optypes.OpType, outputShapes []shapes.Shap
 		OpType:   opType,
 		Inputs:   inputs,
 		Outputs:  outputs,
+	}
+	// Set the statement reference and output index for each output value
+	for i := range outputs {
+		outputs[i].stmt = stmt
+		outputs[i].outputIndex = i
 	}
 	fn.Statements = append(fn.Statements, stmt)
 	return stmt
@@ -2431,6 +2439,47 @@ func BatchNormGradient(operand, scale, mean, variance, gradOutput *Value, epsilo
 		"feature_index": int64(featureAxis),
 	}
 	return stmt.Outputs[0], stmt.Outputs[1], stmt.Outputs[2], nil
+}
+
+// UniformQuantize the operand to a static quantized data type.
+// That means the zero-point and scale of the quantization must be known at "compile" time.
+//
+// The dimensions of the quantizedShape is ignored, and the output will use the dimensions of the operand,
+// but the DType and quantization parameters of the quantizedShape.
+//
+// Note: **EXPERIMENTAL**, this operation is not supported by standard CPU PJRT.
+func UniformQuantize(operand *Value, quantizedShape shapes.Shape) (*Value, error) {
+	op := optypes.UniformQuantize
+	fn := operand.fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+	quantizedShape.Dimensions = slices.Clone(operand.Shape().Dimensions)
+	stmt := fn.addOp(op, quantizedShape, operand)
+	return stmt.Outputs[0], nil
+}
+
+// UniformDequantize takes a value with quantization and returns the value at its "expressed" dtype.
+// The output will have the same dimensions as the operand, but with the expressed dtype from the quantization
+// metadata and no quantization.
+//
+// Note: **EXPERIMENTAL**, this operation is not supported by standard CPU PJRT.
+func UniformDequantize(operand *Value) (*Value, error) {
+	op := optypes.UniformDequantize
+	fn := operand.fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+	if operand.shape.Quantization == nil {
+		return nil, errors.Errorf("UniformDequantize: operand %s does not have quantization metadata", operand.shape)
+	}
+	outputShape := operand.shape.Clone()
+	outputShape.DType = operand.shape.Quantization.ExpressedType
+	outputShape.Quantization = nil
+	stmt := fn.addOp(op, outputShape, operand)
+	return stmt.Outputs[0], nil
 }
 
 // GetDimensionSize returns a scalar i32 containing the runtime size of the specified dimension.

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gomlx/go-xla/internal/protos/xla_data"
 	"github.com/gomlx/go-xla/internal/must"
+	"github.com/gomlx/go-xla/internal/protos/xla_data"
 	"github.com/pkg/errors"
 )
 
@@ -34,10 +34,14 @@ func panicf(format string, args ...any) {
 var aliases = map[string]string{
 	"INVALID": "InvalidDType",
 	"PRED":    "Bool",
+	"S2":      "Int2",
+	"S4":      "Int4",
 	"S8":      "Int8",
 	"S16":     "Int16",
 	"S32":     "Int32",
 	"S64":     "Int64",
+	"U2":      "Uint2",
+	"U4":      "Uint4",
 	"U8":      "Uint8",
 	"U16":     "Uint16",
 	"U32":     "Uint32",
@@ -67,11 +71,11 @@ import "github.com/gomlx/go-xla/internal/protos/xla_data"
 // DType is an enum represents the data type of a buffer or a scalar.
 // These are all the types supported by XLA/PJRT.
 //
-// The names come from the C/C++ constants, so they are not Go idiomatic. 
+// The names come from the C/C++ constants, so they are not Go idiomatic.
 // The package provides some aliases.
 //
-// It is unfortunate, but the data types enums used in XLA/PJRT (which DType is modeled after) 
-// and in C++ XlaBuilder (and other parts of XLA) don't match. 
+// It is unfortunate, but the data types enums used in XLA/PJRT (which DType is modeled after)
+// and in C++ XlaBuilder (and other parts of XLA) don't match.
 // The gopjrt project uses the PJRT enum everywhere, and makes the conversions when needed to call C++ code (see
 // DType.PrimitiveType and FromPrimitiveType for conversion).
 type DType int32
@@ -87,17 +91,17 @@ const ({{range .}}{{if .HasAlias}}
 	{{.Original}} = {{.Name}}
 {{end}}{{end}})
 
-// MapOfNames to their dtypes. It includes also aliases to the various dtypes. 
+// MapOfNames to their dtypes. It includes also aliases to the various dtypes.
 // It is also later initialized to include the lower-case version of the names.
 var MapOfNames = map[string]DType{
 {{range .}}	"{{.Name}}": {{.Name}},
 {{if .HasAlias}}	"{{.Original}}": {{.Name}},
 {{end}}{{end}}}
 
-// PrimitiveType returns the DType equivalent used in C++ XlaBuilder. 
+// PrimitiveType returns the DType equivalent used in C++ XlaBuilder.
 // For internal use only.
 //
-// It is unfortunate, but the data types enums used in PJRT (which DType is modeled after) 
+// It is unfortunate, but the data types enums used in PJRT (which DType is modeled after)
 // and C++ XlaBuilder (and other parts of XLA) don't match.
 func (dtype DType) PrimitiveType() xla_data.PrimitiveType {
 	switch (dtype) {
@@ -113,7 +117,7 @@ func (dtype DType) PrimitiveType() xla_data.PrimitiveType {
 // FromPrimitiveType returns the equivalent DType.
 // For internal use only.
 //
-// It is unfortunate, but the data types enums used in PJRT (which DType is modeled after) 
+// It is unfortunate, but the data types enums used in PJRT (which DType is modeled after)
 // and C++ XlaBuilder (and other parts of XLA) don't match.
 func FromPrimitiveType(primitiveType xla_data.PrimitiveType) DType {
 	switch (primitiveType) {
