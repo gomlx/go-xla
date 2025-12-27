@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/go-xla/internal/optypes"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
 // ExtractConstantShape attempts to extract concrete integer dimensions from a shape Value.
@@ -117,7 +118,7 @@ func extractConcatenatedShape(fn *Function, concatStmt *Statement) ([]int, bool)
 }
 
 // ExtractConcatenatedShapePartial is like extractConcatenatedShape but returns
-// partial results. For dimensions that can't be extracted, it uses -1 as a sentinel.
+// partial results. For dimensions that can't be extracted, it uses shapes.DimUnknown (-1) as a sentinel.
 // Returns (result, allExtracted, anyExtracted).
 func ExtractConcatenatedShapePartial(fn *Function, concatStmt *Statement) ([]int, bool, bool) {
 	// For shape tensors, we only handle axis=0 (concatenating 1D tensors or scalars)
@@ -134,14 +135,14 @@ func ExtractConcatenatedShapePartial(fn *Function, concatStmt *Statement) ([]int
 		dimValues, ok := ExtractConstantShape(fn, input)
 		if !ok {
 			// This input is not extractable - try to determine its size from shape
-			// and fill with -1 sentinels
+			// and fill with shapes.DimUnknown sentinels
 			inputShape := input.Shape()
 			inputSize := 1
 			if inputShape.Rank() == 1 && inputShape.Dimensions[0] > 0 {
 				inputSize = inputShape.Dimensions[0]
 			}
 			for i := 0; i < inputSize; i++ {
-				result = append(result, -1)
+				result = append(result, shapes.DimUnknown)
 			}
 			allExtracted = false
 		} else {

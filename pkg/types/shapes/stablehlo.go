@@ -47,8 +47,8 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 			if i > 0 {
 				w("x")
 			}
-			// StableHLO uses '?' for dynamic/symbolic dimensions
-			if dim < 0 {
+			// StableHLO uses '?' for dynamic/symbolic dimensions (DimUnknown)
+			if dim == DimUnknown {
 				w("?")
 			} else {
 				w("%d", dim)

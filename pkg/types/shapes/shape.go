@@ -49,22 +49,22 @@
 // this package provides two variations of _assert_ functionality. Examples:
 //
 // AssertRank and AssertDims check that the rank and dimensions of the given
-// object (that has a `Shape` method) match, otherwise it panics. The `-1` means
-// the dimension is unchecked (it can be anything).
+// object (that has a `Shape` method) match, otherwise it panics. Use DimUnknown (-1)
+// to indicate a dimension that should not be checked (it can be anything).
 //
 //	func modelGraph(ctx *context.Context, spec any, inputs []*Node) ([]*Node) {
 //		_ = spec  // Not needed here, we know the dataset.
 //		shapes.AssertRank(inputs, 2)
 //		batchSize := inputs.Shape().Dimensions[0]
 //		logits := layers.Dense(ctx, inputs[0], /* useBias= */ true, /* outputDim= */ 1)
-//		shapes.AssertDims(logits, batchSize, -1)
+//		shapes.AssertDims(logits, batchSize, shapes.DimUnknown)
 //		return []*Node{logits}
 //	}
 //
 // ```
 //
 // If you don't want to panic, but instead return an error through the `graph.Graph`, you can
-// use the `Node.AssertDims()` method. So it would look like `logits.AssertDims(batchSize, -1)`.
+// use the `Node.AssertDims()` method. So it would look like `logits.AssertDims(batchSize, shapes.DimUnknown)`.
 package shapes
 
 import (
@@ -77,6 +77,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// DimUnknown is a sentinel value representing an unknown/dynamic dimension.
+// StableHLO uses "?" for dynamic dimensions, and we represent this as -1 in Go.
+// Only -1 is allowed for unknown dimensions; other negative values are invalid.
+const DimUnknown = -1
+
 // Shape represents the shape of either a Tensor or the expected shape
 // of the value from a computation node.
 //
@@ -84,19 +89,23 @@ import (
 type Shape struct {
 	DType           dtypes.DType
 	Dimensions      []int
-	DimensionBounds []int         // Upper bounds for dynamic dimensions (when Dimensions[i] < 0). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
+	DimensionBounds []int         // Upper bounds for dynamic dimensions (when Dimensions[i] == DimUnknown). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
 	TupleShapes     []Shape       // Shapes of the tuple, if this is a tuple.
 	Quantization    *Quantization // Quantization metadata for quantized types.
 }
 
 // Make returns a Shape structure filled with the values given.
 // See MakeTuple for tuple shapes.
-// Note: Negative dimensions (e.g., -3) are allowed to represent symbolic/dynamic dimensions.
+//
+// Dimensions must be non-negative, except DimUnknown (-1) which represents
+// an unknown/dynamic dimension. Any dimension < -1 will cause a panic.
 func Make(dtype dtypes.DType, dimensions ...int) Shape {
-	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
-	// Allow negative dimensions for symbolic/dynamic shapes
-	// Negative values (typically -3) represent unknown dimensions determined at runtime
-	return s
+	for i, dim := range dimensions {
+		if dim < DimUnknown {
+			panic(errors.Errorf("invalid dimension %d at axis %d: dimensions must be >= %d (DimUnknown), got %d", dim, i, DimUnknown, dim))
+		}
+	}
+	return Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
 }
 
 // Scalar returns a scalar Shape for the given type.

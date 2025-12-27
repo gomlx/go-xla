@@ -158,17 +158,17 @@ func BinaryOp(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (output sh
 		err = errors.Errorf("invalid shape for %s or %s for %q", lhsShape, rhsShape, opType)
 		return
 	}
-	// Skip equality check if shapes have symbolic dimensions (negative values) - broadcasting logic in binaryOpImpl will handle it
+	// Skip equality check if shapes have symbolic dimensions (DimUnknown) - broadcasting logic in binaryOpImpl will handle it
 	hasSymbolic := false
 	for _, dim := range lhsShape.Dimensions {
-		if dim < 0 {
+		if dim == shapes.DimUnknown {
 			hasSymbolic = true
 			break
 		}
 	}
 	if !hasSymbolic {
 		for _, dim := range rhsShape.Dimensions {
-			if dim < 0 {
+			if dim == shapes.DimUnknown {
 				hasSymbolic = true
 				break
 			}
@@ -227,21 +227,15 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
 
-		// Handle symbolic dimensions
+		// Handle symbolic dimensions (DimUnknown)
 		switch {
-		case lhsDim < 0 && rhsDim < 0:
-			// Both symbolic
-			if lhsDim == rhsDim {
-				// Same symbol - preserve it
-				output.Dimensions[axis] = lhsDim
-			} else {
-				// Different symbols - unknown (use -1 as the generic unknown dimension marker)
-				output.Dimensions[axis] = -1
-			}
-		case lhsDim < 0 && rhsDim == 1:
+		case lhsDim == shapes.DimUnknown && rhsDim == shapes.DimUnknown:
+			// Both symbolic - result is unknown
+			output.Dimensions[axis] = shapes.DimUnknown
+		case lhsDim == shapes.DimUnknown && rhsDim == 1:
 			// Left is symbolic, right broadcasts
 			output.Dimensions[axis] = lhsDim
-		case rhsDim < 0 && lhsDim == 1:
+		case rhsDim == shapes.DimUnknown && lhsDim == 1:
 			// Right is symbolic, left broadcasts
 			output.Dimensions[axis] = rhsDim
 		case lhsDim > 0 && rhsDim > 0:

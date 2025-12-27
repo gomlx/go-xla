@@ -2057,9 +2057,9 @@ func DynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDim
 			// This handles the case where broadcast is essentially a no-op
 			copy(outputShape.Dimensions, operand.shape.Dimensions)
 		} else {
-			// Use dynamic dimension marker (-1) for all dimensions since they're runtime-determined
+			// Use dynamic dimension marker (shapes.DimUnknown) for all dimensions since they're runtime-determined
 			for i := range outputShape.Dimensions {
-				outputShape.Dimensions[i] = -1
+				outputShape.Dimensions[i] = shapes.DimUnknown
 			}
 			// Set bounds to ensure bounded dynamism
 			// For broadcast, we can use the input dimensions mapped through broadcastDimensions
@@ -2165,13 +2165,14 @@ func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
 
 	// Try to extract constant shape values
 	concreteShape, ok := ExtractConstantShape(fn, outputShape)
+
 	if ok {
-		// Check if all dimensions are concrete (positive) or need to be inferred (-1)
+		// Check if all dimensions are concrete (positive) or need to be inferred (DimUnknown)
 		hasInferDim := false
-		inferDimIndex := -1
+		inferDimIndex := -1 // Index sentinel: -1 means "not found"
 		knownProduct := 1
 		for i, dim := range concreteShape {
-			if dim == -1 {
+			if dim == shapes.DimUnknown {
 				hasInferDim = true
 				inferDimIndex = i
 			} else if dim > 0 {
@@ -2188,7 +2189,7 @@ func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
 			}
 		}
 
-		// Try to resolve -1 dimension using input tensor size
+		// Try to resolve DimUnknown dimension using input tensor size
 		if hasInferDim && inferDimIndex >= 0 {
 			inputSize := operand.shape.Size()
 			if inputSize > 0 && knownProduct > 0 {
@@ -2207,12 +2208,12 @@ func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
 			// Build static dimensions: use extracted values where available, compute remaining
 			staticDims := make([]int, outputRank)
 			knownProduct := 1
-			inferIdx := -1
+			inferIdx := -1 // Index sentinel: -1 means "not found"
 			for i, dim := range concreteShape {
 				if dim > 0 {
 					staticDims[i] = dim
 					knownProduct *= dim
-				} else if dim == -1 {
+				} else if dim == shapes.DimUnknown {
 					inferIdx = i // Will be computed
 				} else {
 					// 0 or other unknown - use default
