@@ -138,7 +138,7 @@ func (s *Statement) Write(writer io.Writer, indentation string) error {
 
 // writeAttributes writes a map of attributes to the writer.
 // The w function is the one provided by the caller to handle errors.
-func writeAttributes(writer io.Writer, indentation string, attributes map[string]any, w func(format string, args ...any)) {
+func writeAttributes(_ io.Writer, indentation string, attributes map[string]any, w func(format string, args ...any)) {
 	if len(attributes) == 0 {
 		return
 	}
@@ -146,7 +146,7 @@ func writeAttributes(writer io.Writer, indentation string, attributes map[string
 	if len(attributes) == 1 {
 		for key, value := range attributes {
 			literalValue := literalToStableHLO(value)
-			if strings.Index(literalValue, "\n") == -1 {
+			if !strings.Contains(literalValue, "\n") {
 				w(" { %s = %s }", key, literalValue)
 			} else {
 				literalValue = strings.ReplaceAll(literalValue, "\n", "\n"+nextIndentation)
@@ -438,4 +438,42 @@ func recursiveTensorToStableHLO(valueV reflect.Value, shape shapes.Shape, flatId
 	}
 	sb.WriteString("]")
 	return flatIdx
+}
+
+// ExtractConstantIntegers attempts to extract integer values from a Constant statement.
+// Returns (values, true) if this is a Constant with extractable integer data,
+// or (nil, false) otherwise.
+func (s *Statement) ExtractConstantIntegers() ([]int, bool) {
+	if s.OpType != optypes.Constant {
+		return nil, false
+	}
+	valueAttr, ok := s.Attributes["value"]
+	if !ok {
+		return nil, false
+	}
+	tl, ok := valueAttr.(tensorLiteral)
+	if !ok {
+		return nil, false
+	}
+	return extractIntegersFromTensorLiteral(tl)
+}
+
+// ExtractIntSliceAttribute attempts to extract an integer slice from the named attribute.
+// Returns (values, true) if successful, or (nil, false) otherwise.
+func (s *Statement) ExtractIntSliceAttribute(name string) ([]int, bool) {
+	attr, ok := s.Attributes[name]
+	if !ok {
+		return nil, false
+	}
+	return extractIntSliceFromAttribute(attr)
+}
+
+// ExtractIntAttribute attempts to extract a single integer from the named attribute.
+// Returns (value, true) if successful, or (0, false) otherwise.
+func (s *Statement) ExtractIntAttribute(name string) (int, bool) {
+	attr, ok := s.Attributes[name]
+	if !ok {
+		return 0, false
+	}
+	return toInt(attr)
 }
