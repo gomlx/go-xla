@@ -363,6 +363,50 @@ func (fn *Function) Closure() *Function {
 	return closureFn
 }
 
+// UseParentValue creates a reference in this closure to a value from the parent function.
+// This allows closure functions (like If branches) to use values computed in the parent scope.
+//
+// At the StableHLO/MLIR level, closures can reference SSA values from their parent scope directly.
+// This method enables that by creating a Value in the closure that references the same SSA name.
+//
+// Returns an error if:
+//   - This function is not a closure (has no parent)
+//   - The parentValue does not belong to the parent function
+//
+// Example:
+//
+//	// In parent function
+//	x := fn.ConstantFromScalar(5.0)
+//
+//	// In closure (e.g., If branch)
+//	closureFn := fn.Closure()
+//	xInClosure := closureFn.UseParentValue(x)
+//	result, _ := stablehlo.Add(xInClosure, closureFn.ConstantFromScalar(1.0))
+//	closureFn.Return(result)
+func (fn *Function) UseParentValue(parentValue *Value) (*Value, error) {
+	if fn.Parent == nil {
+		return nil, errors.New("UseParentValue can only be called on closure functions")
+	}
+	if parentValue == nil {
+		return nil, errors.New("parentValue is nil")
+	}
+	if parentValue.fn != fn.Parent {
+		return nil, errors.Errorf("value %q belongs to function %q, not the parent function %q",
+			parentValue.name, parentValue.fn.Name, fn.Parent.Name)
+	}
+
+	// Create a value in this closure that references the parent's SSA name.
+	// At the MLIR level, the SSA value name is valid across nested regions.
+	v := &Value{
+		fn:    fn, // This value "belongs" to the closure for operation purposes
+		name:  parentValue.name,
+		shape: parentValue.shape,
+	}
+	// Note: We don't add to fn.values since this is a reference to an existing value,
+	// not a new value created in this function.
+	return v, nil
+}
+
 // Write the function as StableHLO code, with the given indentation.
 func (fn *Function) Write(writer io.Writer, indentation string) error {
 	// Create the formatting w() and we() internal functions to facilitate handling error while generating the statement code.

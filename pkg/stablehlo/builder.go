@@ -188,6 +188,12 @@ func (b *Builder) Build() ([]byte, error) {
 		if fn.Name == "main" {
 			hasMain = true
 		}
+		// Skip closures (functions with a Parent) that have no statements.
+		// Closures are inlined in If/While/etc statements and may be created
+		// but not used if an error occurs during graph conversion.
+		if fn.Parent != nil && len(fn.Statements) == 0 {
+			continue
+		}
 		if len(fn.Statements) == 0 {
 			return nil, fmt.Errorf("function %q has no statements", fn.Name)
 		}

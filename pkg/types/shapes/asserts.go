@@ -24,8 +24,8 @@ import (
 )
 
 // UncheckedAxis can be used in CheckDims or AssertDims functions for an axis
-// whose dimension doesn't matter.
-const UncheckedAxis = int(-1)
+// whose dimension doesn't matter. This is the same value as DimUnknown.
+const UncheckedAxis = DimUnknown
 
 // HasShape is an interface for objects that have an associated Shape.
 // `tensor.Tensor` (concrete tensor) and `graph.Node` (tensor representations in a
@@ -34,8 +34,8 @@ type HasShape interface {
 	Shape() Shape
 }
 
-// CheckDims checks that the shape has the given dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// CheckDims checks that the shape has the given dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It returns an error if the rank is different or if any of the dimensions don't match.
 func (s Shape) CheckDims(dimensions ...int) error {
@@ -43,15 +43,21 @@ func (s Shape) CheckDims(dimensions ...int) error {
 		return errors.Errorf("shape (%s) has incompatible rank %d (wanted %d)", s, s.Rank(), len(dimensions))
 	}
 	for ii, wantDim := range dimensions {
-		if wantDim != -1 && s.Dimensions[ii] != wantDim {
-			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, s.Dimensions[ii], wantDim, dimensions)
+		actualDim := s.Dimensions[ii]
+		// Skip check if either dimension is DimUnknown (dynamic/symbolic)
+		if wantDim == DimUnknown || actualDim == DimUnknown {
+			continue
+		}
+		// Both dimensions are concrete, check they match
+		if actualDim != wantDim {
+			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, actualDim, wantDim, dimensions)
 		}
 	}
 	return nil
 }
 
-// Check that the shape has the given dtype, dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// Check that the shape has the given dtype, dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It returns an error if the dtype or rank is different or if any of the dimensions don't match.
 func (s Shape) Check(dtype dtypes.DType, dimensions ...int) error {
@@ -61,8 +67,8 @@ func (s Shape) Check(dtype dtypes.DType, dimensions ...int) error {
 	return s.CheckDims(dimensions...)
 }
 
-// AssertDims checks that the shape has the given dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// AssertDims checks that the shape has the given dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
 //
@@ -74,8 +80,8 @@ func (s Shape) AssertDims(dimensions ...int) {
 	}
 }
 
-// Assert checks that the shape has the given dtype, dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// Assert checks that the shape has the given dtype, dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
 func (s Shape) Assert(dtype dtypes.DType, dimensions ...int) {
@@ -85,16 +91,16 @@ func (s Shape) Assert(dtype dtypes.DType, dimensions ...int) {
 	}
 }
 
-// CheckDims checks that the shape has the given dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// CheckDims checks that the shape has the given dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It returns an error if the rank is different or any of the dimensions.
 func CheckDims(shaped HasShape, dimensions ...int) error {
 	return shaped.Shape().CheckDims(dimensions...)
 }
 
-// AssertDims checks that the shape has the given dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// AssertDims checks that the shape has the given dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
 //
@@ -103,8 +109,8 @@ func AssertDims(shaped HasShape, dimensions ...int) {
 	shaped.Shape().AssertDims(dimensions...)
 }
 
-// Assert checks that the shape has the given dtype, dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// Assert checks that the shape has the given dtype, dimensions and rank. A value of DimUnknown (-1)
+// in dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
 func Assert(shaped HasShape, dtype dtypes.DType, dimensions ...int) {

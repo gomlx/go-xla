@@ -47,10 +47,18 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 			if i > 0 {
 				w("x")
 			}
-			w("%d", dim)
+			// StableHLO uses '?' for dynamic/symbolic dimensions (DimUnknown)
+			if dim == DimUnknown {
+				w("?")
+			} else {
+				w("%d", dim)
+			}
 		}
 		w("x")
 	}
+	// NOTE: Bounds encoding is disabled because XLA HLO translation doesn't support
+	// dynamic_broadcast_in_dim and dynamic_reshape with bounded dynamism.
+	// We use a different approach: use static shapes when extractable from constant computations.
 	if s.Quantization != nil {
 		w("%s", s.Quantization.ToStableHLO())
 	} else {

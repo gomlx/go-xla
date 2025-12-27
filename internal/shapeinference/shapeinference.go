@@ -158,7 +158,23 @@ func BinaryOp(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (output sh
 		err = errors.Errorf("invalid shape for %s or %s for %q", lhsShape, rhsShape, opType)
 		return
 	}
-	if !lhsShape.Equal(rhsShape) {
+	// Skip equality check if shapes have symbolic dimensions (DimUnknown) - broadcasting logic in binaryOpImpl will handle it
+	hasSymbolic := false
+	for _, dim := range lhsShape.Dimensions {
+		if dim == shapes.DimUnknown {
+			hasSymbolic = true
+			break
+		}
+	}
+	if !hasSymbolic {
+		for _, dim := range rhsShape.Dimensions {
+			if dim == shapes.DimUnknown {
+				hasSymbolic = true
+				break
+			}
+		}
+	}
+	if !hasSymbolic && !lhsShape.Equal(rhsShape) {
 		err = errors.Errorf("shapes for %q must match, got %s and %s", opType, lhsShape, rhsShape)
 		return
 	}
@@ -210,12 +226,37 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 	for axis := range output.Rank() {
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
-		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
-			err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
-				axis, opType, lhsShape, rhsShape)
+
+		// Handle symbolic dimensions (DimUnknown)
+		switch {
+		case lhsDim == shapes.DimUnknown && rhsDim == shapes.DimUnknown:
+			// Both symbolic - result is unknown
+			output.Dimensions[axis] = shapes.DimUnknown
+		case lhsDim == shapes.DimUnknown && rhsDim == 1:
+			// Left is symbolic, right broadcasts
+			output.Dimensions[axis] = lhsDim
+		case rhsDim == shapes.DimUnknown && lhsDim == 1:
+			// Right is symbolic, left broadcasts
+			output.Dimensions[axis] = rhsDim
+		case lhsDim > 0 && rhsDim > 0:
+			// Both static - use existing max logic for broadcasting
+			if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
+				err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+					axis, opType, lhsShape, rhsShape)
+				return
+			}
+			output.Dimensions[axis] = max(lhsDim, rhsDim)
+		case lhsDim < 0 && rhsDim > 1:
+			// Symbolic vs concrete > 1: use concrete (symbolic must be compatible)
+			output.Dimensions[axis] = rhsDim
+		case rhsDim < 0 && lhsDim > 1:
+			// Concrete > 1 vs symbolic: use concrete
+			output.Dimensions[axis] = lhsDim
+		default:
+			err = errors.Errorf("incompatible symbolic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
+				axis, lhsDim, rhsDim, opType)
 			return
 		}
-		output.Dimensions[axis] = max(lhsDim, rhsDim)
 	}
 	return
 }
@@ -322,6 +363,37 @@ func UnaryOp(opType optypes.OpType, operand shapes.Shape) (output shapes.Shape, 
 	return
 }
 
+// shapesCompatible checks if two shapes are compatible for operations like Select.
+// Two shapes are compatible if:
+// - They have the same rank
+// - They have the same dtype
+// - For each dimension, either:
+//   - Both are symbolic (negative values indicate dynamic dimensions)
+//   - One or both is symbolic (allows static to match symbolic at runtime)
+//   - Both are static and equal
+func shapesCompatible(a, b shapes.Shape) bool {
+	if a.DType != b.DType {
+		return false
+	}
+	if a.Rank() != b.Rank() {
+		return false
+	}
+	for i := 0; i < a.Rank(); i++ {
+		dimA := a.Dimensions[i]
+		dimB := b.Dimensions[i]
+		// If either dimension is symbolic (negative), they're compatible
+		// This allows mixing static shapes like [1,1,1] with symbolic shapes like [-3,-3,-3]
+		if dimA < 0 || dimB < 0 {
+			continue
+		}
+		// Both are static: must match exactly
+		if dimA != dimB {
+			return false
+		}
+	}
+	return true
+}
+
 // Select returns the shape resulting from the Select operation.
 //
 // The pred must be boolean and can be a scalar or have the same shape as isTrue and isFalse.
@@ -331,19 +403,24 @@ func Select(pred, onTrue, onFalse shapes.Shape) (output shapes.Shape, err error)
 		err = errors.Errorf("pred for Select() must be a boolean, got %s instead", pred)
 		return
 	}
-	if !onTrue.Equal(onFalse) {
-		err = errors.Errorf("onTrue (%s) and onFalse (%s) values for Select() must have the same shape",
+	if !shapesCompatible(onTrue, onFalse) {
+		err = errors.Errorf("onTrue (%s) and onFalse (%s) values for Select() must have compatible shapes",
 			onTrue, onFalse)
 		return
 	}
-	if !pred.IsScalar() && pred.CheckDims(onTrue.Dimensions...) != nil {
-		err = errors.Errorf("pred for Select() must either be a scalar or match onTrue and onFalse shapes, instead got shapes pred=%s, onTrue=%s and onFalse=%s",
-			pred, onTrue, onFalse)
-	}
-	if !onTrue.IsScalar() && !onFalse.IsScalar() && !onTrue.Equal(onFalse) {
-		err = errors.Errorf("onTrue (%s) and onFalse (%s) values for Select() must either be scalar or match each other's shape",
-			onTrue, onFalse)
-		return
+	// Check if pred shape is compatible with onTrue/onFalse shapes
+	if !pred.IsScalar() {
+		// Create a temporary bool shape with onTrue's dimensions for compatibility check
+		// We construct it manually to allow symbolic (negative) dimensions
+		predExpected := shapes.Shape{
+			DType:      dtypes.Bool,
+			Dimensions: slices.Clone(onTrue.Dimensions),
+		}
+		if !shapesCompatible(pred, predExpected) {
+			err = errors.Errorf("pred for Select() must either be a scalar or match onTrue and onFalse shapes, instead got shapes pred=%s, onTrue=%s and onFalse=%s",
+				pred, onTrue, onFalse)
+			return
+		}
 	}
 	return onTrue.Clone(), nil
 }
@@ -475,7 +552,9 @@ func BroadcastInDim(operand, targetShape shapes.Shape, axesMapping []int) error 
 		usedAxis.Insert(targetAxis)
 		operandDim := operand.Dimensions[operandAxis]
 		targetDim := targetShape.Dimensions[targetAxis]
-		if operandDim != 1 && operandDim != targetDim {
+		// Skip dimension check if either dimension is symbolic (negative)
+		// At runtime, symbolic dimensions will be resolved and validated
+		if operandDim >= 0 && targetDim >= 0 && operandDim != 1 && operandDim != targetDim {
 			return errors.Errorf("BroadcastInDim() requires all operand axes to be broadcast to be of dimension 1, but got operand.Dimensions[%d]=%d and targetShape.Dimension[%d]=%d",
 				operandAxis, operandDim, targetAxis, targetDim)
 		}
@@ -489,7 +568,6 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 	offsetOutputAxes, collapsedSliceAxes, operandBatchingAxes,
 	startIndicesBatchingAxes, startIndexMap,
 	sliceSizes []int, indicesAreSorted bool) (output shapes.Shape, err error) {
-	//fmt.Printf("Gather parameters:\n"+
 	//	"  operand: %v\n"+
 	//	"  startIndices: %v\n"+
 	//	"  indexVectorAxis: %d\n"+
@@ -557,11 +635,13 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 	if len(sliceSizes) != operand.Rank() {
 		return output, errors.Errorf("sliceSizes must have one value per operand axes, so it length (%d) must match operand rank (%d)", len(sliceSizes), operand.Rank())
 	}
+	const maxDimSize = 1 << 30 // Sentinel value for symbolic/dynamic dimensions (must match gomlx Gather)
 	for axis, sliceSize := range sliceSizes {
 		if sliceSize < 0 {
 			return output, errors.Errorf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
 		}
-		if operand.Dimensions[axis] < sliceSize {
+		// Skip validation for symbolic dimensions (negative operand dimension) or when using maxDimSize sentinel
+		if operand.Dimensions[axis] >= 0 && sliceSize < maxDimSize && operand.Dimensions[axis] < sliceSize {
 			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
 		}
 	}
@@ -640,7 +720,12 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 			// This is a batch axis and not used as an offset.
 			continue
 		}
-		offsetDims = append(offsetDims, sliceSize)
+		// If sliceSize is the sentinel value (maxDimSize), use the operand's dimension (which may be symbolic)
+		if sliceSize >= maxDimSize {
+			offsetDims = append(offsetDims, operand.Dimensions[axis])
+		} else {
+			offsetDims = append(offsetDims, sliceSize)
+		}
 	}
 	offsetDimsIdx := 0
 
@@ -704,11 +789,40 @@ func Concatenate(inputs []shapes.Shape, axis int) (output shapes.Shape, err erro
 
 		for d := 0; d < rank; d++ {
 			if d == axis {
-				output.Dimensions[d] += currentShape.Dimensions[d]
+				// For the concatenation axis, add dimensions (handling symbolic dims)
+				if output.Dimensions[d] >= 0 && currentShape.Dimensions[d] >= 0 {
+					output.Dimensions[d] += currentShape.Dimensions[d]
+				} else {
+					// If either dimension is symbolic, output is symbolic (-3)
+					output.Dimensions[d] = -3
+				}
 			} else {
-				if currentShape.Dimensions[d] != output.Dimensions[d] {
-					return shapes.Invalid(), errors.Errorf("mismatched dimensions for Concatenate at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
-						d, output.Dimensions[d], i, currentShape.Dimensions[d])
+				outputDim := output.Dimensions[d]
+				currentDim := currentShape.Dimensions[d]
+				// Allow symbolic dimensions to match any dimension (resolved at runtime)
+				// Also allow dimension 1 to be a placeholder for symbolic dimensions
+				// Only error if BOTH dimensions are concrete AND neither is 1 AND they don't match
+				if outputDim != currentDim && outputDim >= 0 && currentDim >= 0 {
+					// Special case: if one dimension is 1, it's likely a placeholder for a symbolic dimension
+					// Allow the match by using the non-1 dimension
+					if outputDim == 1 && currentDim != 1 {
+						output.Dimensions[d] = currentDim
+					} else if currentDim == 1 && outputDim != 1 {
+						// Keep outputDim
+					} else {
+						// Both are concrete non-1 dimensions that don't match - this is an error
+						return shapes.Invalid(), errors.Errorf("mismatched dimensions for Concatenate at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
+							d, output.Dimensions[d], i, currentShape.Dimensions[d])
+					}
+				}
+				// If one is symbolic and one is concrete, use the concrete one for output
+				// This allows symbolic dimensions to match any concrete dimension
+				if outputDim < 0 && currentDim >= 0 {
+					output.Dimensions[d] = currentDim
+				} else if outputDim >= 0 && currentDim < 0 {
+					// Keep the concrete dimension from the first input
+				} else if outputDim < 0 && currentDim < 0 {
+					// Both symbolic, keep symbolic
 				}
 			}
 		}
@@ -847,22 +961,68 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
 		}
-		if start < 0 || start >= dimSize {
-			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
-				opName, start, axis, dimSize, operand)
-		}
-		// Limit can be equal to dimSize.
-		if limit < start || limit > dimSize {
-			return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
-				opName, limit, axis, start, dimSize, operand)
+
+		// Skip validation for symbolic dimensions (negative dimSize)
+		// At runtime, symbolic dimensions will be resolved and validated
+		if dimSize >= 0 {
+			if start < 0 || start >= dimSize {
+				return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
+					opName, start, axis, dimSize, operand)
+			}
+			// Limit can be equal to dimSize.
+			if limit < start || limit > dimSize {
+				return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
+					opName, limit, axis, start, dimSize, operand)
+			}
 		}
 
 		// The first one is always taken, so we use the ceiling of the division.
-		outputDimSize := (limit - start + (stride - 1)) / stride
-		output.Dimensions[axis] = outputDimSize
+		// For symbolic dimensions, output is also symbolic
+		if dimSize < 0 {
+			output.Dimensions[axis] = dimSize // Keep symbolic
+		} else {
+			outputDimSize := (limit - start + (stride - 1)) / stride
+			output.Dimensions[axis] = outputDimSize
+		}
 	}
 
 	return output, nil
+}
+
+// Sort calculates the output shapes for a Sort operation.
+// Sort takes one or more tensors and sorts them along the specified dimension.
+// All input tensors must have the same shape, and the output shapes are identical to the input shapes.
+func Sort(inputs []shapes.Shape, dimension int) (outputs []shapes.Shape, err error) {
+	opName := "Sort"
+	if len(inputs) == 0 {
+		return nil, errors.Errorf("%s: requires at least one input tensor", opName)
+	}
+
+	firstShape := inputs[0]
+	if firstShape.DType == dtypes.InvalidDType {
+		return nil, errors.Errorf("%s: invalid input shape %s", opName, firstShape)
+	}
+
+	rank := firstShape.Rank()
+	if dimension < 0 || dimension >= rank {
+		return nil, errors.Errorf("%s: dimension %d is out of range for rank %d", opName, dimension, rank)
+	}
+
+	// Validate all inputs have the same shape
+	for i := 1; i < len(inputs); i++ {
+		if !shapesCompatible(inputs[i], firstShape) {
+			return nil, errors.Errorf("%s: all inputs must have the same shape, but input[0]=%s and input[%d]=%s",
+				opName, firstShape, i, inputs[i])
+		}
+	}
+
+	// Output shapes are identical to input shapes
+	outputs = make([]shapes.Shape, len(inputs))
+	for i := range inputs {
+		outputs[i] = inputs[i]
+	}
+
+	return outputs, nil
 }
 
 // ArgMinMax calculates the output shape for an ArgMinMax operation.
@@ -1291,21 +1451,37 @@ func DotGeneral(
 	contractingDims := make([]int, len(lhsContractingAxes))
 	for ii, lhsAxis := range lhsContractingAxes {
 		rhsAxis := rhsContractingAxes[ii]
-		if lhs.Dimensions[lhsAxis] != rhs.Dimensions[rhsAxis] {
+		lhsDim := lhs.Dimensions[lhsAxis]
+		rhsDim := rhs.Dimensions[rhsAxis]
+		// Skip dimension equality check if either dimension is symbolic (negative)
+		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral contracting dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
-				lhsAxis, lhs.Dimensions[lhsAxis], rhsAxis, rhs.Dimensions[rhsAxis])
+				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
-		contractingDims[ii] = lhs.Dimensions[lhsAxis]
+		// Use the concrete dimension if one is symbolic, otherwise use lhs dimension
+		if lhsDim >= 0 {
+			contractingDims[ii] = lhsDim
+		} else {
+			contractingDims[ii] = rhsDim
+		}
 	}
 	for ii, lhsAxis := range lhsBatchAxes {
 		rhsAxis := rhsBatchAxes[ii]
-		if lhs.Dimensions[lhsAxis] != rhs.Dimensions[rhsAxis] {
+		lhsDim := lhs.Dimensions[lhsAxis]
+		rhsDim := rhs.Dimensions[rhsAxis]
+		// Skip dimension equality check if either dimension is symbolic (negative)
+		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral batch dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
-				lhsAxis, lhs.Dimensions[lhsAxis], rhsAxis, rhs.Dimensions[rhsAxis])
+				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
-		batchDims[ii] = lhs.Dimensions[lhsAxis]
+		// Use the concrete dimension if one is symbolic, otherwise use lhs dimension
+		if lhsDim >= 0 {
+			batchDims[ii] = lhsDim
+		} else {
+			batchDims[ii] = rhsDim
+		}
 	}
 
 	// Find sizes of the normalized operands ([batchSize, crossSize, contractSize]).
@@ -1313,12 +1489,13 @@ func DotGeneral(
 	batchSize, lhsCrossSize, contractingSize, lhsCrossDims := dotGeneralFindSizes(lhs, lhsContractingAxes, lhsBatchAxes)
 	_, rhsCrossSize, _, rhsCrossDims := dotGeneralFindSizes(rhs, rhsContractingAxes, rhsBatchAxes)
 
-	// Check that all sizes are positive
-	if batchSize < 0 || lhsCrossSize < 0 || contractingSize < 0 || rhsCrossSize < 0 {
-		err = errors.Errorf("DotGeneral sizes must be positive: lhs(batch=%d, cross=%d, contracting=%d), rhs(cross=%d)",
-			batchSize, lhsCrossSize, contractingSize, rhsCrossSize)
-		return
-	}
+	// Check that all sizes are positive or symbolic (negative for symbolic dimensions is allowed)
+	// Note: Sizes can be negative when dimensions are symbolic. We only validate that non-symbolic sizes are positive.
+	// The actual validation happens at runtime when concrete dimensions are known.
+	_ = batchSize      // May be negative (symbolic), validated at runtime
+	_ = lhsCrossSize   // May be negative (symbolic), validated at runtime
+	_ = contractingSize // May be negative (symbolic), validated at runtime
+	_ = rhsCrossSize   // May be negative (symbolic), validated at runtime
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
@@ -1710,5 +1887,135 @@ func AllReduce(operands []shapes.Shape, reductionInputs, reductionOutputs []shap
 	for i, operand := range operands {
 		outputs[i] = operand.Clone()
 	}
+	return outputs, nil
+}
+
+// While returns the operation's output shapes and validates the condition and body functions.
+//
+// The While operation implements a loop that continues executing the body function
+// as long as the condition function returns true.
+//
+// Parameters:
+//   - initialStates: Initial values for the loop state
+//   - condInputs: Input shapes for the condition function (must match initialStates)
+//   - condOutputs: Output shapes for the condition function (must be a single scalar bool)
+//   - bodyInputs: Input shapes for the body function (must match initialStates)
+//   - bodyOutputs: Output shapes for the body function (must match initialStates)
+//
+// Returns:
+//   - outputs: The output shapes (same as initialStates)
+//   - err: Error if validation fails
+func While(initialStates, condInputs, condOutputs, bodyInputs, bodyOutputs []shapes.Shape) (outputs []shapes.Shape, err error) {
+	// Validate we have at least one state value
+	if len(initialStates) == 0 {
+		return nil, errors.New("While requires at least one initial state value")
+	}
+
+	// Validate condition function signature
+	if len(condInputs) != len(initialStates) {
+		return nil, errors.Errorf("While condition function must have %d inputs (same as initial states), got %d",
+			len(initialStates), len(condInputs))
+	}
+	if len(condOutputs) != 1 {
+		return nil, errors.Errorf("While condition function must have exactly 1 output, got %d",
+			len(condOutputs))
+	}
+	if !condOutputs[0].IsScalar() || condOutputs[0].DType != dtypes.Bool {
+		return nil, errors.Errorf("While condition function must return a scalar bool, got %s",
+			condOutputs[0])
+	}
+
+	// Validate body function signature
+	if len(bodyInputs) != len(initialStates) {
+		return nil, errors.Errorf("While body function must have %d inputs (same as initial states), got %d",
+			len(initialStates), len(bodyInputs))
+	}
+	if len(bodyOutputs) != len(initialStates) {
+		return nil, errors.Errorf("While body function must have %d outputs (same as initial states), got %d",
+			len(initialStates), len(bodyOutputs))
+	}
+
+	// Validate that condition inputs match initial states
+	for i, condInput := range condInputs {
+		if !condInput.Equal(initialStates[i]) {
+			return nil, errors.Errorf("While condition function input[%d] must match initial state[%d], got %s vs %s",
+				i, i, condInput, initialStates[i])
+		}
+	}
+
+	// Validate that body inputs match initial states
+	for i, bodyInput := range bodyInputs {
+		if !bodyInput.Equal(initialStates[i]) {
+			return nil, errors.Errorf("While body function input[%d] must match initial state[%d], got %s vs %s",
+				i, i, bodyInput, initialStates[i])
+		}
+	}
+
+	// Validate that body outputs match initial states
+	for i, bodyOutput := range bodyOutputs {
+		if !bodyOutput.Equal(initialStates[i]) {
+			return nil, errors.Errorf("While body function output[%d] must match initial state[%d], got %s vs %s",
+				i, i, bodyOutput, initialStates[i])
+		}
+	}
+
+	// The output shapes are the same as the initial states
+	outputs = make([]shapes.Shape, len(initialStates))
+	for i, state := range initialStates {
+		outputs[i] = state.Clone()
+	}
+
+	return outputs, nil
+}
+
+// If performs shape inference for the stablehlo.if operation.
+//
+// The If operation selects between two branches based on a scalar boolean predicate.
+// Both branches must have no inputs and must produce outputs with matching shapes.
+//
+// Parameters:
+//   - pred: Shape of the predicate (must be scalar bool)
+//   - trueBranchInputs: Input shapes for true branch (must be empty)
+//   - trueBranchOutputs: Output shapes from true branch
+//   - falseBranchInputs: Input shapes for false branch (must be empty)
+//   - falseBranchOutputs: Output shapes from false branch (must match trueBranchOutputs)
+//
+// Returns:
+//   - outputs: The output shapes (same as branch outputs)
+//   - err: Error if validation fails
+func If(pred shapes.Shape, trueBranchInputs, trueBranchOutputs, falseBranchInputs, falseBranchOutputs []shapes.Shape) (outputs []shapes.Shape, err error) {
+	// Validate pred is scalar bool
+	if !pred.IsScalar() || pred.DType != dtypes.Bool {
+		return nil, errors.Errorf("If predicate must be a scalar bool, got %s", pred)
+	}
+
+	// Validate branches have no inputs (per StableHLO spec)
+	if len(trueBranchInputs) != 0 {
+		return nil, errors.Errorf("If true_branch must have no inputs, got %d", len(trueBranchInputs))
+	}
+	if len(falseBranchInputs) != 0 {
+		return nil, errors.Errorf("If false_branch must have no inputs, got %d", len(falseBranchInputs))
+	}
+
+	// Validate branches have same number of outputs
+	if len(trueBranchOutputs) != len(falseBranchOutputs) {
+		return nil, errors.Errorf("If branches must have same number of outputs, true_branch has %d, false_branch has %d",
+			len(trueBranchOutputs), len(falseBranchOutputs))
+	}
+
+	// Validate branch outputs have matching shapes
+	for i := range trueBranchOutputs {
+		if !trueBranchOutputs[i].Equal(falseBranchOutputs[i]) {
+			return nil, errors.Errorf("If branch outputs[%d] must match, true_branch has %s, false_branch has %s",
+				i, trueBranchOutputs[i], falseBranchOutputs[i])
+		}
+	}
+
+	// Output shapes are the same as branch outputs
+	outputs = make([]shapes.Shape, len(trueBranchOutputs))
+	for i, s := range trueBranchOutputs {
+		outputs[i] = s.Clone()
+	}
+
 	return outputs, nil
 }

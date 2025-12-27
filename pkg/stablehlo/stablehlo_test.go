@@ -204,3 +204,86 @@ func TestNormalizeIdentifier(t *testing.T) {
 		}
 	}
 }
+
+func TestDynamicOperations(t *testing.T) {
+	t.Run("GetDimensionSize", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create a tensor with shape [3, 4, 5]
+		operand := must(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3, 4, 5)))
+
+		// Get size of dimension 1 (should be 4)
+		dimSize := must(GetDimensionSize(operand, 1))
+
+		if err := fn.Return(dimSize); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must(b.Build()))
+		fmt.Printf("%s program:\n%s", t.Name(), program)
+
+		// Verify the operation is present in the program
+		if !strings.Contains(program, "stablehlo.get_dimension_size") {
+			t.Fatal("expected program to contain get_dimension_size operation")
+		}
+		if !strings.Contains(program, `dimension = 1`) {
+			t.Fatal("expected program to specify dimension = 1")
+		}
+	})
+
+	t.Run("DynamicBroadcastInDim", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create operand with shape [3, 4]
+		operand := must(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3, 4)))
+
+		// Create output dimensions tensor [2, 3, 4]
+		outputDims := must(fn.ConstantFromFlatAndDimensions([]int32{2, 3, 4}, 3))
+
+		// Broadcast operand to shape [2, 3, 4], mapping axes 0->1, 1->2
+		result := must(DynamicBroadcastInDim(operand, outputDims, []int{1, 2}))
+
+		if err := fn.Return(result); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must(b.Build()))
+		fmt.Printf("%s program:\n%s", t.Name(), program)
+
+		// When the shape is a constant, DynamicBroadcastInDim optimizes to static BroadcastInDim
+		if !strings.Contains(program, "stablehlo.broadcast_in_dim") {
+			t.Fatal("expected program to contain broadcast_in_dim operation (optimized from dynamic)")
+		}
+		if !strings.Contains(program, `broadcast_dimensions`) {
+			t.Fatal("expected program to contain broadcast_dimensions attribute")
+		}
+	})
+
+	t.Run("DynamicReshape", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create operand with shape [12]
+		operand := must(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 12)))
+
+		// Create output shape tensor [3, 4]
+		outputShape := must(fn.ConstantFromFlatAndDimensions([]int32{3, 4}, 2))
+
+		// Reshape to [3, 4]
+		result := must(DynamicReshape(operand, outputShape))
+
+		if err := fn.Return(result); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must(b.Build()))
+		fmt.Printf("%s program:\n%s", t.Name(), program)
+
+		// When the shape is a constant, DynamicReshape optimizes to static Reshape
+		if !strings.Contains(program, "stablehlo.reshape") {
+			t.Fatal("expected program to contain reshape operation (optimized from dynamic)")
+		}
+	})
+}
