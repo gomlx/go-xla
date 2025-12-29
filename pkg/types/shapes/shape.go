@@ -129,6 +129,12 @@ func (s Shape) Rank() int { return len(s.Dimensions) }
 // IsScalar returns whether the shape represents a scalar, that is there are no dimensions (rank==0).
 func (s Shape) IsScalar() bool { return s.Ok() && s.Rank() == 0 }
 
+// IsDynamic returns whether any dimension is unknown/dynamic (DimUnknown).
+// This is used for StableHLO dynamic shape support where dimensions are not known at compile time.
+func (s Shape) IsDynamic() bool {
+	return slices.Contains(s.Dimensions, DimUnknown)
+}
+
 // Dim returns the dimension of the given axis. axis can take negative numbers, in which
 // case it counts as starting from the end -- so axis=-1 refers to the last axis.
 // Like with a slice indexing, it panics for an out-of-bound axis.

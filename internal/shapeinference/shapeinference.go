@@ -158,23 +158,9 @@ func BinaryOp(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (output sh
 		err = errors.Errorf("invalid shape for %s or %s for %q", lhsShape, rhsShape, opType)
 		return
 	}
-	// Skip equality check if shapes have symbolic dimensions (DimUnknown) - broadcasting logic in binaryOpImpl will handle it
-	hasSymbolic := false
-	for _, dim := range lhsShape.Dimensions {
-		if dim == shapes.DimUnknown {
-			hasSymbolic = true
-			break
-		}
-	}
-	if !hasSymbolic {
-		for _, dim := range rhsShape.Dimensions {
-			if dim == shapes.DimUnknown {
-				hasSymbolic = true
-				break
-			}
-		}
-	}
-	if !hasSymbolic && !lhsShape.Equal(rhsShape) {
+	// Skip equality check if shapes have dynamic dimensions (DimUnknown) - broadcasting logic in binaryOpImpl will handle it
+	hasDynamic := lhsShape.IsDynamic() || rhsShape.IsDynamic()
+	if !hasDynamic && !lhsShape.Equal(rhsShape) {
 		err = errors.Errorf("shapes for %q must match, got %s and %s", opType, lhsShape, rhsShape)
 		return
 	}
@@ -227,16 +213,16 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
 
-		// Handle symbolic dimensions (DimUnknown)
+		// Handle dynamic dimensions (DimUnknown)
 		switch {
 		case lhsDim == shapes.DimUnknown && rhsDim == shapes.DimUnknown:
-			// Both symbolic - result is unknown
+			// Both dynamic - result is unknown
 			output.Dimensions[axis] = shapes.DimUnknown
 		case lhsDim == shapes.DimUnknown && rhsDim == 1:
-			// Left is symbolic, right broadcasts
+			// Left is dynamic, right broadcasts
 			output.Dimensions[axis] = lhsDim
 		case rhsDim == shapes.DimUnknown && lhsDim == 1:
-			// Right is symbolic, left broadcasts
+			// Right is dynamic, left broadcasts
 			output.Dimensions[axis] = rhsDim
 		case lhsDim > 0 && rhsDim > 0:
 			// Both static - use existing max logic for broadcasting
@@ -247,13 +233,13 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 			}
 			output.Dimensions[axis] = max(lhsDim, rhsDim)
 		case lhsDim < 0 && rhsDim > 1:
-			// Symbolic vs concrete > 1: use concrete (symbolic must be compatible)
+			// Dynamic vs concrete > 1: use concrete (dynamic must be compatible)
 			output.Dimensions[axis] = rhsDim
 		case rhsDim < 0 && lhsDim > 1:
-			// Concrete > 1 vs symbolic: use concrete
+			// Concrete > 1 vs dynamic: use concrete
 			output.Dimensions[axis] = lhsDim
 		default:
-			err = errors.Errorf("incompatible symbolic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
+			err = errors.Errorf("incompatible dynamic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
 				axis, lhsDim, rhsDim, opType)
 			return
 		}
@@ -381,8 +367,8 @@ func shapesCompatible(a, b shapes.Shape) bool {
 	for i := 0; i < a.Rank(); i++ {
 		dimA := a.Dimensions[i]
 		dimB := b.Dimensions[i]
-		// If either dimension is symbolic (negative), they're compatible
-		// This allows mixing static shapes like [1,1,1] with symbolic shapes like [-3,-3,-3]
+		// If either dimension is dynamic (DimUnknown), they're compatible
+		// This allows mixing static shapes like [1,1,1] with dynamic shapes
 		if dimA < 0 || dimB < 0 {
 			continue
 		}
@@ -789,21 +775,21 @@ func Concatenate(inputs []shapes.Shape, axis int) (output shapes.Shape, err erro
 
 		for d := 0; d < rank; d++ {
 			if d == axis {
-				// For the concatenation axis, add dimensions (handling symbolic dims)
+				// For the concatenation axis, add dimensions (handling dynamic dims)
 				if output.Dimensions[d] >= 0 && currentShape.Dimensions[d] >= 0 {
 					output.Dimensions[d] += currentShape.Dimensions[d]
 				} else {
-					// If either dimension is symbolic, output is symbolic (-3)
-					output.Dimensions[d] = -3
+					// If either dimension is dynamic, output is dynamic
+					output.Dimensions[d] = shapes.DimUnknown
 				}
 			} else {
 				outputDim := output.Dimensions[d]
 				currentDim := currentShape.Dimensions[d]
-				// Allow symbolic dimensions to match any dimension (resolved at runtime)
-				// Also allow dimension 1 to be a placeholder for symbolic dimensions
+				// Allow dynamic dimensions to match any dimension (resolved at runtime)
+				// Also allow dimension 1 to be a placeholder for dynamic dimensions
 				// Only error if BOTH dimensions are concrete AND neither is 1 AND they don't match
 				if outputDim != currentDim && outputDim >= 0 && currentDim >= 0 {
-					// Special case: if one dimension is 1, it's likely a placeholder for a symbolic dimension
+					// Special case: if one dimension is 1, it's likely a placeholder for a dynamic dimension
 					// Allow the match by using the non-1 dimension
 					if outputDim == 1 && currentDim != 1 {
 						output.Dimensions[d] = currentDim
@@ -815,14 +801,14 @@ func Concatenate(inputs []shapes.Shape, axis int) (output shapes.Shape, err erro
 							d, output.Dimensions[d], i, currentShape.Dimensions[d])
 					}
 				}
-				// If one is symbolic and one is concrete, use the concrete one for output
-				// This allows symbolic dimensions to match any concrete dimension
+				// If one is dynamic and one is concrete, use the concrete one for output
+				// This allows dynamic dimensions to match any concrete dimension
 				if outputDim < 0 && currentDim >= 0 {
 					output.Dimensions[d] = currentDim
 				} else if outputDim >= 0 && currentDim < 0 {
 					// Keep the concrete dimension from the first input
 				} else if outputDim < 0 && currentDim < 0 {
-					// Both symbolic, keep symbolic
+					// Both dynamic, keep dynamic
 				}
 			}
 		}

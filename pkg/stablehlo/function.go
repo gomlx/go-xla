@@ -366,7 +366,7 @@ func (fn *Function) Closure() *Function {
 // UseParentValue creates a reference in this closure to a value from the parent function.
 // This allows closure functions (like If branches) to use values computed in the parent scope.
 //
-// At the StableHLO/MLIR level, closures can reference SSA values from their parent scope directly.
+// At the StableHLO/MLIR level, closures can reference SSA (Static Single Assignment) values from their parent scope directly.
 // This method enables that by creating a Value in the closure that references the same SSA name.
 //
 // Returns an error if:
@@ -390,9 +390,14 @@ func (fn *Function) UseParentValue(parentValue *Value) (*Value, error) {
 	if parentValue == nil {
 		return nil, errors.New("parentValue is nil")
 	}
-	if parentValue.fn != fn.Parent {
-		return nil, errors.Errorf("value %q belongs to function %q, not the parent function %q",
-			parentValue.name, parentValue.fn.Name, fn.Parent.Name)
+	// Walk up the parent chain to check if parentValue belongs to an ancestor
+	currentFn := fn
+	for currentFn != nil && currentFn != parentValue.fn {
+		currentFn = currentFn.Parent
+	}
+	if currentFn == nil {
+		return nil, errors.Errorf("value %q belongs to function %q, not an ancestor of function %q",
+			parentValue.name, parentValue.fn.Name, fn.Name)
 	}
 
 	// Create a value in this closure that references the parent's SSA name.

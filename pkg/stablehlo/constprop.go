@@ -268,7 +268,7 @@ func extractBroadcastInDimConstant(fn *Function, broadcastStmt *Statement) ([]in
 		// Get the output dimension (how many times to replicate the scalar)
 		outputSize := outputShape.Dimensions[0]
 		if outputSize < 0 {
-			// Symbolic dimension - can't materialize
+			// Dynamic dimension - can't materialize
 			return nil, false
 		}
 
@@ -372,7 +372,7 @@ func extractGetDimensionSize(fn *Function, getDimStmt *Statement) ([]int, bool) 
 	// Extract the dimension value
 	dimValue := operandShape.Dimensions[dimIndex]
 	if dimValue < 0 {
-		// Symbolic dimension - can't materialize
+		// Dynamic dimension - can't materialize
 		return nil, false
 	}
 

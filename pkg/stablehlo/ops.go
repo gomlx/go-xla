@@ -512,25 +512,11 @@ func Reshape(operand *Value, shape shapes.Shape) (*Value, error) {
 			operand.shape, shape)
 	}
 
-	// Check if either shape has symbolic dimensions (negative values)
-	hasSymbolic := false
-	for _, dim := range operand.shape.Dimensions {
-		if dim < 0 {
-			hasSymbolic = true
-			break
-		}
-	}
-	if !hasSymbolic {
-		for _, dim := range shape.Dimensions {
-			if dim < 0 {
-				hasSymbolic = true
-				break
-			}
-		}
-	}
+	// Check if either shape has dynamic dimensions
+	hasDynamic := operand.shape.IsDynamic() || shape.IsDynamic()
 
-	// Skip size validation if any dimension is symbolic (will be validated at runtime)
-	if !hasSymbolic && operand.shape.Size() != shape.Size() {
+	// Skip size validation if any dimension is dynamic (will be validated at runtime)
+	if !hasDynamic && operand.shape.Size() != shape.Size() {
 		return nil, errors.Errorf("Reshape() requires the total size of the new shape to match the original shape, got operand=%s and shape=%s",
 			operand.shape, shape)
 	}
@@ -1949,9 +1935,9 @@ func DynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDim
 				return BroadcastInDim(operand, targetShape, broadcastDimensions)
 			}
 			// Broadcast is not valid with these concrete shapes
-			// Use symbolic output dimensions instead
+			// Use dynamic output dimensions instead
 			for i := range outputShape.Dimensions {
-				outputShape.Dimensions[i] = -3
+				outputShape.Dimensions[i] = shapes.DimUnknown
 			}
 			// Set bounds based on operand dimensions and extracted shape
 			outputShape.DimensionBounds = make([]int, outputRank)
@@ -2261,18 +2247,10 @@ func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
 				outputSize *= dim
 			}
 
-			// If input has symbolic dimensions, we can't validate size match but should still use extracted shape
-			inputHasSymbolic := false
-			for _, dim := range operand.shape.Dimensions {
-				if dim < 0 {
-					inputHasSymbolic = true
-					break
-				}
-			}
-
-			if inputHasSymbolic {
-				// Input has symbolic dimensions - trust the extracted output shape
-				// This is important for ScatterND and other ops that create symbolic intermediate tensors
+			// If input has dynamic dimensions, we can't validate size match but should still use extracted shape
+			if operand.shape.IsDynamic() {
+				// Input has dynamic dimensions - trust the extracted output shape
+				// This is important for ScatterND and other ops that create dynamic intermediate tensors
 				targetShape := operand.shape.Clone()
 				targetShape.Dimensions = concreteShape
 				return Reshape(operand, targetShape)

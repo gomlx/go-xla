@@ -7,9 +7,9 @@ import (
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
-// TestSelectWithSymbolicDimensions verifies that Select handles symbolic dimensions correctly.
-// This test addresses the issue where shapes like [1,1,1] and [-3,-3,-3] should be compatible.
-func TestSelectWithSymbolicDimensions(t *testing.T) {
+// TestSelectWithDynamicDimensions verifies that Select handles dynamic dimensions correctly.
+// This test addresses the issue where shapes like [1,1,1] and [DimUnknown,DimUnknown,DimUnknown] should be compatible.
+func TestSelectWithDynamicDimensions(t *testing.T) {
 	tests := []struct {
 		name        string
 		pred        shapes.Shape
@@ -34,10 +34,10 @@ func TestSelectWithSymbolicDimensions(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			name: "symbolic pred with static values",
+			name: "dynamic pred with static values",
 			pred: shapes.Shape{
 				DType:      dtypes.Bool,
-				Dimensions: []int{-3, -3, -3}, // symbolic dimensions
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			onTrue: shapes.Shape{
 				DType:      dtypes.Float32,
@@ -50,42 +50,42 @@ func TestSelectWithSymbolicDimensions(t *testing.T) {
 			shouldError: false, // This is the key test case
 		},
 		{
-			name: "static pred with symbolic values",
+			name: "static pred with dynamic values",
 			pred: shapes.Shape{
 				DType:      dtypes.Bool,
 				Dimensions: []int{1, 1, 1},
 			},
 			onTrue: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			onFalse: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			shouldError: false,
 		},
 		{
-			name: "all symbolic dimensions",
+			name: "all dynamic dimensions",
 			pred: shapes.Shape{
 				DType:      dtypes.Bool,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			onTrue: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			onFalse: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			shouldError: false,
 		},
 		{
-			name: "mixed symbolic and static (compatible)",
+			name: "mixed dynamic and static (compatible)",
 			pred: shapes.Shape{
 				DType:      dtypes.Bool,
-				Dimensions: []int{-3, 5, -3},
+				Dimensions: []int{shapes.DimUnknown, 5, shapes.DimUnknown},
 			},
 			onTrue: shapes.Shape{
 				DType:      dtypes.Float32,
@@ -189,10 +189,10 @@ func TestShapesCompatible(t *testing.T) {
 			compatible: true,
 		},
 		{
-			name: "symbolic matches static",
+			name: "dynamic matches static",
 			a: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			b: shapes.Shape{
 				DType:      dtypes.Float32,
@@ -201,22 +201,22 @@ func TestShapesCompatible(t *testing.T) {
 			compatible: true,
 		},
 		{
-			name: "static matches symbolic",
+			name: "static matches dynamic",
 			a: shapes.Shape{
 				DType:      dtypes.Float32,
 				Dimensions: []int{1, 2, 3},
 			},
 			b: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, -3, -3},
+				Dimensions: []int{shapes.DimUnknown, shapes.DimUnknown, shapes.DimUnknown},
 			},
 			compatible: true,
 		},
 		{
-			name: "mixed symbolic and static",
+			name: "mixed dynamic and static",
 			a: shapes.Shape{
 				DType:      dtypes.Float32,
-				Dimensions: []int{-3, 2, -3},
+				Dimensions: []int{shapes.DimUnknown, 2, shapes.DimUnknown},
 			},
 			b: shapes.Shape{
 				DType:      dtypes.Float32,
