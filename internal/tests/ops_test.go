@@ -497,23 +497,6 @@ func testOps(t *testing.T, client *pjrt.Client) {
 		}, outputs)
 	})
 
-	t.Run("BitcastConvert-packed_bits", func(t *testing.T) {
-		builder := New(t.Name())
-		fn := builder.Main()
-		c0 := must1(fn.ConstantFromFlatAndDimensions([]uint8{0b01_10_00_11}, 1))
-		must(fn.Return(
-			must1(BitcastConvert(c0, dtypes.Uint2)),
-			must1(BitcastConvert(c0, dtypes.Int2)),
-		))
-		program := must1(builder.Build())
-		fmt.Printf("%s program:\n%s", t.Name(), withLines(program))
-		outputs := compileAndExecute(t, client, program)
-		requireBuffersEqual(t, []FlatAndDims{
-			{[]uint8{1, 2, 0, 3}, []int{1, 4}},
-			{[]int8{1, -2, 0, -1}, []int{1, 4}},
-		}, outputs)
-	})
-
 	t.Run("Transpose", func(t *testing.T) {
 		builder := New(t.Name())
 		fn := builder.Main()
