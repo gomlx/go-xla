@@ -102,12 +102,10 @@ const (
 	CollectivePermute
 	Composite
 	CustomCall
-	DynamicBroadcastInDim
 	DynamicConv
 	DynamicGather
 	DynamicIota
 	DynamicPad
-	DynamicReshape
 	GetDimensionSize
 	GetTupleElement
 	Infeed
