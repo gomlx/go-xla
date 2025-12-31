@@ -101,11 +101,11 @@ func (fn *Function) InputWithAttributes(shape shapes.Shape, attributes map[strin
 // InputWithShardingAndAttributes creates a new input with the given sharding specification and attributes.
 func (fn *Function) InputWithShardingAndAttributes(shape shapes.Shape, shardingSpec *shardy.ShardingSpec, attributes map[string]any) (*Value, error) {
 	rootFn := fn.findRootFn()
+	// Note: NamedInputWithShardingAndAttributes increments nextArgID, so we don't need to do it here.
 	value, err := fn.NamedInputWithShardingAndAttributes(fmt.Sprintf("arg%d", rootFn.nextArgID), shape, shardingSpec, attributes)
 	if err != nil {
 		return nil, err
 	}
-	rootFn.nextArgID++
 	return value, nil
 }
 
@@ -176,6 +176,14 @@ func (fn *Function) NamedInputWithShardingAndAttributes(name string, shape shape
 		}
 	}
 	fn.Inputs = append(fn.Inputs, value)
+
+	// Increment nextArgID on the root function to ensure closure inputs don't conflict.
+	// This is critical because closures use Input() which generates names like "arg0", "arg1", etc.
+	// based on nextArgID. If we don't increment here, closures would reuse names already used
+	// by the main function's named inputs (e.g., "arg0" for model inputs).
+	rootFn := fn.findRootFn()
+	rootFn.nextArgID++
+
 	return value, nil
 }
 

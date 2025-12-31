@@ -44,7 +44,7 @@ func (s Shape) CheckDims(dimensions ...int) error {
 	}
 	for ii, wantDim := range dimensions {
 		actualDim := s.Dimensions[ii]
-		// Skip check if either dimension is DimUnknown (dynamic/symbolic)
+		// Skip check if either dimension is DimUnknown (dynamic)
 		if wantDim == DimUnknown || actualDim == DimUnknown {
 			continue
 		}

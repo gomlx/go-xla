@@ -2,7 +2,6 @@ package stablehlo
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -696,8 +695,9 @@ func Slice(x *Value, starts, limits, strides []int) (*Value, error) {
 //
 // Parameters:
 //   - comparatorFn: A function that compares two elements and returns a boolean.
-//     Created with Builder.NewClosure. For N inputs, must have signature
-//     (lhs_0, ..., lhs_{N-1}, rhs_0, ..., rhs_{N-1}) -> scalar_bool
+//     Created with Function.Closure. For N inputs, must have signature
+//     (lhs_0, rhs_0, lhs_1, rhs_1, ..., lhs_{N-1}, rhs_{N-1}) -> scalar_bool
+//     That is, for each input tensor you get a (lhs, rhs) pair of elements being compared.
 //     Returns true if lhs should come before rhs in sorted order.
 //   - dimension: The dimension along which to sort (negative values count from the end)
 //   - isStable: Whether the sort should be stable (preserve relative order of equal elements)
@@ -714,10 +714,13 @@ func Slice(x *Value, starts, limits, strides []int) (*Value, error) {
 //	indices := ... // shape [batch, seq_len] with values 0, 1, 2, ...
 //
 //	comparatorFn := fn.Closure()
+//	// Arguments for first input (values): lhs, rhs
 //	lhsVal, _ := comparatorFn.Input(values.Shape().ScalarShape())
 //	rhsVal, _ := comparatorFn.Input(values.Shape().ScalarShape())
-//	lhsIdx, _ := comparatorFn.Input(indices.Shape().ScalarShape()) // not used in comparison
-//	rhsIdx, _ := comparatorFn.Input(indices.Shape().ScalarShape()) // not used in comparison
+//	// Arguments for second input (indices): lhs, rhs (not used in comparison)
+//	lhsIdx, _ := comparatorFn.Input(indices.Shape().ScalarShape())
+//	rhsIdx, _ := comparatorFn.Input(indices.Shape().ScalarShape())
+//	_, _ = lhsIdx, rhsIdx // silence unused variable warnings
 //	result, _ := Compare(lhsVal, rhsVal, ComparisonDirectionGT, ComparisonTypeFloat)
 //	comparatorFn.Return(result)
 //
@@ -1853,673 +1856,11 @@ func GetDimensionSize(operand *Value, dimension int) (*Value, error) {
 	return stmt.Outputs[0], nil
 }
 
-// DynamicBroadcastInDim broadcasts the operand to a shape specified by a 1D tensor (not static dimensions).
-//
-// - operand: the tensor to broadcast.
-// - outputDimensions: a 1D tensor of i32 or i64 values specifying the target shape dimensions.
-// - broadcastDimensions: maps operand axes to output axes (like BroadcastInDim).
-//
-// This is the dynamic version of BroadcastInDim where the output shape is determined at runtime.
-func DynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDimensions []int) (*Value, error) {
-	op := optypes.DynamicBroadcastInDim
-	fn := operand.fn
-	if fn.Returned {
-		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
-			op, fn.Name)
-	}
-	if outputDimensions.fn != fn {
-		return nil, errors.Errorf("cannot add operation %s to function %q, because operand and outputDimensions are from different functions (%q and %q)",
-			op, fn.Name, fn.Name, outputDimensions.fn.Name)
-	}
-
-	// Validate outputDimensions is 1D tensor of integer type
-	if outputDimensions.shape.Rank() != 1 {
-		return nil, errors.Errorf("outputDimensions must be a 1D tensor, got rank %d",
-			outputDimensions.shape.Rank())
-	}
-	if !outputDimensions.shape.DType.IsInt() {
-		return nil, errors.Errorf("outputDimensions must be integer type, got %s",
-			outputDimensions.shape.DType)
-	}
-
-	// Validate broadcastDimensions length matches operand rank
-	if len(broadcastDimensions) != operand.shape.Rank() {
-		return nil, errors.Errorf("broadcastDimensions length (%d) must match operand rank (%d)",
-			len(broadcastDimensions), operand.shape.Rank())
-	}
-
-	// Create output shape - try to extract concrete dimensions if outputDimensions is a constant
-	outputRank := outputDimensions.shape.Dimensions[0]
-
-	// If outputRank is symbolic (negative), use the operand rank as fallback
-	// This is common when broadcasting within shape computation subgraphs
-	if outputRank < 0 {
-		outputRank = operand.shape.Rank()
-	}
-
-	outputShape := operand.shape.Clone()
-	outputShape.Dimensions = make([]int, outputRank)
-
-	// Try to extract constant shape values
-	concreteShape, ok := ExtractConstantShape(fn, outputDimensions)
-	if ok {
-		// Check if all dimensions are positive (fully concrete)
-		allConcrete := true
-		for _, dim := range concreteShape {
-			if dim <= 0 {
-				allConcrete = false
-				break
-			}
-		}
-		if allConcrete {
-			// Validate that broadcast is actually valid
-			// For each operand dimension mapped via broadcastDimensions:
-			// - If operand dim is 1, it can broadcast to any target dim
-			// - If operand dim > 1, target dim must match
-			broadcastValid := true
-			for i, outputAxis := range broadcastDimensions {
-				if outputAxis >= 0 && outputAxis < len(concreteShape) {
-					operandDim := operand.shape.Dimensions[i]
-					targetDim := concreteShape[outputAxis]
-					if operandDim != 1 && operandDim != targetDim {
-						broadcastValid = false
-						break
-					}
-				}
-			}
-			if broadcastValid {
-				// Use static BroadcastInDim when shape is fully known
-				// This avoids XLA translation issues with dynamic_broadcast_in_dim
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = concreteShape
-				return BroadcastInDim(operand, targetShape, broadcastDimensions)
-			}
-			// Broadcast is not valid with these concrete shapes
-			// Use dynamic output dimensions instead
-			for i := range outputShape.Dimensions {
-				outputShape.Dimensions[i] = shapes.DimUnknown
-			}
-			// Set bounds based on operand dimensions and extracted shape
-			outputShape.DimensionBounds = make([]int, outputRank)
-			for i := range outputShape.DimensionBounds {
-				bound := 2048 // conservative default
-				if i < len(concreteShape) && concreteShape[i] > 0 {
-					bound = concreteShape[i]
-				}
-				outputShape.DimensionBounds[i] = bound
-			}
-		} else {
-			// Use concrete dimensions from the constant
-			copy(outputShape.Dimensions, concreteShape)
-		}
-	} else {
-		// tryExtractConstantShape failed - try partial extraction
-		// This handles the case where some dimensions are extractable (e.g., from get_dimension_size)
-		// but others are runtime-computed (e.g., from reduce operations)
-
-		// First, check if outputDimensions comes from a Concatenate operation
-		// and try partial extraction
-		var partialShape []int
-		hasPartialShape := false
-		for _, stmt := range fn.Statements {
-			for _, output := range stmt.Outputs {
-				if output == outputDimensions && stmt.OpType == optypes.Concatenate {
-					partial, _, anyOk := ExtractConcatenatedShapePartial(fn, stmt)
-					if anyOk {
-						partialShape = partial
-						hasPartialShape = true
-					}
-					break
-				}
-			}
-			if hasPartialShape {
-				break
-			}
-		}
-
-		// If we got partial results, try to fill in the unknown dimensions
-		if hasPartialShape && len(partialShape) == outputRank {
-			// Look for a bound for unknown dimensions
-			// Use the model input sequence length (typically 128) as a reasonable bound
-			defaultBound := 128 // Common sequence length for NLP models
-
-			// Fill in unknown dimensions with the bound
-			filledShape := make([]int, len(partialShape))
-			for i, dim := range partialShape {
-				if dim > 0 {
-					filledShape[i] = dim
-				} else {
-					// Unknown dimension - use bound
-					filledShape[i] = defaultBound
-				}
-			}
-
-			// If we filled in values, try using static broadcast
-			// This is safe because XLA will use the actual runtime values for the dynamic computation
-			// but our static shape gives it a compilation target
-
-			// Validate broadcast compatibility
-			broadcastValid := true
-			for i, outputAxis := range broadcastDimensions {
-				if outputAxis >= 0 && outputAxis < len(filledShape) {
-					operandDim := operand.shape.Dimensions[i]
-					targetDim := filledShape[outputAxis]
-					if operandDim > 0 && operandDim != 1 && operandDim != targetDim {
-						broadcastValid = false
-						break
-					}
-				}
-			}
-
-			if broadcastValid {
-				// Use static broadcast with the filled shape
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = filledShape
-				return BroadcastInDim(operand, targetShape, broadcastDimensions)
-			}
-		}
-
-		// Fallback: XLA requires bounded dimensions
-		// Check if operand has all concrete dimensions
-		operandIsConcrete := true
-		for _, dim := range operand.shape.Dimensions {
-			if dim < 0 {
-				operandIsConcrete = false
-				break
-			}
-		}
-
-		// Check if any operand dimension is 1 - this means broadcast is potentially expanding
-		hasBroadcastableDim := false
-		for _, dim := range operand.shape.Dimensions {
-			if dim == 1 {
-				hasBroadcastableDim = true
-				break
-			}
-		}
-
-		if operandIsConcrete && outputRank == len(operand.shape.Dimensions) && !hasBroadcastableDim {
-			// Operand is concrete with no 1-dimensions, and ranks match - use operand dimensions as output
-			// This handles the case where broadcast is essentially a no-op
-			copy(outputShape.Dimensions, operand.shape.Dimensions)
-		} else {
-			// Use dynamic dimension marker (shapes.DimUnknown) for all dimensions since they're runtime-determined
-			for i := range outputShape.Dimensions {
-				outputShape.Dimensions[i] = shapes.DimUnknown
-			}
-			// Set bounds to ensure bounded dynamism
-			// For broadcast, we can use the input dimensions mapped through broadcastDimensions
-			// and a conservative upper bound for other dimensions
-			outputShape.DimensionBounds = make([]int, outputRank)
-			maxDim := 1
-			for _, dim := range operand.shape.Dimensions {
-				if dim > 0 && dim > maxDim {
-					maxDim = dim
-				}
-			}
-			// Conservative: set bounds to a reasonable upper limit
-			// For shape tensors and small broadcasts, use a minimum of 128 (common sequence length)
-			// For larger tensors, use the largest input dimension * output rank
-			conservativeBound := maxDim * outputRank
-			if conservativeBound < 2048 {
-				conservativeBound = 2048 // Minimum bound for typical sequence lengths
-			}
-			if conservativeBound > 65536 {
-				conservativeBound = 65536 // Cap to prevent excessive memory allocation
-			}
-			for i := range outputShape.DimensionBounds {
-				outputShape.DimensionBounds[i] = conservativeBound
-			}
-		}
-	}
-
-	stmt := fn.addOp(op, outputShape, operand, outputDimensions)
-	stmt.Attributes = map[string]any{
-		"broadcast_dimensions": intSliceToArrayI64StableHLO(broadcastDimensions),
-	}
-	return stmt.Outputs[0], nil
-}
-
-// factorize finds n factors of value that are as close to each other as possible
-func factorize(value int, n int) []int {
-	if n == 1 {
-		return []int{value}
-	}
-	if n == 0 {
-		return []int{}
-	}
-
-	// Start with n factors each equal to the nth root
-	factors := make([]int, n)
-	target := int(math.Pow(float64(value), 1.0/float64(n)))
-	if target < 1 {
-		target = 1
-	}
-
-	// Find the largest factor <= target that divides value
-	for i := 0; i < n-1; i++ {
-		// Find best factor starting from target and going down
-		bestFactor := 1
-		for f := target; f >= 1; f-- {
-			if value%f == 0 {
-				bestFactor = f
-				break
-			}
-		}
-		factors[i] = bestFactor
-		value = value / bestFactor
-	}
-	// Last factor gets all remaining
-	factors[n-1] = value
-
-	return factors
-}
-
-// DynamicReshape reshapes the operand to a shape specified by a 1D tensor.
-//
-// - operand: the tensor to reshape.
-// - outputShape: a 1D tensor of i32 or i64 values specifying the target shape dimensions.
+// DynamicReshape reshapes the operand to a shape specified by a 1D tensor,
+// with caller-provided bounds for the output dimensions.
 //
 // This is the dynamic version of Reshape where the output shape is determined at runtime.
 // The total number of elements must remain the same.
-func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
-	op := optypes.DynamicReshape
-	fn := operand.fn
-	if fn.Returned {
-		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
-			op, fn.Name)
-	}
-	if outputShape.fn != fn {
-		return nil, errors.Errorf("cannot add operation %s to function %q, because operand and outputShape are from different functions (%q and %q)",
-			op, fn.Name, fn.Name, outputShape.fn.Name)
-	}
-
-	// Validate outputShape is 1D tensor of integer type
-	if outputShape.shape.Rank() != 1 {
-		return nil, errors.Errorf("outputShape must be a 1D tensor, got rank %d",
-			outputShape.shape.Rank())
-	}
-	if !outputShape.shape.DType.IsInt() {
-		return nil, errors.Errorf("outputShape must be integer type, got %s",
-			outputShape.shape.DType)
-	}
-
-	// Create output shape - try to extract concrete dimensions if outputShape is a constant
-	outputRank := outputShape.shape.Dimensions[0]
-	resultShape := operand.shape.Clone()
-	resultShape.Dimensions = make([]int, outputRank)
-
-	// Try to extract constant shape values
-	concreteShape, ok := ExtractConstantShape(fn, outputShape)
-
-	if ok {
-		// Check if all dimensions are concrete (positive) or need to be inferred (DimUnknown)
-		hasInferDim := false
-		inferDimIndex := -1 // Index sentinel: -1 means "not found"
-		knownProduct := 1
-		for i, dim := range concreteShape {
-			if dim == shapes.DimUnknown {
-				hasInferDim = true
-				inferDimIndex = i
-			} else if dim > 0 {
-				knownProduct *= dim
-			} else if dim == 0 {
-				// 0 means keep the original dimension size, but we can't resolve that statically
-				// if the input dimension is symbolic
-				if i < len(operand.shape.Dimensions) && operand.shape.Dimensions[i] > 0 {
-					concreteShape[i] = operand.shape.Dimensions[i]
-					knownProduct *= concreteShape[i]
-				} else {
-					hasInferDim = true // treat as dynamic
-				}
-			}
-		}
-
-		// Try to resolve DimUnknown dimension using input tensor size
-		if hasInferDim && inferDimIndex >= 0 {
-			inputSize := operand.shape.Size()
-			if inputSize > 0 && knownProduct > 0 {
-				// We can compute the inferred dimension
-				inferredDim := inputSize / knownProduct
-				concreteShape[inferDimIndex] = inferredDim
-				hasInferDim = false // We resolved it
-			}
-		}
-
-		if hasInferDim {
-			// We have unresolvable dimensions - use static Reshape with computed dimensions
-			// instead of dynamic_reshape which XLA can't compile with unbounded output
-			inputSize := operand.shape.Size()
-
-			// Build static dimensions: use extracted values where available, compute remaining
-			staticDims := make([]int, outputRank)
-			knownProduct := 1
-			inferIdx := -1 // Index sentinel: -1 means "not found"
-			for i, dim := range concreteShape {
-				if dim > 0 {
-					staticDims[i] = dim
-					knownProduct *= dim
-				} else if dim == shapes.DimUnknown {
-					inferIdx = i // Will be computed
-				} else {
-					// 0 or other unknown - use default
-					staticDims[i] = 128
-					knownProduct *= 128
-				}
-			}
-
-			// Compute the inferred dimension if possible
-			if inferIdx >= 0 && inputSize > 0 && knownProduct > 0 {
-				inferredDim := inputSize / knownProduct
-				if inferredDim > 0 {
-					staticDims[inferIdx] = inferredDim
-				} else {
-					// Can't compute - use reasonable default
-					staticDims[inferIdx] = 1
-				}
-			}
-
-			// Verify product matches input size
-			outputSize := 1
-			for _, dim := range staticDims {
-				outputSize *= dim
-			}
-
-			if inputSize > 0 && outputSize != inputSize {
-				// Fall back to using input dimensions distributed across output
-				// This is a heuristic but better than unbounded dimensions
-				for i := range staticDims {
-					if i < len(operand.shape.Dimensions) && operand.shape.Dimensions[i] > 0 {
-						staticDims[i] = operand.shape.Dimensions[i]
-					}
-				}
-			}
-
-			targetShape := operand.shape.Clone()
-			targetShape.Dimensions = staticDims
-			targetShape.DimensionBounds = nil
-			return Reshape(operand, targetShape)
-		} else {
-			// All extracted dimensions are concrete - validate sizes match before using static Reshape
-			inputSize := operand.shape.Size()
-			outputSize := 1
-			for _, dim := range concreteShape {
-				outputSize *= dim
-			}
-
-			// If input has dynamic dimensions, we can't validate size match but should still use extracted shape
-			if operand.shape.IsDynamic() {
-				// Input has dynamic dimensions - trust the extracted output shape
-				// This is important for ScatterND and other ops that create dynamic intermediate tensors
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = concreteShape
-				return Reshape(operand, targetShape)
-			}
-
-			if inputSize > 0 && outputSize > 0 && inputSize == outputSize {
-				// Sizes match - use static Reshape
-				// This avoids XLA translation issues with dynamic_reshape
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = concreteShape
-				return Reshape(operand, targetShape)
-			}
-			// Sizes don't match - the extracted shape is wrong for this operand
-			// Use static reshape with computed dimensions based on input
-
-			// Try to preserve as much of the extracted shape as possible while fixing the mismatch
-			staticDims := make([]int, outputRank)
-			copy(staticDims, concreteShape)
-
-			// If we have one dimension that's clearly wrong, try to fix it
-			// by computing what it should be based on the input size
-			if inputSize > 0 {
-				knownProduct := 1
-				unknownIdx := -1
-				for i, dim := range staticDims {
-					if dim > 0 && dim <= inputSize {
-						knownProduct *= dim
-					} else {
-						unknownIdx = i
-					}
-				}
-				if unknownIdx >= 0 && knownProduct > 0 {
-					inferredDim := inputSize / knownProduct
-					if inferredDim > 0 {
-						staticDims[unknownIdx] = inferredDim
-					}
-				}
-			}
-
-			// Verify the new shape matches
-			newOutputSize := 1
-			for _, dim := range staticDims {
-				if dim > 0 {
-					newOutputSize *= dim
-				}
-			}
-
-			if newOutputSize == inputSize {
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = staticDims
-				return Reshape(operand, targetShape)
-			}
-
-			// Still mismatched - try to compute a valid shape that preserves input size
-
-			// Strategy: use as many extracted dims as possible while ensuring product = inputSize
-			// Keep dimensions that are factors of inputSize, adjust the rest
-			validDims := make([]int, outputRank)
-			remainingSize := inputSize
-			dimsToInfer := 0
-
-			// First pass: identify which extracted dims are usable
-			for i, dim := range staticDims {
-				if dim > 0 && dim <= remainingSize && remainingSize%dim == 0 {
-					validDims[i] = dim
-					remainingSize /= dim
-				} else {
-					validDims[i] = 0 // Mark for inference
-					dimsToInfer++
-				}
-			}
-
-			// Second pass: distribute remaining size across unmarked dims
-			if dimsToInfer > 0 && remainingSize > 0 {
-				// Try to find reasonable factorization
-				for i := range validDims {
-					if validDims[i] == 0 {
-						if dimsToInfer == 1 {
-							// Last dim gets the rest
-							validDims[i] = remainingSize
-							remainingSize = 1
-						} else {
-							// Use 1 for this dim
-							validDims[i] = 1
-						}
-						dimsToInfer--
-					}
-				}
-			}
-
-			// Verify product
-			checkProduct := 1
-			for _, dim := range validDims {
-				checkProduct *= dim
-			}
-
-			if checkProduct != inputSize {
-				// Still wrong - use a simple heuristic
-				// If input is [a, b] and output is rank r, try to preserve structure
-				if outputRank == len(operand.shape.Dimensions) {
-					copy(validDims, operand.shape.Dimensions)
-				} else if outputRank > len(operand.shape.Dimensions) {
-					// Add 1s at the beginning
-					for i := range validDims {
-						if i < outputRank-len(operand.shape.Dimensions) {
-							validDims[i] = 1
-						} else {
-							srcIdx := i - (outputRank - len(operand.shape.Dimensions))
-							if srcIdx < len(operand.shape.Dimensions) && operand.shape.Dimensions[srcIdx] > 0 {
-								validDims[i] = operand.shape.Dimensions[srcIdx]
-							} else {
-								validDims[i] = 1
-							}
-						}
-					}
-				} else {
-					// Fewer dims - merge
-					validDims[outputRank-1] = inputSize
-					for i := 0; i < outputRank-1; i++ {
-						validDims[i] = 1
-					}
-				}
-			}
-
-			targetShape := operand.shape.Clone()
-			targetShape.Dimensions = validDims
-			return Reshape(operand, targetShape)
-		}
-	} else {
-		// tryExtractConstantShape failed - try partial extraction first
-		// This handles cases where some dimensions come from get_dimension_size (extractable)
-		// and others from reduce operations (not extractable)
-		var partialShape []int
-		hasPartialShape := false
-		for _, stmt := range fn.Statements {
-			for _, output := range stmt.Outputs {
-				if output == outputShape && stmt.OpType == optypes.Concatenate {
-					partial, _, anyOk := ExtractConcatenatedShapePartial(fn, stmt)
-					if anyOk {
-						partialShape = partial
-						hasPartialShape = true
-					}
-					break
-				}
-			}
-			if hasPartialShape {
-				break
-			}
-		}
-
-		// Calculate input size
-		inputSize := 1
-		hasConcreteDim := false
-		for _, dim := range operand.shape.Dimensions {
-			if dim > 0 {
-				inputSize *= dim
-				hasConcreteDim = true
-			}
-		}
-		if !hasConcreteDim && len(operand.shape.DimensionBounds) > 0 {
-			inputSize = 1
-			for _, bound := range operand.shape.DimensionBounds {
-				if bound > 0 {
-					if inputSize > 65536/bound {
-						inputSize = 65536
-						break
-					}
-					inputSize *= bound
-				}
-			}
-		}
-
-		// If we got partial results, use them to compute the shape
-		if hasPartialShape && len(partialShape) == outputRank {
-			staticDims := make([]int, outputRank)
-			knownProduct := 1
-			unknownCount := 0
-			unknownIdx := -1
-			for i, dim := range partialShape {
-				if dim > 0 {
-					staticDims[i] = dim
-					knownProduct *= dim
-				} else {
-					unknownCount++
-					unknownIdx = i
-				}
-			}
-
-			// If only one unknown dimension and we know the input size, compute it
-			if unknownCount == 1 && inputSize > 0 && knownProduct > 0 {
-				inferredDim := inputSize / knownProduct
-				if inferredDim > 0 {
-					staticDims[unknownIdx] = inferredDim
-				} else {
-					staticDims[unknownIdx] = 1
-				}
-			} else if unknownCount > 0 {
-				// Multiple unknowns - use reasonable defaults
-				for i := range staticDims {
-					if staticDims[i] == 0 {
-						staticDims[i] = 128 // Default for unknown dimensions
-					}
-				}
-			}
-
-			// Verify size match
-			outputSize := 1
-			for _, dim := range staticDims {
-				outputSize *= dim
-			}
-
-			if inputSize > 0 && outputSize == inputSize {
-				targetShape := operand.shape.Clone()
-				targetShape.Dimensions = staticDims
-				targetShape.DimensionBounds = nil
-				return Reshape(operand, targetShape)
-			}
-		}
-
-		// Fallback: shape is truly dynamic, use conservative static dimensions
-
-		bound := 0
-		for _, dim := range operand.shape.Dimensions {
-			if dim > 0 && dim > bound && dim <= 1024 {
-				bound = dim
-			}
-		}
-		if bound == 0 && len(operand.shape.DimensionBounds) > 0 {
-			for _, b := range operand.shape.DimensionBounds {
-				if b > 0 && b > bound && b <= 1024 {
-					bound = b
-				}
-			}
-		}
-		if bound == 0 {
-			bound = 128 // Smaller default - 2048 caused dimension propagation issues
-		}
-
-		staticDims := make([]int, outputRank)
-		if outputRank == len(operand.shape.Dimensions) {
-			for i := range staticDims {
-				if i < len(operand.shape.Dimensions) && operand.shape.Dimensions[i] > 0 {
-					staticDims[i] = operand.shape.Dimensions[i]
-				} else if i < len(operand.shape.DimensionBounds) && operand.shape.DimensionBounds[i] > 0 {
-					staticDims[i] = operand.shape.DimensionBounds[i]
-				} else {
-					staticDims[i] = bound
-				}
-			}
-		} else {
-			for i := range staticDims {
-				staticDims[i] = bound
-			}
-		}
-
-		// Use static Reshape to avoid XLA translation issues
-		targetShape := operand.shape.Clone()
-		targetShape.Dimensions = staticDims
-		targetShape.DimensionBounds = nil // Clear bounds since we're using concrete dims
-		return Reshape(operand, targetShape)
-	}
-}
-
-// SimpleDynamicReshape reshapes the operand to a shape specified by a 1D tensor,
-// using caller-provided bounds for dimensions that are not known at compile time.
-//
-// This is a simplified version of DynamicReshape that doesn't attempt to extract
-// or infer dimensions from the shape tensor. Instead, it uses the provided bounds
-// directly to create bounded dynamic dimensions.
 //
 // Parameters:
 //   - operand: the tensor to reshape.
@@ -2527,11 +1868,10 @@ func DynamicReshape(operand *Value, outputShape *Value) (*Value, error) {
 //   - bounds: dimension bounds for the output shape. Must have length equal to output rank.
 //     Use the actual dimension value for known dimensions, or an upper bound for dynamic ones.
 //
-// This function is preferred when:
-//   - The caller knows the dimension bounds (e.g., from model configuration)
-//   - The shape is data-dependent (e.g., NonZero output)
-//   - You want predictable behavior without extraction heuristics
-func SimpleDynamicReshape(operand *Value, outputShape *Value, bounds []int) (*Value, error) {
+// XLA requires bounded dynamic dimensions, so bounds must be provided. The caller should
+// determine these bounds before generating StableHLO (e.g., from model configuration or
+// by analyzing the computation graph).
+func DynamicReshape(operand *Value, outputShape *Value, bounds []int) (*Value, error) {
 	op := optypes.DynamicReshape
 	fn := operand.fn
 	if fn.Returned {
@@ -2573,16 +1913,17 @@ func SimpleDynamicReshape(operand *Value, outputShape *Value, bounds []int) (*Va
 		resultShape.Dimensions[i] = shapes.DimUnknown // Dynamic
 		resultShape.DimensionBounds[i] = bounds[i]
 	}
+	// dynamic_reshape requires bounded output in XLA, so we must encode bounds
+	resultShape.EncodeBounds = true
 
 	stmt := fn.addOp(op, resultShape, operand, outputShape)
 	return stmt.Outputs[0], nil
 }
 
-// SimpleDynamicBroadcastInDim broadcasts the operand to a shape specified by a 1D tensor,
-// using caller-provided bounds for dimensions that are not known at compile time.
+// DynamicBroadcastInDim broadcasts the operand to a shape specified by a 1D tensor,
+// with caller-provided bounds for the output dimensions.
 //
-// This is a simplified version of DynamicBroadcastInDim that doesn't attempt to extract
-// or infer dimensions. Instead, it uses the provided bounds directly.
+// This is the dynamic version of BroadcastInDim where the output shape is determined at runtime.
 //
 // Parameters:
 //   - operand: the tensor to broadcast.
@@ -2590,8 +1931,10 @@ func SimpleDynamicReshape(operand *Value, outputShape *Value, bounds []int) (*Va
 //   - broadcastDimensions: maps operand axes to output axes (like BroadcastInDim).
 //   - bounds: dimension bounds for the output shape. Must have length equal to output rank.
 //
-// This function is preferred when the caller knows the dimension bounds.
-func SimpleDynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDimensions []int, bounds []int) (*Value, error) {
+// XLA requires bounded dynamic dimensions, so bounds must be provided. The caller should
+// determine these bounds before generating StableHLO (e.g., from model configuration or
+// by analyzing the computation graph).
+func DynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDimensions []int, bounds []int) (*Value, error) {
 	op := optypes.DynamicBroadcastInDim
 	fn := operand.fn
 	if fn.Returned {
@@ -2639,6 +1982,8 @@ func SimpleDynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadc
 		outputShape.Dimensions[i] = shapes.DimUnknown // Dynamic
 		outputShape.DimensionBounds[i] = bounds[i]
 	}
+	// dynamic_broadcast_in_dim requires bounded output in XLA, so we must encode bounds
+	outputShape.EncodeBounds = true
 
 	stmt := fn.addOp(op, outputShape, operand, outputDimensions)
 	stmt.Attributes = map[string]any{

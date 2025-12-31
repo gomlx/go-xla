@@ -209,21 +209,46 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 			opType, lhsShape, rhsShape)
 	}
 	output = lhsShape.Clone()
+
+	// Determine if we need to track bounds
+	needsBounds := len(lhsShape.DimensionBounds) > 0 || len(rhsShape.DimensionBounds) > 0
+
 	for axis := range output.Rank() {
 		lhsDim := lhsShape.Dimensions[axis]
 		rhsDim := rhsShape.Dimensions[axis]
 
+		// Get bounds for each side
+		lhsBound := 0
+		if axis < len(lhsShape.DimensionBounds) {
+			lhsBound = lhsShape.DimensionBounds[axis]
+		}
+		rhsBound := 0
+		if axis < len(rhsShape.DimensionBounds) {
+			rhsBound = rhsShape.DimensionBounds[axis]
+		}
+
 		// Handle dynamic dimensions (DimUnknown)
 		switch {
 		case lhsDim == shapes.DimUnknown && rhsDim == shapes.DimUnknown:
-			// Both dynamic - result is unknown
+			// Both dynamic - result is unknown, merge bounds
 			output.Dimensions[axis] = shapes.DimUnknown
+			if needsBounds && axis < len(output.DimensionBounds) {
+				// Use maximum of both bounds
+				output.DimensionBounds[axis] = max(lhsBound, rhsBound)
+			}
 		case lhsDim == shapes.DimUnknown && rhsDim == 1:
 			// Left is dynamic, right broadcasts
 			output.Dimensions[axis] = lhsDim
+			// Keep lhs bound
 		case rhsDim == shapes.DimUnknown && lhsDim == 1:
 			// Right is dynamic, left broadcasts
 			output.Dimensions[axis] = rhsDim
+			if needsBounds {
+				// Use rhs bound
+				if len(output.DimensionBounds) > axis {
+					output.DimensionBounds[axis] = rhsBound
+				}
+			}
 		case lhsDim >= 0 && rhsDim >= 0:
 			// Both static (including zero-dimension tensors) - use existing max logic for broadcasting
 			if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
@@ -232,18 +257,43 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 				return
 			}
 			output.Dimensions[axis] = max(lhsDim, rhsDim)
+			// Clear bounds for static dimensions
+			if len(output.DimensionBounds) > axis {
+				output.DimensionBounds[axis] = 0
+			}
 		case lhsDim < 0 && rhsDim > 1:
 			// Dynamic vs concrete > 1: use concrete (dynamic must be compatible)
 			output.Dimensions[axis] = rhsDim
+			// Clear bounds since we're now static
+			if len(output.DimensionBounds) > axis {
+				output.DimensionBounds[axis] = 0
+			}
 		case rhsDim < 0 && lhsDim > 1:
 			// Concrete > 1 vs dynamic: use concrete
 			output.Dimensions[axis] = lhsDim
+			// Clear bounds since we're now static
+			if len(output.DimensionBounds) > axis {
+				output.DimensionBounds[axis] = 0
+			}
 		default:
 			err = errors.Errorf("incompatible dynamic dimensions at axis %d: %d vs %d for BinaryOp (%s)",
 				axis, lhsDim, rhsDim, opType)
 			return
 		}
 	}
+
+	// Clean up DimensionBounds if all are zero
+	allZero := true
+	for _, b := range output.DimensionBounds {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		output.DimensionBounds = nil
+	}
+
 	return
 }
 
@@ -354,8 +404,8 @@ func UnaryOp(opType optypes.OpType, operand shapes.Shape) (output shapes.Shape, 
 // - They have the same rank
 // - They have the same dtype
 // - For each dimension, either:
-//   - Both are symbolic (negative values indicate dynamic dimensions)
-//   - One or both is symbolic (allows static to match symbolic at runtime)
+//   - Both are dynamic (negative values indicate dynamic dimensions)
+//   - One or both is dynamic (allows static to match dynamic at runtime)
 //   - Both are static and equal
 func shapesCompatible(a, b shapes.Shape) bool {
 	if a.DType != b.DType {
@@ -369,6 +419,33 @@ func shapesCompatible(a, b shapes.Shape) bool {
 		dimB := b.Dimensions[i]
 		// If either dimension is dynamic (DimUnknown), they're compatible
 		// This allows mixing static shapes like [1,1,1] with dynamic shapes
+		if dimA < 0 || dimB < 0 {
+			continue
+		}
+		// Both are static: must match exactly
+		if dimA != dimB {
+			return false
+		}
+	}
+	return true
+}
+
+// dimensionsCompatible checks if two shapes have compatible dimensions (ignoring dtype).
+// This is useful for operations like Sort that can have inputs with different dtypes.
+// Two shapes are considered dimension-compatible if:
+// - They have the same rank
+// - For each dimension, either:
+//   - Both are dynamic (negative values indicate dynamic dimensions)
+//   - One or both is dynamic (allows static to match dynamic at runtime)
+//   - Both are static and equal
+func dimensionsCompatible(a, b shapes.Shape) bool {
+	if a.Rank() != b.Rank() {
+		return false
+	}
+	for i := 0; i < a.Rank(); i++ {
+		dimA := a.Dimensions[i]
+		dimB := b.Dimensions[i]
+		// If either dimension is dynamic (DimUnknown), they're compatible
 		if dimA < 0 || dimB < 0 {
 			continue
 		}
@@ -397,7 +474,7 @@ func Select(pred, onTrue, onFalse shapes.Shape) (output shapes.Shape, err error)
 	// Check if pred shape is compatible with onTrue/onFalse shapes
 	if !pred.IsScalar() {
 		// Create a temporary bool shape with onTrue's dimensions for compatibility check
-		// We construct it manually to allow symbolic (negative) dimensions
+		// We construct it manually to allow dynamic (negative) dimensions
 		predExpected := shapes.Shape{
 			DType:      dtypes.Bool,
 			Dimensions: slices.Clone(onTrue.Dimensions),
@@ -538,8 +615,8 @@ func BroadcastInDim(operand, targetShape shapes.Shape, axesMapping []int) error 
 		usedAxis.Insert(targetAxis)
 		operandDim := operand.Dimensions[operandAxis]
 		targetDim := targetShape.Dimensions[targetAxis]
-		// Skip dimension check if either dimension is symbolic (negative)
-		// At runtime, symbolic dimensions will be resolved and validated
+		// Skip dimension check if either dimension is dynamic (negative)
+		// At runtime, dynamic dimensions will be resolved and validated
 		if operandDim >= 0 && targetDim >= 0 && operandDim != 1 && operandDim != targetDim {
 			return errors.Errorf("BroadcastInDim() requires all operand axes to be broadcast to be of dimension 1, but got operand.Dimensions[%d]=%d and targetShape.Dimension[%d]=%d",
 				operandAxis, operandDim, targetAxis, targetDim)
@@ -618,16 +695,16 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 	}
 
 	// Check slice sizes.
+	// A sliceSize of shapes.DimUnknown (-1) means "use the whole operand dimension".
 	if len(sliceSizes) != operand.Rank() {
 		return output, errors.Errorf("sliceSizes must have one value per operand axes, so it length (%d) must match operand rank (%d)", len(sliceSizes), operand.Rank())
 	}
-	const maxDimSize = 1 << 30 // Sentinel value for symbolic/dynamic dimensions (must match gomlx Gather)
 	for axis, sliceSize := range sliceSizes {
-		if sliceSize < 0 {
-			return output, errors.Errorf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
+		if sliceSize < 0 && sliceSize != shapes.DimUnknown {
+			return output, errors.Errorf("sliceSize %d for axis %d is negative (only shapes.DimUnknown is allowed as negative)", sliceSize, axis)
 		}
-		// Skip validation for symbolic dimensions (negative operand dimension) or when using maxDimSize sentinel
-		if operand.Dimensions[axis] >= 0 && sliceSize < maxDimSize && operand.Dimensions[axis] < sliceSize {
+		// Skip validation for dynamic dimensions or when sliceSize is DimUnknown (meaning "whole dimension")
+		if sliceSize != shapes.DimUnknown && operand.Dimensions[axis] >= 0 && operand.Dimensions[axis] < sliceSize {
 			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
 		}
 	}
@@ -706,8 +783,10 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 			// This is a batch axis and not used as an offset.
 			continue
 		}
-		// If sliceSize is the sentinel value (maxDimSize), use the operand's dimension (which may be symbolic)
-		if sliceSize >= maxDimSize {
+		// DimUnknown means "use the whole operand dimension" - the output dimension
+		// is dynamic with the operand's dimension as the bound.
+		if sliceSize == shapes.DimUnknown {
+			// Use the operand's dimension (which may itself be dynamic)
 			offsetDims = append(offsetDims, operand.Dimensions[axis])
 		} else {
 			offsetDims = append(offsetDims, sliceSize)
@@ -948,8 +1027,8 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 				opName, axis, stride, operand)
 		}
 
-		// Skip validation for symbolic dimensions (negative dimSize)
-		// At runtime, symbolic dimensions will be resolved and validated
+		// Skip validation for dynamic dimensions (negative dimSize)
+		// At runtime, dynamic dimensions will be resolved and validated
 		if dimSize >= 0 {
 			if start < 0 || start >= dimSize {
 				return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
@@ -963,9 +1042,9 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 		}
 
 		// The first one is always taken, so we use the ceiling of the division.
-		// For symbolic dimensions, output is also symbolic
+		// For dynamic dimensions, output is also dynamic
 		if dimSize < 0 {
-			output.Dimensions[axis] = dimSize // Keep symbolic
+			output.Dimensions[axis] = dimSize // Keep dynamic
 		} else {
 			outputDimSize := (limit - start + (stride - 1)) / stride
 			output.Dimensions[axis] = outputDimSize
@@ -977,7 +1056,8 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 
 // Sort calculates the output shapes for a Sort operation.
 // Sort takes one or more tensors and sorts them along the specified dimension.
-// All input tensors must have the same shape, and the output shapes are identical to the input shapes.
+// All input tensors must have the same dimensions (but can have different dtypes),
+// and the output shapes are identical to the input shapes.
 func Sort(inputs []shapes.Shape, dimension int) (outputs []shapes.Shape, err error) {
 	opName := "Sort"
 	if len(inputs) == 0 {
@@ -994,10 +1074,10 @@ func Sort(inputs []shapes.Shape, dimension int) (outputs []shapes.Shape, err err
 		return nil, errors.Errorf("%s: dimension %d is out of range for rank %d", opName, dimension, rank)
 	}
 
-	// Validate all inputs have the same shape
+	// Validate all inputs have the same dimensions (dtypes can differ for Sort)
 	for i := 1; i < len(inputs); i++ {
-		if !shapesCompatible(inputs[i], firstShape) {
-			return nil, errors.Errorf("%s: all inputs must have the same shape, but input[0]=%s and input[%d]=%s",
+		if !dimensionsCompatible(inputs[i], firstShape) {
+			return nil, errors.Errorf("%s: all inputs must have the same dimensions, but input[0]=%s and input[%d]=%s",
 				opName, firstShape, i, inputs[i])
 		}
 	}
@@ -1439,13 +1519,13 @@ func DotGeneral(
 		rhsAxis := rhsContractingAxes[ii]
 		lhsDim := lhs.Dimensions[lhsAxis]
 		rhsDim := rhs.Dimensions[rhsAxis]
-		// Skip dimension equality check if either dimension is symbolic (negative)
+		// Skip dimension equality check if either dimension is dynamic (negative)
 		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral contracting dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
 				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
-		// Use the concrete dimension if one is symbolic, otherwise use lhs dimension
+		// Use the concrete dimension if one is dynamic, otherwise use lhs dimension
 		if lhsDim >= 0 {
 			contractingDims[ii] = lhsDim
 		} else {
@@ -1456,13 +1536,13 @@ func DotGeneral(
 		rhsAxis := rhsBatchAxes[ii]
 		lhsDim := lhs.Dimensions[lhsAxis]
 		rhsDim := rhs.Dimensions[rhsAxis]
-		// Skip dimension equality check if either dimension is symbolic (negative)
+		// Skip dimension equality check if either dimension is dynamic (negative)
 		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral batch dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
 				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
-		// Use the concrete dimension if one is symbolic, otherwise use lhs dimension
+		// Use the concrete dimension if one is dynamic, otherwise use lhs dimension
 		if lhsDim >= 0 {
 			batchDims[ii] = lhsDim
 		} else {
@@ -1475,13 +1555,13 @@ func DotGeneral(
 	batchSize, lhsCrossSize, contractingSize, lhsCrossDims := dotGeneralFindSizes(lhs, lhsContractingAxes, lhsBatchAxes)
 	_, rhsCrossSize, _, rhsCrossDims := dotGeneralFindSizes(rhs, rhsContractingAxes, rhsBatchAxes)
 
-	// Check that all sizes are positive or symbolic (negative for symbolic dimensions is allowed)
-	// Note: Sizes can be negative when dimensions are symbolic. We only validate that non-symbolic sizes are positive.
+	// Check that all sizes are positive or dynamic (negative for dynamic dimensions is allowed)
+	// Note: Sizes can be negative when dimensions are dynamic. We only validate that non-dynamic sizes are positive.
 	// The actual validation happens at runtime when concrete dimensions are known.
-	_ = batchSize      // May be negative (symbolic), validated at runtime
-	_ = lhsCrossSize   // May be negative (symbolic), validated at runtime
-	_ = contractingSize // May be negative (symbolic), validated at runtime
-	_ = rhsCrossSize   // May be negative (symbolic), validated at runtime
+	_ = batchSize      // May be negative (dynamic), validated at runtime
+	_ = lhsCrossSize   // May be negative (dynamic), validated at runtime
+	_ = contractingSize // May be negative (dynamic), validated at runtime
+	_ = rhsCrossSize   // May be negative (dynamic), validated at runtime
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))

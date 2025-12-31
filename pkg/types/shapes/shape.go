@@ -92,6 +92,7 @@ type Shape struct {
 	DimensionBounds []int         // Upper bounds for dynamic dimensions (when Dimensions[i] == DimUnknown). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
 	TupleShapes     []Shape       // Shapes of the tuple, if this is a tuple.
 	Quantization    *Quantization // Quantization metadata for quantized types.
+	EncodeBounds    bool          // Whether to encode DimensionBounds in StableHLO output. Set to true for ops that require bounded dynamism (e.g., dynamic_reshape).
 }
 
 // Make returns a Shape structure filled with the values given.
@@ -133,6 +134,20 @@ func (s Shape) IsScalar() bool { return s.Ok() && s.Rank() == 0 }
 // This is used for StableHLO dynamic shape support where dimensions are not known at compile time.
 func (s Shape) IsDynamic() bool {
 	return slices.Contains(s.Dimensions, DimUnknown)
+}
+
+// hasBoundedDynamism returns true if the shape has at least one dynamic dimension
+// with a known upper bound. This is used for StableHLO bounds encoding.
+func (s Shape) hasBoundedDynamism() bool {
+	if len(s.DimensionBounds) == 0 {
+		return false
+	}
+	for i, dim := range s.Dimensions {
+		if dim == DimUnknown && i < len(s.DimensionBounds) && s.DimensionBounds[i] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Dim returns the dimension of the given axis. axis can take negative numbers, in which
@@ -277,6 +292,7 @@ func (s Shape) Clone() (s2 Shape) {
 		}
 	}
 	s2.Quantization = s.Quantization.Clone()
+	s2.EncodeBounds = s.EncodeBounds
 	return
 }
 

@@ -243,7 +243,8 @@ func TestDynamicOperations(t *testing.T) {
 		outputDims := must(fn.ConstantFromFlatAndDimensions([]int32{2, 3, 4}, 3))
 
 		// Broadcast operand to shape [2, 3, 4], mapping axes 0->1, 1->2
-		result := must(DynamicBroadcastInDim(operand, outputDims, []int{1, 2}))
+		// Bounds must be provided for XLA compatibility
+		result := must(DynamicBroadcastInDim(operand, outputDims, []int{1, 2}, []int{2, 3, 4}))
 
 		if err := fn.Return(result); err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -252,9 +253,8 @@ func TestDynamicOperations(t *testing.T) {
 		program := string(must(b.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 
-		// When the shape is a constant, DynamicBroadcastInDim optimizes to static BroadcastInDim
-		if !strings.Contains(program, "stablehlo.broadcast_in_dim") {
-			t.Fatal("expected program to contain broadcast_in_dim operation (optimized from dynamic)")
+		if !strings.Contains(program, "stablehlo.dynamic_broadcast_in_dim") {
+			t.Fatal("expected program to contain dynamic_broadcast_in_dim operation")
 		}
 		if !strings.Contains(program, `broadcast_dimensions`) {
 			t.Fatal("expected program to contain broadcast_dimensions attribute")
@@ -271,8 +271,9 @@ func TestDynamicOperations(t *testing.T) {
 		// Create output shape tensor [3, 4]
 		outputShape := must(fn.ConstantFromFlatAndDimensions([]int32{3, 4}, 2))
 
-		// Reshape to [3, 4]
-		result := must(DynamicReshape(operand, outputShape))
+		// Reshape to [3, 4] with bounds
+		// Bounds must be provided for XLA compatibility
+		result := must(DynamicReshape(operand, outputShape, []int{3, 4}))
 
 		if err := fn.Return(result); err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -281,9 +282,8 @@ func TestDynamicOperations(t *testing.T) {
 		program := string(must(b.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 
-		// When the shape is a constant, DynamicReshape optimizes to static Reshape
-		if !strings.Contains(program, "stablehlo.reshape") {
-			t.Fatal("expected program to contain reshape operation (optimized from dynamic)")
+		if !strings.Contains(program, "stablehlo.dynamic_reshape") {
+			t.Fatal("expected program to contain dynamic_reshape operation")
 		}
 	})
 }
