@@ -236,19 +236,6 @@ func binaryOpImpl(opType optypes.OpType, lhsShape, rhsShape shapes.Shape) (outpu
 				// Use maximum of both bounds
 				output.DimensionBounds[axis] = max(lhsBound, rhsBound)
 			}
-		case lhsDim == shapes.DimUnknown && rhsDim == 1:
-			// Left is dynamic, right broadcasts
-			output.Dimensions[axis] = lhsDim
-			// Keep lhs bound
-		case rhsDim == shapes.DimUnknown && lhsDim == 1:
-			// Right is dynamic, left broadcasts
-			output.Dimensions[axis] = rhsDim
-			if needsBounds {
-				// Use rhs bound
-				if len(output.DimensionBounds) > axis {
-					output.DimensionBounds[axis] = rhsBound
-				}
-			}
 		case lhsDim >= 0 && rhsDim >= 0:
 			// Both static (including zero-dimension tensors) - use existing max logic for broadcasting
 			if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
