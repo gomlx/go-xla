@@ -39,12 +39,12 @@ func must2[T1, T2 any](value1 T1, value2 T2, err error) (T1, T2) {
 
 // withLines prefix each line of text with a "%04d: " of the line number.
 func withLines(text []byte) string {
-	var result string
+	var result strings.Builder
 	lines := strings.Split(string(text), "\n")
 	for i, line := range lines {
-		result += fmt.Sprintf("%04d: %s\n", i+1, line)
+		_, _ = fmt.Fprintf(&result, "%04d: %s\n", i+1, line)
 	}
-	return result
+	return result.String()
 }
 
 func getPluginNames() []string {

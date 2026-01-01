@@ -22,56 +22,59 @@ func TestScalarDataToRaw(t *testing.T) {
 func testTransfersImpl[T interface {
 	float64 | float32 | int64 | int8
 }](t *testing.T, client *Client) {
-	// Transfer arrays.
-	input := []T{1, 2, 3}
-	fmt.Printf("From %#v\n", input)
-	buffer, err := ArrayToBuffer(client, input, 3, 1)
-	requireNoError(t, err)
-	assertFalse(t, buffer.IsShared())
+	var baseT T
+	t.Run(fmt.Sprintf("%T", baseT), func(t *testing.T) {
+		// Transfer arrays.
+		input := []T{1, 2, 3}
+		fmt.Printf("From %#v\n", input)
+		buffer, err := ArrayToBuffer(client, input, 3, 1)
+		requireNoError(t, err)
+		assertFalse(t, buffer.IsShared())
 
-	output, outputDims, err := BufferToArray[T](buffer)
-	requireNoError(t, err)
-	fmt.Printf("\t> output=%#v\n", output)
-	assertEqualSlice(t, input, output)
-	assertEqualSlice(t, []int{3, 1}, outputDims)
+		output, outputDims, err := BufferToArray[T](buffer)
+		requireNoError(t, err)
+		fmt.Printf("\t> output=%#v\n", output)
+		assertEqualSlice(t, input, output)
+		assertEqualSlice(t, []int{3, 1}, outputDims)
 
-	flat, outputDims, err := buffer.ToFlatDataAndDimensions()
-	requireNoError(t, err)
-	assertEqualSlice(t, input, flat.([]T))
-	assertEqualSlice(t, []int{3, 1}, outputDims)
+		flat, outputDims, err := buffer.ToFlatDataAndDimensions()
+		requireNoError(t, err)
+		assertEqualSlice(t, input, flat.([]T))
+		assertEqualSlice(t, []int{3, 1}, outputDims)
 
-	gotDevice, err := buffer.Device()
-	requireNoError(t, err)
-	wantDevice := client.AddressableDevices()[0]
-	assertEqual(t, wantDevice.LocalHardwareID(), gotDevice.LocalHardwareID())
-	assertEqual(t, 0, client.NumForDevice(gotDevice))
+		gotDevice, err := buffer.Device()
+		requireNoError(t, err)
+		wantDevice := client.AddressableDevices()[0]
+		assertEqual(t, wantDevice.LocalHardwareID(), gotDevice.LocalHardwareID())
+		assertEqual(t, 0, client.NumForDevice(gotDevice))
 
-	// Try an invalid transfer: it should complain about the invalid dtype.
-	_, _, err = BufferToArray[complex128](buffer)
-	fmt.Printf("\t> expected wrong dtype error: %v\n", err)
-	requireError(t, err)
+		// Try an invalid transfer: it should complain about the invalid dtype.
+		_, _, err = BufferToArray[complex128](buffer)
+		fmt.Printf("\t> expected wrong dtype error: %v\n", err)
+		requireError(t, err)
 
-	// Transfer scalars.
-	from := T(13)
-	fmt.Printf("From %T(%v)\n", from, from)
-	buffer, err = ScalarToBuffer(client, from)
-	requireNoError(t, err)
-	to, err := BufferToScalar[T](buffer)
-	requireNoError(t, err)
-	fmt.Printf("\t> got %v\n", to)
-	assertEqual(t, from, to)
+		// Transfer scalars.
+		from := T(13)
+		fmt.Printf("From %T(%v)\n", from, from)
+		buffer, err = ScalarToBuffer(client, from)
+		requireNoError(t, err)
+		to, err := BufferToScalar[T](buffer)
+		requireNoError(t, err)
+		fmt.Printf("\t> got %v\n", to)
+		assertEqual(t, from, to)
 
-	// ArrayToBuffer can also be used to transfer a scalar.
-	from = T(19)
-	fmt.Printf("From %T(%v)\n", from, from)
-	buffer, err = ArrayToBuffer(client, []T{from})
-	requireNoError(t, err)
+		// ArrayToBuffer can also be used to transfer a scalar.
+		from = T(19)
+		fmt.Printf("From %T(%v)\n", from, from)
+		buffer, err = ArrayToBuffer(client, []T{from})
+		requireNoError(t, err)
 
-	flatValues, dimensions, err := BufferToArray[T](buffer) // Check that it actually returns a scalar.
-	requireNoError(t, err)
-	assertLen(t, dimensions, 0) // That means, it is a scalar.
-	fmt.Printf("\t> got %v\n", flatValues[0])
-	assertEqual(t, from, flatValues[0])
+		flatValues, dimensions, err := BufferToArray[T](buffer) // Check that it actually returns a scalar.
+		requireNoError(t, err)
+		assertLen(t, dimensions, 0) // That means, it is a scalar.
+		fmt.Printf("\t> got %v\n", flatValues[0])
+		assertEqual(t, from, flatValues[0])
+	})
 }
 
 func TestTransfers(t *testing.T) {

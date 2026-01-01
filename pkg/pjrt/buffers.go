@@ -282,6 +282,9 @@ func ScalarToBufferOnDeviceNum[T dtypes.Supported](client *Client, deviceNum int
 // It is a shortcut to Client.BufferFromHost call with default parameters.
 // If you need more control where the value will be used you'll have to use Client.BufferFromHost instead.
 func ArrayToBuffer[T dtypes.Supported](client *Client, flatValues []T, dimensions ...int) (b *Buffer, err error) {
+	if len(dimensions) == 0 && len(flatValues) != 1 {
+		return nil, errors.Errorf("ArrayToBuffer not given any dimensions (indicating a scalar), but len(flatValues) == %d", len(flatValues))
+	}
 	return client.BufferFromHost().FromFlatDataWithDimensions(flatValues, dimensions).Done()
 }
 

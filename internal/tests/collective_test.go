@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"flag"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,8 +10,6 @@ import (
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
-
-var flagCollectiveBroadcast = flag.Bool("collective_broadcast", false, "Run collective broadcast test: it is not implemented in PJRT CPU, so it is skipped by default.")
 
 func TestCollectiveOps(t *testing.T) {
 	iterateClientsAndTest(t, testCollectiveOps)
@@ -27,7 +24,7 @@ func testCollectiveOps(t *testing.T, client *pjrt.Client) {
 		return
 	}
 	replicaGroups := [][]int{make([]int, numReplicas)}
-	for i := 0; i < numReplicas; i++ {
+	for i := range numReplicas {
 		replicaGroups[0][i] = i
 	}
 
