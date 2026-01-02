@@ -383,7 +383,6 @@ func Reshape(operand *Value, shape shapes.Shape) (*Value, error) {
 			operand.shape, shape)
 	}
 
-	// Check if either shape has dynamic dimensions
 	hasDynamic := operand.shape.IsDynamic() || shape.IsDynamic()
 
 	// Skip size validation if any dimension is dynamic (will be validated at runtime)

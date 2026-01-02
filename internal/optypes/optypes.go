@@ -93,6 +93,8 @@ const (
 	While
 	Xor
 
+	GetDimensionSize
+
 	// Here the ones not implemented yet, please add an issue in the repo if you need them.
 
 	AllGather
@@ -102,11 +104,12 @@ const (
 	CollectivePermute
 	Composite
 	CustomCall
+	DynamicBroadcastInDim
 	DynamicConv
 	DynamicGather
 	DynamicIota
 	DynamicPad
-	GetDimensionSize
+	DynamicReshape
 	GetTupleElement
 	Infeed
 	OptimizationBarrier

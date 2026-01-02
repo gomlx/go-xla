@@ -25,5 +25,3 @@ require (
 )
 
 tool github.com/dmarkham/enumer
-
-replace github.com/janpfeifer/go-benchmarks => github.com/ajroetker/go-benchmarks v0.0.0-20251227191922-60d02b7acb0c

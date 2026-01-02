@@ -456,7 +456,7 @@ func Complex(real, imag shapes.Shape) (output shapes.Shape, err error) {
 	output = real.Clone()
 	// Merge dynamic dimensions: use concrete dimension if one side is dynamic
 	for axis := range output.Dimensions {
-		if output.Dimensions[axis] < 0 && imag.Dimensions[axis] >= 0 {
+		if output.Dimensions[axis] == shapes.DimUnknown && imag.Dimensions[axis] != shapes.DimUnknown {
 			output.Dimensions[axis] = imag.Dimensions[axis]
 		}
 	}
@@ -508,14 +508,14 @@ func Clamp(min, operand, max shapes.Shape) (output shapes.Shape, err error) {
 	// Merge dynamic dimensions from min/max if they have concrete values
 	if !min.IsScalar() {
 		for axis := range output.Dimensions {
-			if output.Dimensions[axis] < 0 && min.Dimensions[axis] >= 0 {
+			if output.Dimensions[axis] == shapes.DimUnknown && min.Dimensions[axis] != shapes.DimUnknown {
 				output.Dimensions[axis] = min.Dimensions[axis]
 			}
 		}
 	}
 	if !max.IsScalar() {
 		for axis := range output.Dimensions {
-			if output.Dimensions[axis] < 0 && max.Dimensions[axis] >= 0 {
+			if output.Dimensions[axis] == shapes.DimUnknown && max.Dimensions[axis] != shapes.DimUnknown {
 				output.Dimensions[axis] = max.Dimensions[axis]
 			}
 		}
@@ -591,9 +591,9 @@ func BroadcastInDim(operand, targetShape shapes.Shape, axesMapping []int) error 
 		usedAxis.Insert(targetAxis)
 		operandDim := operand.Dimensions[operandAxis]
 		targetDim := targetShape.Dimensions[targetAxis]
-		// Skip dimension check if either dimension is dynamic (negative)
+		// Skip dimension check if either dimension is dynamic
 		// At runtime, dynamic dimensions will be resolved and validated
-		if operandDim >= 0 && targetDim >= 0 && operandDim != 1 && operandDim != targetDim {
+		if operandDim != shapes.DimUnknown && targetDim != shapes.DimUnknown && operandDim != 1 && operandDim != targetDim {
 			return errors.Errorf("BroadcastInDim() requires all operand axes to be broadcast to be of dimension 1, but got operand.Dimensions[%d]=%d and targetShape.Dimension[%d]=%d",
 				operandAxis, operandDim, targetAxis, targetDim)
 		}
@@ -680,7 +680,7 @@ func Gather(operand, startIndices shapes.Shape, indexVectorAxis int,
 			return output, errors.Errorf("sliceSize %d for axis %d is negative (only shapes.DimUnknown is allowed as negative)", sliceSize, axis)
 		}
 		// Skip validation for dynamic dimensions or when sliceSize is DimUnknown (meaning "whole dimension")
-		if sliceSize != shapes.DimUnknown && operand.Dimensions[axis] >= 0 && operand.Dimensions[axis] < sliceSize {
+		if sliceSize != shapes.DimUnknown && operand.Dimensions[axis] != shapes.DimUnknown && operand.Dimensions[axis] < sliceSize {
 			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
 		}
 	}
@@ -831,7 +831,7 @@ func Concatenate(inputs []shapes.Shape, axis int) (output shapes.Shape, err erro
 		for d := 0; d < rank; d++ {
 			if d == axis {
 				// For the concatenation axis, add dimensions (handling dynamic dims)
-				if output.Dimensions[d] >= 0 && currentShape.Dimensions[d] >= 0 {
+				if output.Dimensions[d] != shapes.DimUnknown && currentShape.Dimensions[d] != shapes.DimUnknown {
 					output.Dimensions[d] += currentShape.Dimensions[d]
 				} else {
 					// If either dimension is dynamic, output is dynamic
@@ -996,9 +996,9 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 				opName, axis, stride, operand)
 		}
 
-		// Skip validation for dynamic dimensions (negative dimSize)
+		// Skip validation for dynamic dimensions
 		// At runtime, dynamic dimensions will be resolved and validated
-		if dimSize >= 0 {
+		if dimSize != shapes.DimUnknown {
 			if start < 0 || start >= dimSize {
 				return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
 					opName, start, axis, dimSize, operand)
@@ -1024,10 +1024,10 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 }
 
 // Sort calculates the output shapes for a Sort operation.
-// Sort takes one or more tensors and sorts them along the specified dimension.
+// Sort takes one or more tensors and sorts them along the specified axis.
 // All input tensors must have the same dimensions (but can have different dtypes),
 // and the output shapes are identical to the input shapes.
-func Sort(inputs []shapes.Shape, dimension int) (outputs []shapes.Shape, err error) {
+func Sort(inputs []shapes.Shape, axis int) (outputs []shapes.Shape, err error) {
 	opName := "Sort"
 	if len(inputs) == 0 {
 		return nil, errors.Errorf("%s: requires at least one input tensor", opName)
@@ -1039,15 +1039,18 @@ func Sort(inputs []shapes.Shape, dimension int) (outputs []shapes.Shape, err err
 	}
 
 	rank := firstShape.Rank()
-	if dimension < 0 || dimension >= rank {
-		return nil, errors.Errorf("%s: dimension %d is out of range for rank %d", opName, dimension, rank)
+	if axis < 0 || axis >= rank {
+		return nil, errors.Errorf("%s: axis %d is out of range for rank %d", opName, axis, rank)
 	}
 
 	// Validate all inputs have the same dimensions (dtypes can differ for Sort)
-	for i := 1; i < len(inputs); i++ {
-		if !areEqualDimensionsCompatible(inputs[i], firstShape) {
+	for i, input := range inputs {
+		if i == 0 {
+			continue
+		}
+		if !areEqualDimensionsCompatible(input, firstShape) {
 			return nil, errors.Errorf("%s: all inputs must have the same dimensions, but input[0]=%s and input[%d]=%s",
-				opName, firstShape, i, inputs[i])
+				opName, firstShape, i, input)
 		}
 	}
 
@@ -1191,7 +1194,6 @@ func ReduceWindow(inputs, initialValues []shapes.Shape, reductionInputs, reducti
 			return nil, errors.Errorf("ReduceWindow: windowDilations[%d]=%d must be >= 1 for operand shape %s", i, windowDilation, operand)
 		}
 
-		// Handle dynamic dimensions: if inputDim is dynamic, output is also dynamic
 		if inputDim == shapes.DimUnknown {
 			outputDims[i] = shapes.DimUnknown
 			continue
@@ -1344,15 +1346,15 @@ func Convolve(input, kernel shapes.Shape,
 		return errorf("channelGroupCount=%d must be >= 1 for input shape %s", channelGroupCount, input)
 	}
 	// Skip divisibility checks for dynamic dimensions
-	if inputChannels >= 0 && inputChannels%channelGroupCount != 0 {
+	if inputChannels != shapes.DimUnknown && inputChannels%channelGroupCount != 0 {
 		return errorf("input channels dimension %d must be divisible by channelGroupCount %d", inputChannels, channelGroupCount)
 	}
-	if outputChannels >= 0 && outputChannels%channelGroupCount != 0 {
+	if outputChannels != shapes.DimUnknown && outputChannels%channelGroupCount != 0 {
 		return errorf("kernel output channels dimension %d must be divisible by channelGroupCount %d", outputChannels, channelGroupCount)
 	}
 	kernelInputChannels := kernel.Dim(kernelInputChannelsAxis)
 	// Skip channel equality check for dynamic dimensions
-	if inputChannels >= 0 && kernelInputChannels >= 0 && inputChannels != kernelInputChannels*channelGroupCount {
+	if inputChannels != shapes.DimUnknown && kernelInputChannels != shapes.DimUnknown && inputChannels != kernelInputChannels*channelGroupCount {
 		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * channelGroupCount (=%d) -- input shape is %s, kernel shape is %s",
 			inputChannels, kernelInputChannels, channelGroupCount, input, kernel)
 	}
@@ -1363,17 +1365,17 @@ func Convolve(input, kernel shapes.Shape,
 		return errorf("batchGroupCount=%d must be >= 1 for input shape %s", batchGroupCount, input)
 	}
 	// Skip divisibility checks for dynamic dimensions
-	if inputBatch >= 0 && inputBatch%batchGroupCount != 0 {
+	if inputBatch != shapes.DimUnknown && inputBatch%batchGroupCount != 0 {
 		return errorf("input batch dimension %d must be divisible by batchGroupCount %d", inputBatch, batchGroupCount)
 	}
-	if outputChannels >= 0 && outputChannels%batchGroupCount != 0 {
+	if outputChannels != shapes.DimUnknown && outputChannels%batchGroupCount != 0 {
 		return errorf("output channels dimension %d must be divisible by batchGroupCount %d", outputChannels, batchGroupCount)
 	}
 
 	// Find the output shape.
 	output := input.Clone()
 	// Handle dynamic batch dimension
-	if inputBatch < 0 {
+	if inputBatch == shapes.DimUnknown {
 		output.Dimensions[outputBatchAxis] = shapes.DimUnknown
 	} else {
 		output.Dimensions[outputBatchAxis] = inputBatch / batchGroupCount
@@ -1509,14 +1511,14 @@ func DotGeneral(
 		rhsAxis := rhsContractingAxes[ii]
 		lhsDim := lhs.Dimensions[lhsAxis]
 		rhsDim := rhs.Dimensions[rhsAxis]
-		// Skip dimension equality check if either dimension is dynamic (negative)
-		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
+		// Skip dimension equality check if either dimension is dynamic
+		if lhsDim != shapes.DimUnknown && rhsDim != shapes.DimUnknown && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral contracting dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
 				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
 		// Use the concrete dimension if one is dynamic, otherwise use lhs dimension
-		if lhsDim >= 0 {
+		if lhsDim != shapes.DimUnknown {
 			contractingDims[ii] = lhsDim
 		} else {
 			contractingDims[ii] = rhsDim
@@ -1526,14 +1528,14 @@ func DotGeneral(
 		rhsAxis := rhsBatchAxes[ii]
 		lhsDim := lhs.Dimensions[lhsAxis]
 		rhsDim := rhs.Dimensions[rhsAxis]
-		// Skip dimension equality check if either dimension is dynamic (negative)
-		if lhsDim >= 0 && rhsDim >= 0 && lhsDim != rhsDim {
+		// Skip dimension equality check if either dimension is dynamic
+		if lhsDim != shapes.DimUnknown && rhsDim != shapes.DimUnknown && lhsDim != rhsDim {
 			err = errors.Errorf("DotGeneral batch dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
 				lhsAxis, lhsDim, rhsAxis, rhsDim)
 			return
 		}
 		// Use the concrete dimension if one is dynamic, otherwise use lhs dimension
-		if lhsDim >= 0 {
+		if lhsDim != shapes.DimUnknown {
 			batchDims[ii] = lhsDim
 		} else {
 			batchDims[ii] = rhsDim
@@ -1704,7 +1706,7 @@ func BitcastConvert(operand shapes.Shape, targetDType dtypes.DType) (outputShape
 	lastDim := outputShape.Dim(-1)
 	expectedDim := (targetDType.Bits() + sourceDType.Bits() - 1) / sourceDType.Bits()
 	// Skip dimension check if last dimension is dynamic
-	if lastDim >= 0 && lastDim != expectedDim {
+	if lastDim != shapes.DimUnknown && lastDim != expectedDim {
 		return shapes.Invalid(), errors.Errorf("BitcastConvert: cannot convert from %d x %s (%d bits) to %s (%d bits)",
 			lastDim, sourceDType, sourceDType.Bits(), targetDType, targetDType.Bits())
 	}
@@ -1740,7 +1742,6 @@ func Pad(x, fill shapes.Shape, paddingStart, paddingEnd, paddingInterior []int) 
 	outputDims := make([]int, rank)
 	for axis := range rank {
 		inputDim := x.Dimensions[axis]
-		// Handle dynamic dimensions: if inputDim is dynamic, output is also dynamic
 		if inputDim == shapes.DimUnknown {
 			outputDims[axis] = shapes.DimUnknown
 			continue
@@ -1817,7 +1818,7 @@ func FFT(x shapes.Shape, fftType types.FFTType, fftLength []int) (output shapes.
 		lastFFTDim := fftLength[len(fftLength)-1]
 		lastInputDim := x.Dim(-1)
 		// Skip dimension check if input dimension is dynamic
-		if lastInputDim >= 0 && lastInputDim != lastFFTDim/2+1 {
+		if lastInputDim != shapes.DimUnknown && lastInputDim != lastFFTDim/2+1 {
 			return shapes.Invalid(), errors.Errorf("FFT: FFTInverseReal input dimension %d must be equal to fftLength/2+1=%d",
 				lastInputDim, lastFFTDim/2+1)
 		}
@@ -1864,11 +1865,9 @@ func AllGather(operand shapes.Shape, replicaGroups [][]int, allGatherDim int) (o
 
 	output = operand.Clone()
 	replicaGroupSize := len(replicaGroups[0])
-	// Handle dynamic dimensions: if gather dimension is dynamic, output is also dynamic
-	if output.Dimensions[allGatherDim] >= 0 {
+	if output.Dimensions[allGatherDim] != shapes.DimUnknown {
 		output.Dimensions[allGatherDim] *= replicaGroupSize
 	}
-	// If dynamic, it stays dynamic (DimUnknown)
 	return output, nil
 }
 
@@ -1891,23 +1890,21 @@ func AllToAll(operand shapes.Shape, replicaGroups [][]int, splitDimension, conca
 	}
 	splitDimSize := operand.Dimensions[splitDimension]
 	// Skip divisibility check for dynamic dimensions
-	if splitDimSize >= 0 && splitDimSize%splitCount != 0 {
+	if splitDimSize != shapes.DimUnknown && splitDimSize%splitCount != 0 {
 		return shapes.Invalid(), errors.Errorf("AllToAll: split_dimension size %d is not divisible by split_count %d", splitDimSize, splitCount)
 	}
 
 	output = operand.Clone()
 	// Handle dynamic dimensions
-	if splitDimSize >= 0 {
+	if splitDimSize != shapes.DimUnknown {
 		output.Dimensions[splitDimension] = splitDimSize / splitCount
 	}
-	// If splitDimSize < 0 (dynamic), it stays dynamic
 
 	// Use output.Dimensions for concatDimSize since splitDimension may have already been modified
 	concatDimSize := output.Dimensions[concatDimension]
-	if concatDimSize >= 0 {
+	if concatDimSize != shapes.DimUnknown {
 		output.Dimensions[concatDimension] = concatDimSize * splitCount
 	}
-	// If concatDimSize < 0 (dynamic), it stays dynamic
 	return output, nil
 }
 
@@ -2099,7 +2096,7 @@ func If(pred shapes.Shape, trueBranchInputs, trueBranchOutputs, falseBranchInput
 		outputs[i] = s.Clone()
 		// Merge dynamic dimensions: use concrete dimension if one branch has it
 		for axis := range outputs[i].Dimensions {
-			if outputs[i].Dimensions[axis] < 0 && falseBranchOutputs[i].Dimensions[axis] >= 0 {
+			if outputs[i].Dimensions[axis] == shapes.DimUnknown && falseBranchOutputs[i].Dimensions[axis] != shapes.DimUnknown {
 				outputs[i].Dimensions[axis] = falseBranchOutputs[i].Dimensions[axis]
 			}
 		}
