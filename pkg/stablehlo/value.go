@@ -3,6 +3,7 @@ package stablehlo
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/pkg/errors"
@@ -51,15 +52,15 @@ func (v *Value) String() string {
 // ConvertToValidName replaces any characters not in { "0"-"9", "a"-"z", "A-Z", "_" } to a "_",
 // making it a valid name for values and function arguments.
 func ConvertToValidName(name string) string {
-	var result string
+	var result strings.Builder
 	for _, c := range name {
 		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
-			result += string(c)
+			result.WriteString(string(c))
 		} else {
-			result += "_"
+			result.WriteString("_")
 		}
 	}
-	return result
+	return result.String()
 }
 
 // WithQuantization sets the quantization parameters for this value.

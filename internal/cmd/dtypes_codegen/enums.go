@@ -148,7 +148,7 @@ func generateEnums(contents string) {
 	if len(matches) == 0 {
 		panicf("failed to match PJRT_Buffer_Types enum from pjrt_c_api.h")
 	}
-	for _, line := range strings.Split(matches[2], "\n") {
+	for line := range strings.SplitSeq(matches[2], "\n") {
 		if line == "" {
 			continue
 		}

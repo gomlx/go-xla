@@ -828,7 +828,7 @@ func Concatenate(inputs []shapes.Shape, axis int) (output shapes.Shape, err erro
 				rank, i, currentShape.Rank())
 		}
 
-		for d := 0; d < rank; d++ {
+		for d := range rank {
 			if d == axis {
 				// For the concatenation axis, add dimensions (handling dynamic dims)
 				if output.Dimensions[d] != shapes.DimUnknown && currentShape.Dimensions[d] != shapes.DimUnknown {
@@ -987,7 +987,7 @@ func Slice(operand shapes.Shape, starts, limits, strides []int) (output shapes.S
 		Dimensions: make([]int, rank),
 	}
 
-	for axis := 0; axis < rank; axis++ {
+	for axis := range rank {
 		start, limit, stride := starts[axis], limits[axis], strides[axis]
 		dimSize := operand.Dimensions[axis]
 
@@ -1170,7 +1170,7 @@ func ReduceWindow(inputs, initialValues []shapes.Shape, reductionInputs, reducti
 	// Each output dimension is calculated orthogonally to the others.
 	outputDims := make([]int, rank)
 	operand := inputs[0]
-	for i := 0; i < rank; i++ {
+	for i := range rank {
 		inputDim := operand.Dimensions[i]
 		windowDim := windowDimensions[i]
 		if windowDim < 1 {
@@ -1550,10 +1550,10 @@ func DotGeneral(
 	// Check that all sizes are positive or dynamic (negative for dynamic dimensions is allowed)
 	// Note: Sizes can be negative when dimensions are dynamic. We only validate that non-dynamic sizes are positive.
 	// The actual validation happens at runtime when concrete dimensions are known.
-	_ = batchSize      // May be negative (dynamic), validated at runtime
-	_ = lhsCrossSize   // May be negative (dynamic), validated at runtime
+	_ = batchSize       // May be negative (dynamic), validated at runtime
+	_ = lhsCrossSize    // May be negative (dynamic), validated at runtime
 	_ = contractingSize // May be negative (dynamic), validated at runtime
-	_ = rhsCrossSize   // May be negative (dynamic), validated at runtime
+	_ = rhsCrossSize    // May be negative (dynamic), validated at runtime
 
 	// Reshape result to recover batch and cross dimensions.
 	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))

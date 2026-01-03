@@ -109,9 +109,9 @@ func (info *PipPackageInfo) ParseDependencies() ([]PipDependency, error) {
 
 			// Handle multiple comma-separated specifiers
 			// Example: "<10.0,>=9.8"
-			specParts := strings.Split(cleanSpec, ",")
+			specParts := strings.SplitSeq(cleanSpec, ",")
 
-			for _, part := range specParts {
+			for part := range specParts {
 				part = strings.TrimSpace(part)
 				if part == "" {
 					continue
@@ -192,7 +192,7 @@ func PipCompareVersion(v1, v2 string) int {
 	minLen := min(len(v1Parts), len(v2Parts))
 
 	// Compare common parts
-	for i := 0; i < minLen; i++ {
+	for i := range minLen {
 		var n1, n2 int
 		fmt.Sscanf(v1Parts[i], "%d", &n1)
 		fmt.Sscanf(v2Parts[i], "%d", &n2)
@@ -261,4 +261,3 @@ func PipPackageLinuxAMD64() *regexp.Regexp {
 func PipPackageLinuxAMD64Glibc231() *regexp.Regexp {
 	return pipPackageLinuxAMD64Glibc231
 }
-

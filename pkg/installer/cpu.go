@@ -50,8 +50,8 @@ func detectGlibcVersion() (major int, minor int, err error) {
 	if lddErr != nil {
 		return 0, 0, errors.Wrap(lddErr, "failed to run ldd --version")
 	}
-	lines := strings.Split(string(lddBytes), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(lddBytes), "\n")
+	for line := range lines {
 		matches := glibcVersionRegex.FindStringSubmatch(line)
 		if len(matches) == 3 {
 			major, _ = strconv.Atoi(matches[1])

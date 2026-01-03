@@ -63,7 +63,7 @@ func generateEnums(contents string) {
 			continue
 		}
 		var eEntry *enumEntry
-		for _, line := range strings.Split(matches[2], "\n") {
+		for line := range strings.SplitSeq(matches[2], "\n") {
 			if line == "" {
 				continue
 			}
