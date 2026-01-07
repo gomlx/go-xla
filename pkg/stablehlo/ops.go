@@ -52,6 +52,43 @@ func (fn *Function) addMultiOp(opType optypes.OpType, outputShapes []shapes.Shap
 	return stmt
 }
 
+// isAncestor checks if ancestor is an ancestor of child (or the same function).
+func isAncestor(ancestor, child *Function) bool {
+	for child != nil {
+		if child == ancestor {
+			return true
+		}
+		child = child.Parent
+	}
+	return false
+}
+
+// innerMostFunction returns the function that is the innermost scope among the operands.
+// It returns an error if the functions associated with the operands are not compatible
+// (i.e. one is not an ancestor of the other).
+func innerMostFunction(operands ...*Value) (*Function, error) {
+	if len(operands) == 0 {
+		return nil, errors.New("innerMostFunction requires at least one operand")
+	}
+	deepest := operands[0].fn
+	for _, op := range operands[1:] {
+		fn := op.fn
+		if fn == deepest {
+			continue
+		}
+		if isAncestor(deepest, fn) {
+			deepest = fn
+			continue
+		}
+		if !isAncestor(fn, deepest) {
+			return nil, errors.Errorf(
+				"operands are from incompatible functions (neither is ancestor of other): %q and %q",
+				deepest.Name, fn.Name)
+		}
+	}
+	return deepest, nil
+}
+
 // binaryOp adds a new binary operation to the function.
 func (fn *Function) binaryOp(op optypes.OpType, lhs, rhs *Value) (*Value, error) {
 	if fn.Returned {
