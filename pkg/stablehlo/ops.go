@@ -1886,3 +1886,54 @@ func If(pred *Value, trueBranch, falseBranch *Function) ([]*Value, error) {
 
 	return stmt.Outputs, nil
 }
+
+// Call invokes a function with the given arguments.
+// The callee must be a top-level function (not a closure).
+// Returns the output values from the callee.
+func Call(callee *Function, operands ...*Value) ([]*Value, error) {
+	op := optypes.Call
+	if len(operands) == 0 {
+		return nil, errors.New("Call requires at least one operand to determine the calling function context")
+	}
+
+	fn := operands[0].fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	// Validate callee is a top-level function (not a closure)
+	if callee.Parent != nil {
+		return nil, errors.Errorf("Call callee must be a top-level function, not a closure (has parent %q)",
+			callee.Parent.Name)
+	}
+
+	// Validate callee has been returned (function body complete)
+	if !callee.Returned {
+		return nil, errors.Errorf("Call callee %q must have Return() called before it can be called", callee.Name)
+	}
+
+	// Validate all operands are from the same function
+	for i, operand := range operands {
+		if operand.fn != fn {
+			return nil, errors.Errorf("cannot add operation %s because operand[%d] is from a different function (%s) than operand[0] (%s)",
+				op, i, operand.fn.Name, fn.Name)
+		}
+	}
+
+	// Perform shape inference
+	outputsShapes, err := shapeinference.Call(
+		valuesToShapes(operands),
+		valuesToShapes(callee.Inputs),
+		valuesToShapes(callee.Outputs))
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the statement
+	stmt := fn.addMultiOp(op, outputsShapes, operands)
+	// Add the callee as a symbol reference attribute
+	stmt.Attributes["callee"] = symbolRef{name: callee.Name}
+
+	return stmt.Outputs, nil
+}

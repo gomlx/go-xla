@@ -28,6 +28,7 @@ const (
 	BatchNormGrad
 	BitcastConvert
 	BroadcastInDim
+	Call
 	Cbrt
 	Ceil
 	Clamp

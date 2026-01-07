@@ -176,6 +176,16 @@ type hasToStableHLO interface {
 // literalStr represents a value already rendered in StableHLO format.
 type literalStr string
 
+// symbolRef represents a symbol reference to a function (e.g., @function_name).
+type symbolRef struct {
+	name string
+}
+
+// ToStableHLO returns the symbol reference in StableHLO format.
+func (s symbolRef) ToStableHLO() string {
+	return "@" + NormalizeIdentifier(s.name)
+}
+
 // literalStrF format the string into a literalStr.
 // It also replaces tabs by IndentionStep.
 func literalStrF(format string, args ...any) literalStr {

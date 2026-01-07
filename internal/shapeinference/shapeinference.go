@@ -2104,3 +2104,30 @@ func If(pred shapes.Shape, trueBranchInputs, trueBranchOutputs, falseBranchInput
 
 	return outputs, nil
 }
+
+// Call performs shape inference for the stablehlo.call operation.
+// It validates that the operand shapes match the callee's input shapes
+// and returns the callee's output shapes.
+func Call(operands, calleeInputs, calleeOutputs []shapes.Shape) (outputs []shapes.Shape, err error) {
+	// Validate operand count matches callee inputs
+	if len(operands) != len(calleeInputs) {
+		return nil, errors.Errorf("Call: operand count %d doesn't match callee input count %d",
+			len(operands), len(calleeInputs))
+	}
+
+	// Validate operand shapes match callee input shapes
+	for i, opShape := range operands {
+		if !areEqualShapesCompatible(opShape, calleeInputs[i]) {
+			return nil, errors.Errorf("Call: operand[%d] shape %s doesn't match callee input shape %s",
+				i, opShape, calleeInputs[i])
+		}
+	}
+
+	// Output shapes are the callee's output shapes
+	outputs = make([]shapes.Shape, len(calleeOutputs))
+	for i, s := range calleeOutputs {
+		outputs[i] = s.Clone()
+	}
+
+	return outputs, nil
+}
