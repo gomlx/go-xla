@@ -8,90 +8,135 @@ import (
 
 // Add implements the corresponding standard binary operation.
 func Add(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Add, lhs, rhs)
 }
 
 // And implements the corresponding standard binary operation.
 func And(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.And, lhs, rhs)
 }
 
 // Atan2 implements the corresponding standard binary operation.
 func Atan2(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Atan2, lhs, rhs)
 }
 
 // Divide implements the corresponding standard binary operation.
 func Divide(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Divide, lhs, rhs)
 }
 
 // Maximum implements the corresponding standard binary operation.
 func Maximum(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Maximum, lhs, rhs)
 }
 
 // Minimum implements the corresponding standard binary operation.
 func Minimum(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Minimum, lhs, rhs)
 }
 
 // Multiply implements the corresponding standard binary operation.
 func Multiply(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Multiply, lhs, rhs)
 }
 
 // Or implements the corresponding standard binary operation.
 func Or(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Or, lhs, rhs)
 }
 
 // Power implements the corresponding standard binary operation.
 func Power(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Power, lhs, rhs)
 }
 
 // Remainder implements the corresponding standard binary operation.
 func Remainder(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Remainder, lhs, rhs)
 }
 
 // ShiftLeft implements the corresponding standard binary operation.
 func ShiftLeft(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.ShiftLeft, lhs, rhs)
 }
 
 // ShiftRightArithmetic implements the corresponding standard binary operation.
 func ShiftRightArithmetic(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.ShiftRightArithmetic, lhs, rhs)
 }
 
 // ShiftRightLogical implements the corresponding standard binary operation.
 func ShiftRightLogical(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.ShiftRightLogical, lhs, rhs)
 }
 
 // Subtract implements the corresponding standard binary operation.
 func Subtract(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Subtract, lhs, rhs)
 }
 
 // Xor implements the corresponding standard binary operation.
 func Xor(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.Xor, lhs, rhs)
 }

@@ -31,7 +31,10 @@ import (
 {{- range .}}
 // {{.Name}} implements the corresponding standard unary operation.
 func {{.Name}}(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.{{.Name}}, operand)
 }
 {{- end}}

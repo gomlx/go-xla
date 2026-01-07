@@ -109,7 +109,10 @@ func AllReduce(operands []*Value, replicaGroups [][]int, computation *Function, 
 	if len(operands) == 0 {
 		return nil, errors.Errorf("AllReduce requires at least one operand")
 	}
-	fn := operands[0].fn
+	fn, err := innerMostFunction(operands...)
+	if err != nil {
+		return nil, err
+	}
 	if fn.Returned {
 		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
 			op, fn.Name)
@@ -118,13 +121,6 @@ func AllReduce(operands []*Value, replicaGroups [][]int, computation *Function, 
 		return nil, errors.Errorf(
 			"cannot add operation %s because computation is not a StableHLO closure of %s",
 			op, fn.Name)
-	}
-	for i, operand := range operands {
-		if operand.fn != fn {
-			return nil, errors.Errorf(
-				"cannot add operation %s (#%d) because operand is not from the same function %s",
-				op, i, fn.Name)
-		}
 	}
 
 	outputShapes, err := shapeinference.AllReduce(

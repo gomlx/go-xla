@@ -31,7 +31,10 @@ import (
 {{- range .}}
 // {{.Name}} implements the corresponding standard binary operation.
 func {{.Name}}(lhs, rhs *Value) (*Value, error) {
-	fn := lhs.fn
+	fn, err := innerMostFunction(lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
 	return fn.binaryOp(optypes.{{.Name}}, lhs, rhs)
 }
 {{- end}}

@@ -372,9 +372,14 @@ func (fn *Function) Closure() *Function {
 }
 
 // UseParentValue creates a reference in this closure to a value from the parent function.
-// This allows closure functions (like If branches) to use values computed in the parent scope.
+// This forces the scope of the operation to the closure (fn).
 //
-// At the StableHLO/MLIR level, closures can reference SSA (Static Single Assignment) values from their parent scope directly.
+// Notice, the default for most ops is already to use the deepest (innermost) scope, so
+// if one of the operands of an op (like Add) is from a closure, the op will use the closure's scope.
+// So this is rarely needed.
+//
+// At the StableHLO/MLIR level, closures can reference SSA (Static Single Assignment) values from their parent
+// scope directly.
 // This method enables that by creating a Value in the closure that references the same SSA name.
 //
 // Returns an error if:
@@ -385,11 +390,13 @@ func (fn *Function) Closure() *Function {
 //
 //	// In parent function
 //	x := fn.ConstantFromScalar(5.0)
+//	y := fn.ConstantFromScalar(10.0)
 //
 //	// In closure (e.g., If branch)
 //	closureFn := fn.Closure()
 //	xInClosure := closureFn.UseParentValue(x)
-//	result, _ := stablehlo.Add(xInClosure, closureFn.ConstantFromScalar(1.0))
+//	yInClosure := closureFn.UseParentValue(y)
+//	result, _ := stablehlo.Add(xInClosure, yInClosure)
 //	closureFn.Return(result)
 func (fn *Function) UseParentValue(parentValue *Value) (*Value, error) {
 	if fn.Parent == nil {

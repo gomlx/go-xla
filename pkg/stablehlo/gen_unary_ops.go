@@ -8,138 +8,207 @@ import (
 
 // Abs implements the corresponding standard unary operation.
 func Abs(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Abs, operand)
 }
 
 // Cbrt implements the corresponding standard unary operation.
 func Cbrt(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Cbrt, operand)
 }
 
 // Ceil implements the corresponding standard unary operation.
 func Ceil(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Ceil, operand)
 }
 
 // Cosine implements the corresponding standard unary operation.
 func Cosine(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Cosine, operand)
 }
 
 // CountLeadingZeros implements the corresponding standard unary operation.
 func CountLeadingZeros(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.CountLeadingZeros, operand)
 }
 
 // Erf implements the corresponding standard unary operation.
 func Erf(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Erf, operand)
 }
 
 // Exponential implements the corresponding standard unary operation.
 func Exponential(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Exponential, operand)
 }
 
 // ExponentialMinusOne implements the corresponding standard unary operation.
 func ExponentialMinusOne(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.ExponentialMinusOne, operand)
 }
 
 // Floor implements the corresponding standard unary operation.
 func Floor(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Floor, operand)
 }
 
 // Log implements the corresponding standard unary operation.
 func Log(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Log, operand)
 }
 
 // LogPlusOne implements the corresponding standard unary operation.
 func LogPlusOne(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.LogPlusOne, operand)
 }
 
 // Logistic implements the corresponding standard unary operation.
 func Logistic(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Logistic, operand)
 }
 
 // Negate implements the corresponding standard unary operation.
 func Negate(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Negate, operand)
 }
 
 // Not implements the corresponding standard unary operation.
 func Not(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Not, operand)
 }
 
 // Popcnt implements the corresponding standard unary operation.
 func Popcnt(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Popcnt, operand)
 }
 
 // RoundNearestAfz implements the corresponding standard unary operation.
 func RoundNearestAfz(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.RoundNearestAfz, operand)
 }
 
 // RoundNearestEven implements the corresponding standard unary operation.
 func RoundNearestEven(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.RoundNearestEven, operand)
 }
 
 // Rsqrt implements the corresponding standard unary operation.
 func Rsqrt(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Rsqrt, operand)
 }
 
 // Sign implements the corresponding standard unary operation.
 func Sign(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Sign, operand)
 }
 
 // Sine implements the corresponding standard unary operation.
 func Sine(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Sine, operand)
 }
 
 // Sqrt implements the corresponding standard unary operation.
 func Sqrt(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Sqrt, operand)
 }
 
 // Tan implements the corresponding standard unary operation.
 func Tan(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Tan, operand)
 }
 
 // Tanh implements the corresponding standard unary operation.
 func Tanh(operand *Value) (*Value, error) {
-	fn := operand.fn
+	fn, err := innerMostFunction(operand)
+	if err != nil {
+		return nil, err
+	}
 	return fn.unaryOp(optypes.Tanh, operand)
 }

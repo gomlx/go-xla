@@ -8,6 +8,7 @@
   - Add UniformQuantize() and UniformDequantize() ops.
   - Add Value.WithOutputElementType() to allow change of quantization parameters for operations.
 - Dynamic Shapes (thx @ajroetker)
+- Ops choose the "innermost" scope of their operands -- meaning they are added the closure functions if they are operating on a value that is local to the closure.
 
 # v0.1.4
 
