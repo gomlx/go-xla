@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/go-xla/pkg/types/shardy"
 )
 
-func must[T any](value T, err error) T {
+func must1[T any](value T, err error) T {
 	if err != nil {
 		panic(err)
 	}
@@ -21,13 +21,13 @@ func TestBuilder(t *testing.T) {
 	t.Run("no inputs", func(t *testing.T) {
 		b := New(t.Name())
 		fn := b.Main()
-		c1 := must(fn.ConstantFromScalar(1.0))
-		c2 := must(fn.ConstantFromScalar(2.0))
-		sum := must(Add(c1, c2))
+		c1 := must1(fn.ConstantFromScalar(1.0))
+		c2 := must1(fn.ConstantFromScalar(2.0))
+		sum := must1(Add(c1, c2))
 		if err := fn.Return(sum); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 		want := `module @TestBuilder_no_inputs {
   func.func @main() -> tensor<f64> {
@@ -57,20 +57,20 @@ func TestBuilder(t *testing.T) {
 		b.WithShardy(mesh)
 		fn := b.Main()
 
-		arg0 := must(fn.NamedInputWithShardingAndAttributes(
+		arg0 := must1(fn.NamedInputWithShardingAndAttributes(
 			"arg0",
 			shapes.Make(dtypes.F32, 16, 128),
 			b.NewShardingSpec().AddShardedAxis("data"),
 			nil,
 		))
-		arg1 := must(fn.NamedInputWithSharding(
+		arg1 := must1(fn.NamedInputWithSharding(
 			"arg1",
 			shapes.Make(dtypes.F32, 128, 256),
 			b.NewShardingSpec().AddShardedAxis("model"),
 		))
 
-		tanh := must(Tanh(arg0))
-		dot := must(Dot(tanh, arg1))
+		tanh := must1(Tanh(arg0))
+		dot := must1(Dot(tanh, arg1))
 		err = fn.ReturnWithShardingAndAttributes(
 			[]*Value{dot},
 			[]*shardy.ShardingSpec{
@@ -83,7 +83,7 @@ func TestBuilder(t *testing.T) {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 		want := `module @TestBuilder_Sharding attributes {stablehlo.num_replicas = 1,  stablehlo.num_partitions = 8} {
   sdy.mesh @mesh = <["data"=4, "model"=2], device_ids=[7, 6, 5, 4, 3, 2, 1, 0]>
@@ -115,13 +115,13 @@ func TestBuilder(t *testing.T) {
 		shape := shapes.Make(dtypes.Float64)
 		// lhs is provided during the Main function creation, and rhs is added later.
 		fn := builder.Main()
-		lhs := must(fn.NamedInput("lhs", shape))
-		rhs := must(fn.NamedInput("rhs", shape))
-		sum := must(Add(lhs, rhs))
+		lhs := must1(fn.NamedInput("lhs", shape))
+		rhs := must1(fn.NamedInput("rhs", shape))
+		sum := must1(Add(lhs, rhs))
 		if err := fn.Return(sum); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		program := string(must(builder.Build()))
+		program := string(must1(builder.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 		want := `module @TestBuilder_with_inputs {
   func.func @main(%lhs: tensor<f64>, %rhs: tensor<f64>) -> tensor<f64> {
@@ -140,10 +140,10 @@ func TestBuilder(t *testing.T) {
 		builder := New(t.Name())
 		fn := builder.Main()
 		// Create two constants
-		c1 := must(fn.ConstantFromScalar(float32(2.0)))
-		c2 := must(fn.ConstantFromScalar(float32(3.0)))
+		c1 := must1(fn.ConstantFromScalar(float32(2.0)))
+		c2 := must1(fn.ConstantFromScalar(float32(3.0)))
 		// Multiply them
-		product := must(Multiply(c1, c2))
+		product := must1(Multiply(c1, c2))
 		// Change quantization on the output
 		quantization := shapes.UniformQuantization(dtypes.Int8, dtypes.Float32, 0.025, 0)
 		product, err := product.WithQuantization(quantization)
@@ -153,7 +153,7 @@ func TestBuilder(t *testing.T) {
 		if err := fn.Return(product); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		program := string(must(builder.Build()))
+		program := string(must1(builder.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 		want := `module @TestBuilder_quantization {
   func.func @main() -> tensor<!quant.uniform<i8:f32, 0.025:0>> {
@@ -175,7 +175,7 @@ func TestBuilder_Errors(t *testing.T) {
 	t.Run("no main", func(t *testing.T) {
 		b := New("test_program")
 		fn := b.NewFunction("not_main", nil)
-		c1 := must(fn.ConstantFromScalar(1.0))
+		c1 := must1(fn.ConstantFromScalar(1.0))
 		if err := fn.Return(c1); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -211,16 +211,16 @@ func TestDynamicOperations(t *testing.T) {
 		fn := b.Main()
 
 		// Create a tensor with shape [3, ?, 5] where the second dimension is dynamic
-		operand := must(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3, shapes.DimUnknown, 5)))
+		operand := must1(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3, shapes.DimUnknown, 5)))
 
 		// Get size of dynamic dimension 1 (value only known at runtime)
-		dimSize := must(GetDimensionSize(operand, 1))
+		dimSize := must1(GetDimensionSize(operand, 1))
 
 		if err := fn.Return(dimSize); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s", t.Name(), program)
 
 		// Verify the operation is present in the program

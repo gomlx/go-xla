@@ -1933,7 +1933,9 @@ func Call(callee *Function, operands ...*Value) ([]*Value, error) {
 	// Create the statement
 	stmt := fn.addMultiOp(op, outputsShapes, operands)
 	// Add the callee as a symbol reference attribute
-	stmt.Attributes["callee"] = symbolRef{name: callee.Name}
+	stmt.Attributes = map[string]any{
+		"callee": symbolRef{name: callee.Name},
+	}
 
 	return stmt.Outputs, nil
 }

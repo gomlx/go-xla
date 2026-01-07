@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/go-xla/pkg/pjrt"
+	"github.com/gomlx/go-xla/pkg/stablehlo"
 	. "github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
@@ -1292,4 +1293,83 @@ func testConstants(t *testing.T, client *pjrt.Client) {
 	t.Run("1D-float32", func(t *testing.T) { testTensor(t, []float32{1, 2, 3, 5, 7}, 5) })
 	t.Run("2D-complex64", func(t *testing.T) { testTensor(t, []complex64{1, 2, 3, 5i, 7i, 11i}, 2, 3) })
 	t.Run("3D-bool", func(t *testing.T) { testTensor(t, []bool{false, true, false, true}, 2, 1, 2) })
+}
+
+func TestCall(t *testing.T) {
+	iterateClientsAndTest(t, func(t *testing.T, client *pjrt.Client) {
+		t.Run("pjrt-only", func(t *testing.T) {
+			program := []byte(`module @TestCall_simple {
+		func.func @double(%arg0: tensor<f32>) -> tensor<f32> {
+			%0 = "stablehlo.add"(%arg0, %arg0) : (tensor<f32>, tensor<f32>) -> tensor<f32>
+			"stablehlo.return"(%0) : (tensor<f32>) -> ()
+		}
+
+		func.func @main(%x: tensor<f32>) -> tensor<f32> {
+			%0 = "func.call"(%x) {callee = @double} : (tensor<f32>) -> tensor<f32>
+			"stablehlo.return"(%0) : (tensor<f32>) -> ()
+		}
+}`)
+			// Compile
+			loadedExec := must1(client.Compile().WithStableHLO(program).Done())
+			defer loadedExec.Destroy()
+
+			// Execute
+			inputVal := float32(10.0)
+			inputBuffer := must1(pjrt.ScalarToBufferOnDeviceNum(client, 0, inputVal))
+			defer inputBuffer.Destroy()
+
+			outputBuffers := must1(loadedExec.Execute(inputBuffer).Done())
+			if len(outputBuffers) != 1 {
+				t.Fatalf("expected 1 output buffer, got %d", len(outputBuffers))
+			}
+			defer outputBuffers[0].Destroy()
+			outputVal := must1(pjrt.BufferToScalar[float32](outputBuffers[0]))
+
+			expected := inputVal * 2
+			if outputVal != expected {
+				t.Errorf("expected %f, got %f", expected, outputVal)
+			}
+		})
+
+		t.Run("simple", func(t *testing.T) {
+			b := stablehlo.New(t.Name())
+
+			// Define callee: double(x) = x + x
+			callee := b.NewFunction("double")
+			arg := must1(callee.Input(shapes.Make(dtypes.F32)))
+			doubleArg := must1(stablehlo.Add(arg, arg))
+			must(callee.Return(doubleArg))
+
+			// Define main: main(x) = double(x)
+			fn := b.Main()
+			input := must1(fn.NamedInput("x", shapes.Make(dtypes.F32)))
+			results := must1(stablehlo.Call(callee, input))
+			must(fn.Return(results...))
+
+			// Build
+			program := must1(b.Build())
+			fmt.Printf("%s program:\n%s", t.Name(), program)
+
+			// Compile
+			loadedExec := must1(client.Compile().WithStableHLO(program).Done())
+			defer loadedExec.Destroy()
+
+			// Execute
+			inputVal := float32(10.0)
+			inputBuffer := must1(pjrt.ScalarToBufferOnDeviceNum(client, 0, inputVal))
+			defer inputBuffer.Destroy()
+
+			outputBuffers := must1(loadedExec.Execute(inputBuffer).Done())
+			if len(outputBuffers) != 1 {
+				t.Fatalf("expected 1 output buffer, got %d", len(outputBuffers))
+			}
+			defer outputBuffers[0].Destroy()
+			outputVal := must1(pjrt.BufferToScalar[float32](outputBuffers[0]))
+
+			expected := inputVal * 2
+			if outputVal != expected {
+				t.Errorf("expected %f, got %f", expected, outputVal)
+			}
+		})
+	})
 }

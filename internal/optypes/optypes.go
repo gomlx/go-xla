@@ -134,6 +134,7 @@ var (
 	// "snake case" doesn't work.
 	stableHLOMappings = map[OpType]string{
 		FuncReturn: "stablehlo.return",
+		Call:       "func.call",
 		Erf:        "chlo.erf",
 		AllReduce:  "stablehlo.all_reduce"}
 )

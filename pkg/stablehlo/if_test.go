@@ -15,18 +15,18 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate: true
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch: return 42
 		trueBranch := fn.Closure()
-		trueVal := must(trueBranch.ConstantFromScalar(int32(42)))
+		trueVal := must1(trueBranch.ConstantFromScalar(int32(42)))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return 0
 		falseBranch := fn.Closure()
-		falseVal := must(falseBranch.ConstantFromScalar(int32(0)))
+		falseVal := must1(falseBranch.ConstantFromScalar(int32(0)))
 		if err := falseBranch.Return(falseVal); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -45,7 +45,7 @@ func TestIf(t *testing.T) {
 			t.Fatalf("fn.Return: %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s\n", t.Name(), program)
 
 		// Verify the program contains the expected if structure
@@ -65,20 +65,20 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(false))
+		pred := must1(fn.ConstantFromScalar(false))
 
 		// True branch: return (1, 2)
 		trueBranch := fn.Closure()
-		trueVal1 := must(trueBranch.ConstantFromScalar(int32(1)))
-		trueVal2 := must(trueBranch.ConstantFromScalar(int32(2)))
+		trueVal1 := must1(trueBranch.ConstantFromScalar(int32(1)))
+		trueVal2 := must1(trueBranch.ConstantFromScalar(int32(2)))
 		if err := trueBranch.Return(trueVal1, trueVal2); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return (10, 20)
 		falseBranch := fn.Closure()
-		falseVal1 := must(falseBranch.ConstantFromScalar(int32(10)))
-		falseVal2 := must(falseBranch.ConstantFromScalar(int32(20)))
+		falseVal1 := must1(falseBranch.ConstantFromScalar(int32(10)))
+		falseVal2 := must1(falseBranch.ConstantFromScalar(int32(20)))
 		if err := falseBranch.Return(falseVal1, falseVal2); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -97,7 +97,7 @@ func TestIf(t *testing.T) {
 			t.Fatalf("fn.Return: %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s\n", t.Name(), program)
 
 		// Verify the program structure
@@ -111,18 +111,18 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch: return tensor [1, 2, 3]
 		trueBranch := fn.Closure()
-		trueVec := must(trueBranch.ConstantFromFlatAndDimensions([]int32{1, 2, 3}, 3))
+		trueVec := must1(trueBranch.ConstantFromFlatAndDimensions([]int32{1, 2, 3}, 3))
 		if err := trueBranch.Return(trueVec); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return tensor [4, 5, 6]
 		falseBranch := fn.Closure()
-		falseVec := must(falseBranch.ConstantFromFlatAndDimensions([]int32{4, 5, 6}, 3))
+		falseVec := must1(falseBranch.ConstantFromFlatAndDimensions([]int32{4, 5, 6}, 3))
 		if err := falseBranch.Return(falseVec); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestIf(t *testing.T) {
 			t.Fatalf("fn.Return: %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s\n", t.Name(), program)
 
 		// Verify tensor type in output
@@ -152,18 +152,18 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Invalid predicate: int instead of bool
-		pred := must(fn.ConstantFromScalar(int32(1)))
+		pred := must1(fn.ConstantFromScalar(int32(1)))
 
 		// True branch
 		trueBranch := fn.Closure()
-		trueVal := must(trueBranch.ConstantFromScalar(int32(42)))
+		trueVal := must1(trueBranch.ConstantFromScalar(int32(42)))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch
 		falseBranch := fn.Closure()
-		falseVal := must(falseBranch.ConstantFromScalar(int32(0)))
+		falseVal := must1(falseBranch.ConstantFromScalar(int32(0)))
 		if err := falseBranch.Return(falseVal); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -183,18 +183,18 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch: return scalar
 		trueBranch := fn.Closure()
-		trueVal := must(trueBranch.ConstantFromScalar(int32(42)))
+		trueVal := must1(trueBranch.ConstantFromScalar(int32(42)))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return vector (different shape!)
 		falseBranch := fn.Closure()
-		falseVec := must(falseBranch.ConstantFromFlatAndDimensions([]int32{1, 2, 3}, 3))
+		falseVec := must1(falseBranch.ConstantFromFlatAndDimensions([]int32{1, 2, 3}, 3))
 		if err := falseBranch.Return(falseVec); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -214,19 +214,19 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch: return 1 value
 		trueBranch := fn.Closure()
-		trueVal := must(trueBranch.ConstantFromScalar(int32(42)))
+		trueVal := must1(trueBranch.ConstantFromScalar(int32(42)))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return 2 values
 		falseBranch := fn.Closure()
-		falseVal1 := must(falseBranch.ConstantFromScalar(int32(1)))
-		falseVal2 := must(falseBranch.ConstantFromScalar(int32(2)))
+		falseVal1 := must1(falseBranch.ConstantFromScalar(int32(1)))
+		falseVal2 := must1(falseBranch.ConstantFromScalar(int32(2)))
 		if err := falseBranch.Return(falseVal1, falseVal2); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -246,18 +246,18 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch: return pi
 		trueBranch := fn.Closure()
-		trueVal := must(trueBranch.ConstantFromScalar(3.14159))
+		trueVal := must1(trueBranch.ConstantFromScalar(3.14159))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch: return e
 		falseBranch := fn.Closure()
-		falseVal := must(falseBranch.ConstantFromScalar(2.71828))
+		falseVal := must1(falseBranch.ConstantFromScalar(2.71828))
 		if err := falseBranch.Return(falseVal); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}
@@ -273,7 +273,7 @@ func TestIf(t *testing.T) {
 			t.Fatalf("fn.Return: %v", err)
 		}
 
-		program := string(must(b.Build()))
+		program := string(must1(b.Build()))
 		fmt.Printf("%s program:\n%s\n", t.Name(), program)
 
 		// Verify float64 type
@@ -287,19 +287,19 @@ func TestIf(t *testing.T) {
 		fn := b.Main()
 
 		// Predicate
-		pred := must(fn.ConstantFromScalar(true))
+		pred := must1(fn.ConstantFromScalar(true))
 
 		// True branch with an input (not allowed per StableHLO spec)
 		trueBranch := fn.Closure()
-		_ = must(trueBranch.Input(shapes.Make(dtypes.Int32))) // This is not allowed
-		trueVal := must(trueBranch.ConstantFromScalar(int32(42)))
+		_ = must1(trueBranch.Input(shapes.Make(dtypes.Int32))) // This is not allowed
+		trueVal := must1(trueBranch.ConstantFromScalar(int32(42)))
 		if err := trueBranch.Return(trueVal); err != nil {
 			t.Fatalf("trueBranch.Return: %v", err)
 		}
 
 		// False branch (valid)
 		falseBranch := fn.Closure()
-		falseVal := must(falseBranch.ConstantFromScalar(int32(0)))
+		falseVal := must1(falseBranch.ConstantFromScalar(int32(0)))
 		if err := falseBranch.Return(falseVal); err != nil {
 			t.Fatalf("falseBranch.Return: %v", err)
 		}

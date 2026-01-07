@@ -1,6 +1,7 @@
-# Next: Dynamic Shapes (thx @ajroetker); Quantized shapes;
+# Next: Dynamic Shapes (thx @ajroetker); added `Call()`; Quantized shapes;
 
 * Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+* Added `Call()` op (thx @ajroetker)
 * Quantization:
   - Add Quantization field to shapes.Shape.
   - Add i2, i4, ui2 and ui4 DTypes.
