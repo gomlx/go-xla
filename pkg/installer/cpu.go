@@ -31,7 +31,11 @@ func init() {
 // goxlaInstallPath is expected to be a "lib/go-xla" directory, under which the PJRT plugin is installed.
 func CPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) error {
 	version := utils.DefaultCPUVersion
-	pjrtPluginPath := path.Join(goxlaInstallPath, fmt.Sprintf("pjrt_c_api_cpu_%s_plugin.so", version))
+	extension := "so"
+	if runtime.GOOS == "windows" {
+		extension = "dll"
+	}
+	pjrtPluginPath := path.Join(goxlaInstallPath, fmt.Sprintf("pjrt_c_api_cpu_%s_plugin.%s", version, extension))
 	_, err := os.Stat(pjrtPluginPath)
 	if err == nil {
 		// Already installed.
