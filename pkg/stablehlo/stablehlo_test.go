@@ -221,7 +221,7 @@ func TestDynamicOperations(t *testing.T) {
 		}
 
 		program := string(must1(b.Build()))
-		fmt.Printf("%s program:\n%s", t.Name(), program)
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
 
 		// Verify the operation is present in the program
 		if !strings.Contains(program, "stablehlo.get_dimension_size") {
@@ -229,6 +229,197 @@ func TestDynamicOperations(t *testing.T) {
 		}
 		if !strings.Contains(program, `dimension = 1`) {
 			t.Fatal("expected program to specify dimension = 1")
+		}
+	})
+
+	t.Run("DynamicReshape", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create input tensor [2, 3] = 6 elements
+		operand := must1(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 2, 3)))
+
+		// Create shape tensor specifying new shape [3, 2] - a 1D tensor with 2 elements
+		newShape := must1(fn.ConstantFromFlatAndDimensions([]int64{3, 2}, 2))
+
+		// Dynamic reshape with bounds
+		reshaped := must1(DynamicReshape(operand, newShape, []int{3, 2}))
+
+		if err := fn.Return(reshaped); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_reshape") {
+			t.Fatal("expected program to contain dynamic_reshape operation")
+		}
+		// Check for bounded dynamic shape encoding
+		if !strings.Contains(program, "#stablehlo.bounds") {
+			t.Fatal("expected program to contain bounds encoding")
+		}
+	})
+
+	t.Run("DynamicBroadcastInDim", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create input tensor [3]
+		operand := must1(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3)))
+
+		// Create output dimensions tensor [2, 3] - a 1D tensor with 2 elements
+		outputDims := must1(fn.ConstantFromFlatAndDimensions([]int64{2, 3}, 2))
+
+		// Broadcast with dimension mapping: input dim 0 -> output dim 1
+		broadcasted := must1(DynamicBroadcastInDim(operand, outputDims, []int{1}, []int{2, 3}))
+
+		if err := fn.Return(broadcasted); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_broadcast_in_dim") {
+			t.Fatal("expected program to contain dynamic_broadcast_in_dim operation")
+		}
+		if !strings.Contains(program, "broadcast_dimensions") {
+			t.Fatal("expected program to contain broadcast_dimensions attribute")
+		}
+	})
+
+	t.Run("DynamicIota", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create shape tensor [4, 3] - a 1D tensor with 2 elements
+		outputShape := must1(fn.ConstantFromFlatAndDimensions([]int64{4, 3}, 2))
+
+		// Create iota along dimension 0
+		iota := must1(DynamicIota(fn, dtypes.Int32, outputShape, 0, []int{4, 3}))
+
+		if err := fn.Return(iota); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_iota") {
+			t.Fatal("expected program to contain dynamic_iota operation")
+		}
+		if !strings.Contains(program, "iota_dimension = 0") {
+			t.Fatal("expected program to contain iota_dimension attribute")
+		}
+	})
+
+	t.Run("DynamicGather", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create operand [3, 4, 2]
+		operand := must1(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 3, 4, 2)))
+
+		// Create start indices [2, 3, 2] - 2 batches of 3 indices, each index has 2 elements
+		startIndices := must1(fn.NamedInput("indices", shapes.Make(dtypes.Int64, 2, 3, 2)))
+
+		// Create dynamic slice sizes [1, 1, 2] - a 1D tensor with 3 elements
+		sliceSizes := must1(fn.ConstantFromFlatAndDimensions([]int64{1, 1, 2}, 3))
+
+		// Gather with dimension configuration
+		gathered := must1(DynamicGather(operand, startIndices, sliceSizes,
+			2,           // indexVectorAxis
+			[]int{2},    // offsetOutputAxes
+			[]int{0, 1}, // collapsedSliceAxes
+			[]int{},     // operandBatchingAxes
+			[]int{},     // startIndicesBatchingAxes
+			[]int{0, 1}, // startIndexMap
+			false,       // indicesAreSorted
+			[]int{2, 3, 2})) // bounds
+
+		if err := fn.Return(gathered); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_gather") {
+			t.Fatal("expected program to contain dynamic_gather operation")
+		}
+		if !strings.Contains(program, "#stablehlo.gather") {
+			t.Fatal("expected program to contain gather dimension_numbers")
+		}
+	})
+
+	t.Run("DynamicPad", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create operand [2, 3]
+		operand := must1(fn.NamedInput("operand", shapes.Make(dtypes.Float32, 2, 3)))
+
+		// Create padding value
+		padValue := must1(fn.ConstantFromScalar(float32(0)))
+
+		// Create padding tensors - 1D tensors with 2 elements each
+		edgeLow := must1(fn.ConstantFromFlatAndDimensions([]int64{1, 2}, 2))
+		edgeHigh := must1(fn.ConstantFromFlatAndDimensions([]int64{1, 2}, 2))
+		interior := must1(fn.ConstantFromFlatAndDimensions([]int64{0, 0}, 2))
+
+		// Dynamic pad with bounds for output shape [4, 7]
+		padded := must1(DynamicPad(operand, padValue, edgeLow, edgeHigh, interior, []int{4, 7}))
+
+		if err := fn.Return(padded); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_pad") {
+			t.Fatal("expected program to contain dynamic_pad operation")
+		}
+	})
+
+	t.Run("DynamicConv", func(t *testing.T) {
+		b := New(t.Name())
+		fn := b.Main()
+
+		// Create input [1, 4, 4, 1] - NHWC format
+		input := must1(fn.NamedInput("input", shapes.Make(dtypes.Float32, 1, 4, 4, 1)))
+
+		// Create kernel [3, 3, 1, 1] - HWIO format
+		kernel := must1(fn.NamedInput("kernel", shapes.Make(dtypes.Float32, 3, 3, 1, 1)))
+
+		// Create dynamic padding tensor [2, 2] for 2 spatial dims with [low, high] each
+		padding := must1(fn.ConstantFromFlatAndDimensions([]int64{1, 1, 1, 1}, 2, 2))
+
+		// Dynamic conv with bounds
+		convolved := must1(DynamicConv(input, kernel, padding,
+			[]int{1, 1},    // strides
+			[]int{1, 1},    // inputDilations
+			[]int{1, 1},    // kernelDilations
+			0, 3, []int{1, 2}, // input: batch=0, channels=3, spatial=[1,2]
+			2, 3, []int{0, 1}, // kernel: inChannels=2, outChannels=3, spatial=[0,1]
+			0, 3, []int{1, 2}, // output: batch=0, channels=3, spatial=[1,2]
+			1, 1, // channelGroupCount, batchGroupCount
+			0, 0, // precision (DEFAULT)
+			[]int{1, 4, 4, 1})) // bounds
+
+		if err := fn.Return(convolved); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		program := string(must1(b.Build()))
+		fmt.Printf("%s program:\n%s\n", t.Name(), program)
+
+		if !strings.Contains(program, "stablehlo.dynamic_conv") {
+			t.Fatal("expected program to contain dynamic_conv operation")
+		}
+		if !strings.Contains(program, "dimension_numbers") {
+			t.Fatal("expected program to contain dimension_numbers attribute")
 		}
 	})
 
