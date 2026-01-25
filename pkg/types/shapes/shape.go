@@ -317,6 +317,7 @@ func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
 	s2.Dimensions = slices.Clone(s.Dimensions)
 	s2.DimensionBounds = slices.Clone(s.DimensionBounds)
+	s2.EncodeBounds = s.EncodeBounds
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
@@ -324,7 +325,6 @@ func (s Shape) Clone() (s2 Shape) {
 		}
 	}
 	s2.Quantization = s.Quantization.Clone()
-	s2.EncodeBounds = s.EncodeBounds
 	return
 }
 
