@@ -65,6 +65,14 @@
 //
 // If you don't want to panic, but instead return an error through the `graph.Graph`, you can
 // use the `Node.AssertDims()` method. So it would look like `logits.AssertDims(batchSize, shapes.DimUnknown)`.
+//
+// ## Experimental extensions:
+//
+//   - Dynamic shapes: using DimUnknown (-1) for axes with unknown/dynamic dimensions.
+//     Dynamic ranked tensors are not supported.
+//   - Dynamic bounds: DimensionBounds for dynamic dimensions, when Dimensions[axis] == DimUnknown.
+//   - Quantization: not supported by PJRT yet, but the library will generate valid StableHLO
+//     for quantized types.
 package shapes
 
 import (
@@ -87,12 +95,41 @@ const DimUnknown = -1
 //
 // Use Make to create a new shape. See example in package shapes documentation.
 type Shape struct {
-	DType           dtypes.DType
-	Dimensions      []int
-	DimensionBounds []int         // Upper bounds for dynamic dimensions (when Dimensions[i] == DimUnknown). nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
-	TupleShapes     []Shape       // Shapes of the tuple, if this is a tuple.
-	Quantization    *Quantization // Quantization metadata for quantized types.
-	EncodeBounds    bool          // Whether to encode DimensionBounds in StableHLO output. Set to true for ops that require bounded dynamism (e.g., dynamic_reshape).
+	// DType is the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/go-xla/pkg/types/dtypes
+	DType dtypes.DType
+
+	// Dimensions (lengths) for each axis of the tensor/array being represented.
+	// It can be 0 (0-lengthed tensor) and DimUnknown (-1) for unknown/dynamic dimensions.
+	//
+	// Dimensions also encode the rank (== len(Dimensions)) of the tensor.
+	// Dynamic ranked tensors are not supported.
+	//
+	// If you are going to use this to create a new shape, remember to clone it
+	// (see Shape.Clone()).
+	Dimensions []int
+
+	// DimensionBounds for dynamic dimensions, when Dimensions[axis] == DimUnknown.
+	//  nil or len(DimensionBounds)==len(Dimensions). 0 means no bound.
+	//
+	// It is set to nil for shapes that are not dynamic or have no bounds.
+	DimensionBounds []int
+
+	// EncodeBounds whether to encode DimensionBounds in StableHLO output. Set to true for ops that require
+	// bounded dynamism (e.g., dynamic_reshape).
+	EncodeBounds bool
+
+	// TupleShapes of the tuple, if this is a tuple.
+	TupleShapes []Shape
+
+	// Quantization metadata for quantized shapes.
+	// Not supported by PJRT yet, but the library will generate valid StableHLO
+	// for quantized types.
+	//
+	// Notice that one can implement quantization around stablehlo, simply managing themselves the conversions
+	// at every step/operation.
+	//
+	// It is set to nil for shapes that are not quantized.
+	Quantization *Quantization
 }
 
 // Make returns a Shape structure filled with the values given.
@@ -280,6 +317,7 @@ func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
 	s2.Dimensions = slices.Clone(s.Dimensions)
 	s2.DimensionBounds = slices.Clone(s.DimensionBounds)
+	s2.EncodeBounds = s.EncodeBounds
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
@@ -287,7 +325,6 @@ func (s Shape) Clone() (s2 Shape) {
 		}
 	}
 	s2.Quantization = s.Quantization.Clone()
-	s2.EncodeBounds = s.EncodeBounds
 	return
 }
 
