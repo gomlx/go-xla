@@ -1719,6 +1719,468 @@ func GetDimensionSize(operand *Value, dimension int) (*Value, error) {
 	return stmt.Outputs[0], nil
 }
 
+// DynamicReshape reshapes the operand to a shape specified by a 1D tensor.
+//
+// Parameters:
+//   - operand: the tensor to reshape.
+//   - outputShapeTensor: a 1D tensor of i32 or i64 values specifying the target shape dimensions.
+//   - bounds: dimension bounds for the output shape. Must have length equal to output rank.
+//     Use the actual dimension value for known dimensions, or an upper bound for dynamic ones.
+//
+// This is the dynamic version of Reshape where the output shape is determined at runtime.
+// The total number of elements must remain the same.
+func DynamicReshape(operand *Value, outputShapeTensor *Value, bounds []int) (*Value, error) {
+	op := optypes.DynamicReshape
+	fn := operand.fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+	if outputShapeTensor.fn != fn {
+		return nil, errors.Errorf("cannot add operation %s to function %q, because operand and outputShapeTensor are from different functions",
+			op, fn.Name)
+	}
+
+	// Validate outputShapeTensor is 1D tensor of integer type
+	if outputShapeTensor.shape.Rank() != 1 {
+		return nil, errors.Errorf("outputShapeTensor must be a 1D tensor, got rank %d",
+			outputShapeTensor.shape.Rank())
+	}
+	if !outputShapeTensor.shape.DType.IsInt() {
+		return nil, errors.Errorf("outputShapeTensor must be integer type, got %s",
+			outputShapeTensor.shape.DType)
+	}
+
+	// Get output rank from the shape tensor
+	outputRank := outputShapeTensor.shape.Dimensions[0]
+	if outputRank < 0 {
+		return nil, errors.Errorf("outputShapeTensor has dynamic size, cannot determine output rank")
+	}
+
+	// Validate bounds length
+	if len(bounds) != outputRank {
+		return nil, errors.Errorf("bounds length (%d) must match output rank (%d)",
+			len(bounds), outputRank)
+	}
+
+	// Create output shape with dynamic dimensions and caller-provided bounds
+	resultShape := operand.shape.Clone()
+	resultShape.Dimensions = make([]int, outputRank)
+	resultShape.DimensionBounds = make([]int, outputRank)
+	for i := range outputRank {
+		resultShape.Dimensions[i] = shapes.DimUnknown // Dynamic
+		resultShape.DimensionBounds[i] = bounds[i]
+	}
+	resultShape.EncodeBounds = true
+
+	stmt := fn.addOp(op, resultShape, operand, outputShapeTensor)
+	return stmt.Outputs[0], nil
+}
+
+// DynamicBroadcastInDim broadcasts the operand to a shape specified by a 1D tensor.
+//
+// Parameters:
+//   - operand: the tensor to broadcast.
+//   - outputDimensions: a 1D tensor of i32 or i64 values specifying the target shape.
+//   - broadcastDimensions: maps operand axes to output axes (like BroadcastInDim).
+//   - bounds: dimension bounds for the output shape. Must have length equal to output rank.
+//
+// This is the dynamic version of BroadcastInDim where the output shape is determined at runtime.
+func DynamicBroadcastInDim(operand *Value, outputDimensions *Value, broadcastDimensions []int, bounds []int) (*Value, error) {
+	op := optypes.DynamicBroadcastInDim
+	fn := operand.fn
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+	if outputDimensions.fn != fn {
+		return nil, errors.Errorf("cannot add operation %s to function %q, because operand and outputDimensions are from different functions",
+			op, fn.Name)
+	}
+
+	// Validate outputDimensions is 1D tensor of integer type
+	if outputDimensions.shape.Rank() != 1 {
+		return nil, errors.Errorf("outputDimensions must be a 1D tensor, got rank %d",
+			outputDimensions.shape.Rank())
+	}
+	if !outputDimensions.shape.DType.IsInt() {
+		return nil, errors.Errorf("outputDimensions must be integer type, got %s",
+			outputDimensions.shape.DType)
+	}
+
+	// Validate broadcastDimensions length matches operand rank
+	if len(broadcastDimensions) != operand.shape.Rank() {
+		return nil, errors.Errorf("broadcastDimensions length (%d) must match operand rank (%d)",
+			len(broadcastDimensions), operand.shape.Rank())
+	}
+
+	// Get output rank from the dimensions tensor
+	outputRank := outputDimensions.shape.Dimensions[0]
+	if outputRank < 0 {
+		return nil, errors.Errorf("outputDimensions has dynamic size, cannot determine output rank")
+	}
+
+	// Validate bounds length
+	if len(bounds) != outputRank {
+		return nil, errors.Errorf("bounds length (%d) must match output rank (%d)",
+			len(bounds), outputRank)
+	}
+
+	// Create output shape with dynamic dimensions and caller-provided bounds
+	outputShape := operand.shape.Clone()
+	outputShape.Dimensions = make([]int, outputRank)
+	outputShape.DimensionBounds = make([]int, outputRank)
+	for i := range outputRank {
+		outputShape.Dimensions[i] = shapes.DimUnknown // Dynamic
+		outputShape.DimensionBounds[i] = bounds[i]
+	}
+	outputShape.EncodeBounds = true
+
+	stmt := fn.addOp(op, outputShape, operand, outputDimensions)
+	stmt.Attributes = map[string]any{
+		"broadcast_dimensions": intSliceToArrayI64StableHLO(broadcastDimensions),
+	}
+	return stmt.Outputs[0], nil
+}
+
+// DynamicIota creates a tensor filled with values increasing along the specified dimension,
+// where the output shape is determined at runtime.
+//
+// Parameters:
+//   - fn: the function to add this operation to.
+//   - dtype: the data type of the output tensor.
+//   - outputShape: a 1D tensor of i32 or i64 values specifying the output dimensions.
+//   - iotaDimension: the axis along which values increase (0, 1, 2, ...).
+//   - bounds: dimension bounds for the output shape. Must have length equal to output rank.
+//
+// This is the dynamic version of Iota where the output shape is determined at runtime.
+func DynamicIota(fn *Function, dtype dtypes.DType, outputShape *Value, iotaDimension int, bounds []int) (*Value, error) {
+	op := optypes.DynamicIota
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+	if outputShape.fn != fn {
+		return nil, errors.Errorf("cannot add operation %s to function %q, because outputShape is from a different function",
+			op, fn.Name)
+	}
+
+	// Validate outputShape is 1D tensor of integer type
+	if outputShape.shape.Rank() != 1 {
+		return nil, errors.Errorf("outputShape must be a 1D tensor, got rank %d",
+			outputShape.shape.Rank())
+	}
+	if !outputShape.shape.DType.IsInt() {
+		return nil, errors.Errorf("outputShape must be integer type, got %s",
+			outputShape.shape.DType)
+	}
+
+	// Get output rank from the shape tensor
+	outputRank := outputShape.shape.Dimensions[0]
+	if outputRank < 0 {
+		return nil, errors.Errorf("outputShape has dynamic size, cannot determine output rank")
+	}
+
+	// Validate iotaDimension
+	if iotaDimension < 0 || iotaDimension >= outputRank {
+		return nil, errors.Errorf("iotaDimension %d out of bounds for output rank %d",
+			iotaDimension, outputRank)
+	}
+
+	// Validate bounds length
+	if len(bounds) != outputRank {
+		return nil, errors.Errorf("bounds length (%d) must match output rank (%d)",
+			len(bounds), outputRank)
+	}
+
+	// Create output shape with dynamic dimensions and caller-provided bounds
+	resultShape := shapes.Make(dtype)
+	resultShape.Dimensions = make([]int, outputRank)
+	resultShape.DimensionBounds = make([]int, outputRank)
+	for i := range outputRank {
+		resultShape.Dimensions[i] = shapes.DimUnknown
+		resultShape.DimensionBounds[i] = bounds[i]
+	}
+	resultShape.EncodeBounds = true
+
+	stmt := fn.addOp(op, resultShape, outputShape)
+	stmt.Attributes = map[string]any{
+		"iota_dimension": int64(iotaDimension),
+	}
+	return stmt.Outputs[0], nil
+}
+
+// DynamicGather performs a gather operation with dynamically-specified slice sizes.
+//
+// This is the dynamic version of Gather where slice_sizes is a 1D tensor instead of
+// static values. All other parameters work the same as Gather.
+//
+// Parameters:
+//   - operand: the tensor to gather from.
+//   - startIndices: indices specifying where to gather from.
+//   - sliceSizes: a 1D tensor specifying the size of each slice (length = operand.Rank()).
+//   - indexVectorAxis: the axis in startIndices that contains the index vectors.
+//   - offsetOutputAxes: output axes corresponding to non-collapsed, non-batched operand axes.
+//   - collapsedSliceAxes: operand axes to collapse (must have slice size 1).
+//   - operandBatchingAxes: operand's batching axes.
+//   - startIndicesBatchingAxes: startIndices' batching axes.
+//   - startIndexMap: maps index vector elements to operand axes.
+//   - indicesAreSorted: whether indices are guaranteed sorted.
+//   - bounds: dimension bounds for the output shape.
+func DynamicGather(operand, startIndices, sliceSizes *Value, indexVectorAxis int,
+	offsetOutputAxes, collapsedSliceAxes, operandBatchingAxes,
+	startIndicesBatchingAxes, startIndexMap []int,
+	indicesAreSorted bool, bounds []int) (*Value, error) {
+	op := optypes.DynamicGather
+	fn, err := innerMostFunction(operand, startIndices, sliceSizes)
+	if err != nil {
+		return nil, err
+	}
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	// Validate sliceSizes is 1D tensor of integer type
+	if sliceSizes.shape.Rank() != 1 {
+		return nil, errors.Errorf("sliceSizes must be a 1D tensor, got rank %d",
+			sliceSizes.shape.Rank())
+	}
+	if !sliceSizes.shape.DType.IsInt() {
+		return nil, errors.Errorf("sliceSizes must be integer type, got %s",
+			sliceSizes.shape.DType)
+	}
+
+	// sliceSizes length should match operand rank
+	if sliceSizes.shape.Dimensions[0] != operand.shape.Rank() {
+		return nil, errors.Errorf("sliceSizes length (%d) must match operand rank (%d)",
+			sliceSizes.shape.Dimensions[0], operand.shape.Rank())
+	}
+
+	// Validate bounds length
+	if len(bounds) == 0 {
+		return nil, errors.Errorf("bounds must be provided for dynamic gather")
+	}
+
+	// Calculate output rank: batch dimensions from startIndices + offset dimensions
+	// Output rank = len(offsetOutputAxes) + startIndices.Rank() - 1 + len(operandBatchingAxes)
+	startIndicesRank := startIndices.shape.Rank()
+	outputRank := len(offsetOutputAxes) + startIndicesRank - 1 + len(startIndicesBatchingAxes)
+	if len(bounds) != outputRank {
+		return nil, errors.Errorf("bounds length (%d) must match output rank (%d)",
+			len(bounds), outputRank)
+	}
+
+	// Create output shape with dynamic dimensions
+	outputShape := shapes.Shape{DType: operand.shape.DType}
+	outputShape.Dimensions = make([]int, outputRank)
+	outputShape.DimensionBounds = make([]int, outputRank)
+	for i := range outputRank {
+		outputShape.Dimensions[i] = shapes.DimUnknown
+		outputShape.DimensionBounds[i] = bounds[i]
+	}
+	outputShape.EncodeBounds = true
+
+	stmt := fn.addOp(op, outputShape, operand, startIndices, sliceSizes)
+	stmt.Attributes = map[string]any{
+		"dimension_numbers": literalStrF(
+			"#stablehlo.gather<\n"+
+				"\toffset_dims = %s,\n"+
+				"\tcollapsed_slice_dims = %s,\n"+
+				"\toperand_batching_dims = %s,\n"+
+				"\tstart_indices_batching_dims = %s,\n"+
+				"\tstart_index_map = %s,\n"+
+				"\tindex_vector_dim = %d>",
+			intSliceToStableHLO(offsetOutputAxes),
+			intSliceToStableHLO(collapsedSliceAxes),
+			intSliceToStableHLO(operandBatchingAxes),
+			intSliceToStableHLO(startIndicesBatchingAxes),
+			intSliceToStableHLO(startIndexMap),
+			indexVectorAxis),
+		"indices_are_sorted": indicesAreSorted,
+	}
+	return stmt.Outputs[0], nil
+}
+
+// DynamicPad pads the operand with dynamically-specified padding amounts.
+//
+// This is the dynamic version of Pad where the padding amounts are 1D tensors
+// instead of static values.
+//
+// Parameters:
+//   - operand: the tensor to pad.
+//   - paddingValue: scalar value to use for padding (must match operand dtype).
+//   - edgePaddingLow: 1D tensor specifying low-end padding for each axis.
+//   - edgePaddingHigh: 1D tensor specifying high-end padding for each axis.
+//   - interiorPadding: 1D tensor specifying interior padding for each axis.
+//   - bounds: dimension bounds for the output shape.
+func DynamicPad(operand, paddingValue, edgePaddingLow, edgePaddingHigh, interiorPadding *Value, bounds []int) (*Value, error) {
+	op := optypes.DynamicPad
+	fn, err := innerMostFunction(operand, paddingValue, edgePaddingLow, edgePaddingHigh, interiorPadding)
+	if err != nil {
+		return nil, err
+	}
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	// Validate paddingValue is scalar
+	if !paddingValue.shape.IsScalar() {
+		return nil, errors.Errorf("paddingValue must be a scalar, got shape %s", paddingValue.shape)
+	}
+	if paddingValue.shape.DType != operand.shape.DType {
+		return nil, errors.Errorf("paddingValue dtype (%s) must match operand dtype (%s)",
+			paddingValue.shape.DType, operand.shape.DType)
+	}
+
+	rank := operand.shape.Rank()
+
+	// Validate padding tensors are 1D with correct length
+	for name, tensor := range map[string]*Value{
+		"edgePaddingLow":  edgePaddingLow,
+		"edgePaddingHigh": edgePaddingHigh,
+		"interiorPadding": interiorPadding,
+	} {
+		if tensor.shape.Rank() != 1 {
+			return nil, errors.Errorf("%s must be a 1D tensor, got rank %d", name, tensor.shape.Rank())
+		}
+		if !tensor.shape.DType.IsInt() {
+			return nil, errors.Errorf("%s must be integer type, got %s", name, tensor.shape.DType)
+		}
+		if tensor.shape.Dimensions[0] != rank {
+			return nil, errors.Errorf("%s length (%d) must match operand rank (%d)",
+				name, tensor.shape.Dimensions[0], rank)
+		}
+	}
+
+	// Validate bounds length
+	if len(bounds) != rank {
+		return nil, errors.Errorf("bounds length (%d) must match operand rank (%d)",
+			len(bounds), rank)
+	}
+
+	// Create output shape with dynamic dimensions
+	outputShape := operand.shape.Clone()
+	outputShape.Dimensions = make([]int, rank)
+	outputShape.DimensionBounds = make([]int, rank)
+	for i := range rank {
+		outputShape.Dimensions[i] = shapes.DimUnknown
+		outputShape.DimensionBounds[i] = bounds[i]
+	}
+	outputShape.EncodeBounds = true
+
+	stmt := fn.addOp(op, outputShape, operand, paddingValue, edgePaddingLow, edgePaddingHigh, interiorPadding)
+	return stmt.Outputs[0], nil
+}
+
+// DynamicConv performs a convolution with dynamically-specified padding.
+//
+// This is the dynamic version of Convolution where the padding amounts are specified
+// via a tensor instead of static values. All other parameters work the same as Convolution.
+//
+// Parameters:
+//   - input: the input tensor.
+//   - kernel: the convolution kernel/filter.
+//   - padding: a 2D tensor of shape [numSpatialDims, 2] specifying [low, high] padding per spatial axis.
+//   - strides, inputDilations, kernelDilations: same as Convolution (static).
+//   - axis configuration parameters: same as Convolution.
+//   - bounds: dimension bounds for the output shape.
+func DynamicConv(input, kernel, padding *Value,
+	strides, inputDilations, kernelDilations []int,
+	inputBatchAxis, inputChannelsAxis int, inputSpatialAxes []int,
+	kernelInputChannelsAxis, kernelOutputChannelsAxis int, kernelSpatialAxes []int,
+	outputBatchAxis, outputChannelsAxis int, outputSpatialAxes []int,
+	channelGroupCount, batchGroupCount int,
+	inputPrecision, kernelPrecision types.DotGeneralPrecisionType,
+	bounds []int) (*Value, error) {
+	op := optypes.DynamicConv
+	fn, err := innerMostFunction(input, kernel, padding)
+	if err != nil {
+		return nil, err
+	}
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	rank := input.shape.Rank()
+	rankSpatial := rank - 2
+
+	// Validate padding tensor shape: should be [numSpatialDims, 2]
+	if padding.shape.Rank() != 2 {
+		return nil, errors.Errorf("padding must be a 2D tensor, got rank %d", padding.shape.Rank())
+	}
+	if padding.shape.Dimensions[0] != rankSpatial || padding.shape.Dimensions[1] != 2 {
+		return nil, errors.Errorf("padding must have shape [%d, 2], got %v",
+			rankSpatial, padding.shape.Dimensions)
+	}
+
+	// Set default for any missing slices
+	windowReversal := make([]bool, rankSpatial)
+	for _, s := range []*[]int{&strides, &inputDilations, &kernelDilations} {
+		if len(*s) == 0 {
+			*s = slices.Repeat([]int{1}, rankSpatial)
+		}
+	}
+
+	// Fix negative axes
+	for _, axisConfig := range []*int{&inputBatchAxis, &inputChannelsAxis, &kernelInputChannelsAxis, &kernelOutputChannelsAxis, &outputBatchAxis, &outputChannelsAxis} {
+		adjustedAxis, err := shapeinference.AdjustAxisToRank(*axisConfig, rank)
+		if err != nil {
+			return nil, errors.Errorf("invalid channel/batch axis %d for rank %d", *axisConfig, rank)
+		}
+		*axisConfig = adjustedAxis
+	}
+	for _, s := range []*[]int{&inputSpatialAxes, &kernelSpatialAxes, &outputSpatialAxes} {
+		*s = slices.Clone(*s)
+		for i, axis := range *s {
+			adjustedAxis, err := shapeinference.AdjustAxisToRank(axis, rank)
+			if err != nil {
+				return nil, errors.Errorf("invalid spatial axis %d for rank %d", axis, rank)
+			}
+			(*s)[i] = adjustedAxis
+		}
+	}
+
+	// Validate bounds length
+	if len(bounds) != rank {
+		return nil, errors.Errorf("bounds length (%d) must match output rank (%d)",
+			len(bounds), rank)
+	}
+
+	// Create output shape with dynamic dimensions
+	outputShape := shapes.Shape{DType: input.shape.DType}
+	outputShape.Dimensions = make([]int, rank)
+	outputShape.DimensionBounds = make([]int, rank)
+	for i := range rank {
+		outputShape.Dimensions[i] = shapes.DimUnknown
+		outputShape.DimensionBounds[i] = bounds[i]
+	}
+	outputShape.EncodeBounds = true
+
+	// Build statement
+	stmt := fn.addOp(op, outputShape, input, kernel, padding)
+
+	convConfig := getConvAxesConfig(inputBatchAxis, inputChannelsAxis, inputSpatialAxes,
+		kernelInputChannelsAxis, kernelOutputChannelsAxis, kernelSpatialAxes,
+		outputBatchAxis, outputChannelsAxis, outputSpatialAxes)
+	precisionConfig := literalStrF("[#stablehlo<precision %s>, #stablehlo<precision %s>]",
+		inputPrecision.ToStableHLO(), kernelPrecision.ToStableHLO())
+
+	stmt.Attributes = map[string]any{
+		"window_strides":      intSliceToArrayI64StableHLO(strides),
+		"lhs_dilation":        intSliceToArrayI64StableHLO(inputDilations),
+		"rhs_dilation":        intSliceToArrayI64StableHLO(kernelDilations),
+		"window_reversal":     boolSliceToArrayI1StableHLO(windowReversal),
+		"dimension_numbers":   convConfig,
+		"feature_group_count": int64(channelGroupCount),
+		"batch_group_count":   int64(batchGroupCount),
+		"precision_config":    precisionConfig,
+	}
+	return stmt.Outputs[0], nil
+}
+
 // While executes body repeatedly while condition returns true.
 //
 // The While operation implements a loop that continues executing the body function

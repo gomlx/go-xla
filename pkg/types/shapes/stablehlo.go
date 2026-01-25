@@ -62,6 +62,28 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 		w("%s", s.DType.ToStableHLO())
 	}
 
+	// Encode bounds only if explicitly requested via EncodeBounds flag.
+	// XLA requires bounded dynamic dimensions for compilation.
+	if s.EncodeBounds && s.HasBoundedDynamism() {
+		w(", #stablehlo.bounds<")
+		for i, dim := range s.Dimensions {
+			if i > 0 {
+				w(", ")
+			}
+			if dim == DimUnknown {
+				// Dynamic dimension - check if we have a bound
+				if i < len(s.DimensionBounds) && s.DimensionBounds[i] > 0 {
+					w("%d", s.DimensionBounds[i])
+				} else {
+					w("?")
+				}
+			} else {
+				// Static dimension - use ? (no bound needed, the dimension is already known)
+				w("?")
+			}
+		}
+		w(">")
+	}
 	w(">")
 	return err
 }
