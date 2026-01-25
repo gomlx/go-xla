@@ -1,13 +1,17 @@
 # Next: Dynamic Shapes (thx @ajroetker); added `Call()`; Quantized shapes;
 
-* Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
-* Added `Call()` op (thx @ajroetker)
-* Quantization:
+- Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+- Added `Call()` op (thx @ajroetker)
+- Dynamic Shapes (thx @ajroetker) -- with and without dynamic bounds.
+  - Added `DimensionBounds` and `EncodeBounds` fields to `Shape` struct
+  - Added ops: `DynamicReshape`, `DynamicBroadcastInDim`, `DynamicIota`, `DynamicGather`,
+    `DynamicPad`, `DynamicConv`.
+- Quantization:
   - Add Quantization field to shapes.Shape.
   - Add i2, i4, ui2 and ui4 DTypes.
   - Add UniformQuantize() and UniformDequantize() ops.
   - Add Value.WithOutputElementType() to allow change of quantization parameters for operations.
-- Dynamic Shapes (thx @ajroetker)
+
 - Ops choose the "innermost" scope of their operands -- meaning they are added the closure functions if they are operating on a value that is local to the closure.
 
 # v0.1.4
