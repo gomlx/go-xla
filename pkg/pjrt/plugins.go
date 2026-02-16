@@ -148,6 +148,12 @@ func (p *Plugin) Attributes() NamedValuesMap {
 	return p.attributes
 }
 
+// IsCUDA attempts to guess if the plugin is based on NVIDIA CUDA.
+// It's not perfect.
+func (p *Plugin) IsCUDA() bool {
+	return isCuda(p.name)
+}
+
 // String implements fmt.Stringer. It returns the platform and version of the plugin.
 func (p *Plugin) String() string {
 	major, minor := p.Version()
