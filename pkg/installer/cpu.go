@@ -152,22 +152,64 @@ func CPUInstall(platform, version, installPath string, useCache bool, verbosity 
 		defer func() { ReportError(os.Remove(downloadedFile)) }()
 	}
 
-	// Extract files
+	// Extract files to a temporary directory first, then atomically move them into
+	// the install path. This prevents concurrent goroutines from dlopen-ing a
+	// partially-written .so file (which causes SIGBUS).
+	tmpExtractDir, err := os.MkdirTemp(installPath, ".extracting-")
+	if err != nil {
+		return errors.Wrap(err, "failed to create temporary extraction directory")
+	}
+	defer func() { _ = os.RemoveAll(tmpExtractDir) }()
+
 	if verbosity != Quiet {
 		fmt.Printf("\r- Extracting files in %s to %s%s", downloadedFile, installPath, eolSeq)
 	}
-	var extractedFiles []string
+	var tmpExtractedFiles []string
 	if strings.HasSuffix(downloadedFile, ".zip") {
-		extractedFiles, err = Unzip(downloadedFile, installPath)
+		tmpExtractedFiles, err = Unzip(downloadedFile, tmpExtractDir)
 	} else {
-		extractedFiles, err = Untar(downloadedFile, installPath)
+		tmpExtractedFiles, err = Untar(downloadedFile, tmpExtractDir)
 	}
 	if err != nil {
 		return err
 	}
-	if len(extractedFiles) == 0 {
+	if len(tmpExtractedFiles) == 0 {
 		return errors.Errorf("failed to extract files from %s", downloadedFile)
 	}
+
+	// Move extracted files atomically from the temp directory to the install path.
+	// os.Rename is atomic on the same filesystem, so the plugin .so is never
+	// visible in a partially-written state.
+	extractedFiles := make([]string, 0, len(tmpExtractedFiles))
+	for _, tmpFile := range tmpExtractedFiles {
+		relPath, err := filepath.Rel(tmpExtractDir, tmpFile)
+		if err != nil {
+			return errors.Wrapf(err, "failed to compute relative path for %s", tmpFile)
+		}
+		finalPath := filepath.Join(installPath, relPath)
+
+		info, err := os.Lstat(tmpFile)
+		if err != nil {
+			return errors.Wrapf(err, "failed to stat extracted file %s", tmpFile)
+		}
+		if info.IsDir() {
+			if err := os.MkdirAll(finalPath, 0755); err != nil {
+				return errors.Wrapf(err, "failed to create directory %s", finalPath)
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(finalPath), 0755); err != nil {
+			return errors.Wrapf(err, "failed to create parent directory for %s", finalPath)
+		}
+		// Remove existing file so Rename doesn't fail on some platforms.
+		_ = os.Remove(finalPath)
+		if err := os.Rename(tmpFile, finalPath); err != nil {
+			return errors.Wrapf(err, "failed to move %s to %s", tmpFile, finalPath)
+		}
+		extractedFiles = append(extractedFiles, finalPath)
+	}
+
 	isLinked := false
 	if verbosity == Verbose {
 		fmt.Printf("- Extracted %d file(s):\n", len(extractedFiles))
