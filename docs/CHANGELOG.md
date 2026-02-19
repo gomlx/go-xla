@@ -1,6 +1,9 @@
 # Next: Dynamic Shapes (thx @ajroetker); added `Call()`; Quantized shapes;
 
-- Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+- `go.mod`: updated to Go 1.25: needed for `synctest`.
+
+## StableHLO
+
 - Added `Call()` op (thx @ajroetker)
 - Dynamic Shapes (thx @ajroetker) -- with and without dynamic bounds.
   - Added `DimensionBounds` and `EncodeBounds` fields to `Shape` struct
@@ -11,8 +14,14 @@
   - Add i2, i4, ui2 and ui4 DTypes.
   - Add UniformQuantize() and UniformDequantize() ops.
   - Add Value.WithOutputElementType() to allow change of quantization parameters for operations.
+- Functions:
+  - Ops choose the "innermost" scope of their operands -- meaning they are added the closure functions if they are operating on a value that is local to the closure.
 
-- Ops choose the "innermost" scope of their operands -- meaning they are added the closure functions if they are operating on a value that is local to the closure.
+## PJRT
+
+- Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+- Installation: 
+  - prevent race condition of concurrent (auto-)installations (using flock, so it works cross-processes).
 
 # v0.1.4
 

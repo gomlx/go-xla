@@ -1,10 +1,9 @@
 module github.com/gomlx/go-xla
 
-go 1.24.3
-
-toolchain go1.24.6
+go 1.25
 
 require (
+	github.com/gofrs/flock v0.13.0
 	github.com/janpfeifer/go-benchmarks v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/x448/float16 v0.8.4
@@ -18,7 +17,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/pascaldekloe/name v1.0.0 // indirect
 	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 var CPUSupportedPlatforms = []string{
@@ -29,19 +30,35 @@ func init() {
 
 // CPUAutoInstall installs the latest version of the CPU PJRT if not yet installed.
 // goxlaInstallPath is expected to be a "lib/go-xla" directory, under which the PJRT plugin is installed.
-func CPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) error {
+func CPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) (returnErr error) {
 	version := utils.DefaultCPUVersion
 	extension := "so"
 	if runtime.GOOS == "windows" {
 		extension = "dll"
 	}
 	pjrtPluginPath := path.Join(goxlaInstallPath, fmt.Sprintf("pjrt_c_api_cpu_%s_plugin.%s", version, extension))
-	_, err := os.Stat(pjrtPluginPath)
-	if err == nil {
-		// Already installed.
+	isInstalled, fLock, err := checkInstallOrFileLock(pjrtPluginPath)
+	if err != nil {
+		return err
+	}
+	if isInstalled {
 		return nil
 	}
 
+	// We got the lock: makes sure we unlock it at the end and report any errors.
+	defer func() {
+		errLock := fLock.Unlock()
+		if errLock != nil {
+			if returnErr == nil {
+				returnErr = errLock
+			} else {
+				// Log the error, continue with the next installer.
+				klog.Errorf("AutoInstall error: %+v\n", errLock)
+			}
+		}
+	}()
+
+	// Install the CPU PJRT plugin.
 	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 	return CPUInstall(platform, version, goxlaInstallPath, useCache, verbosity)
 }

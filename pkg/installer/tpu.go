@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 // HasTPU checks if a TPU is available on the system.
@@ -41,19 +42,38 @@ const TPUPJRTPluginName = "pjrt_c_api_tpu_plugin.so"
 
 // TPUAutoInstall installs the TPU PJRT if it is available on the system.
 // goxlaInstallPath is expected to be a "lib/go-xla" directory, under which the PJRT plugin is installed.
-func TPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) error {
+func TPUAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) (returnErr error) {
 	// Only support Linux/amd64 for TPU installation.
 	if runtime.GOOS != "linux" {
-		return nil
-	}
-	pjrtPluginPath := path.Join(goxlaInstallPath, TPUPJRTPluginName)
-	if _, err := os.Stat(pjrtPluginPath); err == nil {
-		// Already installed.
 		return nil
 	}
 	if !HasTPU() {
 		return nil
 	}
+
+	pjrtPluginPath := path.Join(goxlaInstallPath, TPUPJRTPluginName)
+	isInstalled, fLock, err := checkInstallOrFileLock(pjrtPluginPath)
+	if err != nil {
+		return err
+	}
+	if isInstalled {
+		return nil
+	}
+
+	// We got the lock: makes sure we unlock it at the end and report any errors.
+	defer func() {
+		errLock := fLock.Unlock()
+		if errLock != nil {
+			if returnErr == nil {
+				returnErr = errLock
+			} else {
+				// Log the error, continue with the next installer.
+				klog.Errorf("AutoInstall error: %+v\n", errLock)
+			}
+		}
+	}()
+
+	// Install it:
 	return TPUInstall("tpu", "latest", goxlaInstallPath, useCache, verbosity)
 }
 
@@ -109,9 +129,15 @@ func TPUInstall(plugin, version, installPath string, useCache bool, verbosity Ve
 	if !fileCached {
 		defer func() { ReportError(os.Remove(downloadedJaxPJRTWHL)) }()
 	}
-	err = ExtractFileFromZip(downloadedJaxPJRTWHL, "libtpu.so", pjrtOutputPath)
+	pjrtTmpPath := pjrtOutputPath + ".tmp"
+	err = ExtractFileFromZip(downloadedJaxPJRTWHL, "libtpu.so", pjrtTmpPath)
 	if err != nil {
+		_ = os.Remove(pjrtTmpPath)
 		return errors.Wrapf(err, "failed to extract TPU PJRT file from %q wheel", packageName)
+	}
+	if err := os.Rename(pjrtTmpPath, pjrtOutputPath); err != nil {
+		_ = os.Remove(pjrtTmpPath)
+		return errors.Wrapf(err, "failed to rename %q to %q", pjrtTmpPath, pjrtOutputPath)
 	}
 
 	if verbosity == Verbose {
