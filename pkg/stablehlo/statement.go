@@ -111,7 +111,7 @@ func (s *Statement) Write(writer io.Writer, indentation string) error {
 		if i > 0 {
 			w(", ")
 		}
-		w(input.shape.ToStableHLO())
+		w("%s", input.shape.ToStableHLO())
 	}
 	w(")")
 	w(" -> ")
@@ -126,7 +126,7 @@ func (s *Statement) Write(writer io.Writer, indentation string) error {
 			if i > 0 {
 				w(", ")
 			}
-			w(output.shape.ToStableHLO())
+			w("%s", output.shape.ToStableHLO())
 		}
 		if len(s.Outputs) > 1 {
 			w(")")

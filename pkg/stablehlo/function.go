@@ -478,7 +478,7 @@ func (fn *Function) Write(writer io.Writer, indentation string) error {
 			if i > 0 {
 				w(", ")
 			}
-			w(output.shape.ToStableHLO())
+			w("%s", output.shape.ToStableHLO())
 			writeAttributes(writer, indentation, output.Attributes, w)
 		}
 		if encloseOutputInParenthesis {
