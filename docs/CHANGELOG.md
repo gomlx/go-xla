@@ -20,6 +20,7 @@
 ## PJRT
 
 - Updated `DefaultCPUVersion` to "v0.83.4" (`pjrt-cpu-binaries` version)
+- Added `Client.IsCUDA()` method.
 - Installation: 
   - prevent race condition of concurrent (auto-)installations (using flock, so it works cross-processes).
 
