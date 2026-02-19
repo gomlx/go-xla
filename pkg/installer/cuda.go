@@ -18,6 +18,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const NVIDIAPJRTPluginFileName = "pjrt_c_api_cuda_plugin.so"
+
 // HasNvidiaGPU tries to guess if there is an actual Nvidia GPU installed (as opposed to only the drivers/PJRT
 // file installed, but no actual hardware).
 // It does that by checking for the presence of the device files in /dev/nvidia*.
@@ -53,21 +55,39 @@ func init() {
 //
 // goxlaInstallPath is expected to be a "lib/go-xla" directory, under which the nvidia/ subdirectory will be (is already)
 // created, and the CUDA PJRT plugin is installed.
-func CudaAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) error {
+func CudaAutoInstall(goxlaInstallPath string, useCache bool, verbosity VerbosityLevel) (returnErr error) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		// Only supported on Linux/amd64.
-		return nil
-	}
-	pjrtPluginPath := path.Join(goxlaInstallPath, "nvidia", "pjrt_c_api_cuda_plugin.so")
-	_, err := os.Stat(pjrtPluginPath)
-	if err == nil {
-		// Already installed.
 		return nil
 	}
 	if !HasNvidiaGPU() {
 		// No need to install anything.
 		return nil
 	}
+
+	pjrtPluginPath := path.Join(goxlaInstallPath, "nvidia", NVIDIAPJRTPluginFileName)
+	isInstalled, fLock, err := checkInstallOrFileLock(pjrtPluginPath)
+	if err != nil {
+		return err
+	}
+	if isInstalled {
+		return nil
+	}
+
+	// We got the lock: makes sure we unlock it at the end and report any errors.
+	defer func() {
+		errLock := fLock.Unlock()
+		if errLock != nil {
+			if returnErr == nil {
+				returnErr = errLock
+			} else {
+				// Log the error, continue with the next installer.
+				klog.Errorf("AutoInstall error: %+v\n", errLock)
+			}
+		}
+	}()
+
+	// Install it:
 	return CudaInstall("cuda13", "latest", goxlaInstallPath, useCache, verbosity)
 }
 
@@ -100,16 +120,17 @@ func CudaInstall(plugin, version, installPath string, useCache bool, verbosity V
 		return errors.Wrapf(err, "failed to remove existing nvidia libraries directory %s", nvidiaSubdir)
 	}
 
+	// Install required Nvidia libraries.
+	if err := CudaInstallNvidiaLibraries(plugin, version, nvidiaSubdir, useCache, verbosity); err != nil {
+		return err
+	}
+
 	// Install PJRT plugin.
 	version, err = CudaInstallPJRT(plugin, version, nvidiaSubdir, useCache, verbosity)
 	if err != nil {
 		return err
 	}
 
-	// Pinstall required Nvidia libraries.
-	if err := CudaInstallNvidiaLibraries(plugin, version, nvidiaSubdir, useCache, verbosity); err != nil {
-		return err
-	}
 	cudaVersion := "13"
 	if plugin == "cuda12" {
 		cudaVersion = "12"
@@ -140,7 +161,7 @@ func CudaInstallPJRT(plugin, version, installPath string, useCache bool, verbosi
 	if err := os.MkdirAll(installPath, 0755); err != nil {
 		return "", errors.Wrapf(err, "failed to create PJRT install directory in %s", installPath)
 	}
-	pjrtOutputPath := path.Join(installPath, "pjrt_c_api_cuda_plugin.so")
+	pjrtOutputPath := path.Join(installPath, NVIDIAPJRTPluginFileName)
 
 	// Get CUDA PJRT wheel from pypi.org
 	info, packageName, err := CudaGetPJRTPipInfo(plugin)
@@ -181,9 +202,15 @@ func CudaInstallPJRT(plugin, version, installPath string, useCache bool, verbosi
 	if !fileCached {
 		defer func() { ReportError(os.Remove(downloadedJaxPJRTWHL)) }()
 	}
-	err = ExtractFileFromZip(downloadedJaxPJRTWHL, "xla_cuda_plugin.so", pjrtOutputPath)
+	pjrtTmpPath := pjrtOutputPath + ".tmp"
+	err = ExtractFileFromZip(downloadedJaxPJRTWHL, "xla_cuda_plugin.so", pjrtTmpPath)
 	if err != nil {
+		_ = os.Remove(pjrtTmpPath)
 		return "", errors.Wrapf(err, "failed to extract CUDA PJRT file from %q wheel", packageName)
+	}
+	if err := os.Rename(pjrtTmpPath, pjrtOutputPath); err != nil {
+		_ = os.Remove(pjrtTmpPath)
+		return "", errors.Wrapf(err, "failed to rename %q to %q", pjrtTmpPath, pjrtOutputPath)
 	}
 	switch verbosity {
 	case Verbose:
