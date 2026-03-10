@@ -41,7 +41,7 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Diagnostic: Check CPU Features
+      - name: Diagnostic Check CPU Features
         run: |
           # Check if the runner CPU actually supports AVX-512
           # If this returns nothing, the AVX-512 kernels will crash during DLL init
