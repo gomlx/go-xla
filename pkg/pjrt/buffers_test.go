@@ -426,14 +426,25 @@ func TestBufferBitcast(t *testing.T) {
 	requireNoError(t, err)
 	assertEqualSlice(t, []int{2}, dims)
 
+	// Bitcast back to uint8:
+	bufUint8, err := bufInt4.Bitcast(dtypes.Uint8)
+	requireNoError(t, err)
+	dtype, err = bufUint8.DType()
+	requireNoError(t, err)
+	assertEqual(t, dtypes.Uint8, dtype)
+
+	dims, err = bufUint8.Dimensions()
+	requireNoError(t, err)
+	assertEqualSlice(t, []int{}, dims)
+
 	// To check the data, we use ToHost.
 	// ToHost for Int4 will return the packed bytes.
-	size, err := bufInt4.Size()
+	size, err := bufUint8.Size()
 	requireNoError(t, err)
 	assertEqual(t, 1, size) // 2 * 4 bits = 8 bits = 1 byte.
-
 	data := make([]byte, 1)
-	err = bufInt4.ToHost(data)
+	err = bufUint8.ToHost(data)
 	requireNoError(t, err)
+	fmt.Printf("\t- data=[0x%X]\n", data)
 	assertEqual(t, val, data[0])
 }
