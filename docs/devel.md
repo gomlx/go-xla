@@ -2,8 +2,8 @@
 
 ## Package `pjrt`
 
-The package tries to be independent of installation of any external compiled library -- including the other `xlabuilder` package.
-It still depends on CGO and system libraries (`-ldl` for dynamic loading).
+Lots is generated automatically `go generate ./...` from XLA's `pjrt_c_api.h` and its protos: you need to clone [github.com/openxla/xla](https://github.com/openxla/xla)
+locally and set set the environment varialbe `XLA_SRC` to the path where XLA is cloned.
 
 It includes a copy of the following files:
 
@@ -17,28 +17,13 @@ To generate the latest proto Go programs (see [tutorial](https://protobuf.dev/ge
 * Set XLA_SRC to a clone of the `github.com/openxla/xla` repository.
 * Go to the `protos` sub-package and do `go generate .` See `cmd/protoc_xla_prots/main.go` for details.
 
-## Package `xlabuilder`
-
-The package needs to link XLA's XlaBuilder library (and some associated tools). To achieve that, we create in the
-subdirectory `c/` a C/C++ project that builds the `libgomlx_xlabuilder.so` file and associated header files. They
-need to be installed so that `xlabuilder` package compile.
-
-The plan is to have in the release a binary distribution of the required libraries. It's very inconvenient ... but
-XLA is not easy to build (Bazel is complex and finicky) so trying to integrate everything would be tricky.
-
-TODO: investigate distributing all headers and `libgomlx_xlabuilder.so` in the repository so it's fetched with Go,
-and the user won't need to do anything.
-
 ## PJRT Plugins
 
 * A prebuilt CUDA (GPU) plugin is  [distributed with Jax (pypi wheel)](https://pypi.org/project/jax-cuda12-pjrt/) (albeit with a [non-standard naming](https://docs.google.com/document/d/1Qdptisz1tUPGn1qFAVgCV2omnfjN01zoQPwKLdlizas/edit#heading=h.l9ksu371j9wz))
 * There is a prebuilt Apple Arm64+GPU metal plugin in [the jax-metal (pypi wheel)](https://pypi.org/project/jax-metal/) used by the installation script.
   It is lacking support for some functionality (including `float64`).
-* The CPU plugin can be built from the XLA sources: after running `configure.py`, build `bazel build //xla/pjrt/c:pjrt_c_api_cpu_plugin.so`.
-  * On a successful build, you can find the PJRT CPU plugin in `bazel-bin/xla/pjrt/c/pjrt_c_api_cpu_plugin.so`
-  * Using GCC or CLANG won't matter much in terms of performance, because we are only building the JIT-compiler. Both
-    will JIT-compile the computation graph (using LLVM) to the same code in the end. I tested, just to be sure, using
-    the GNN example, both has the same median training step speed.
+* The CPU plugin is built in repo [github.com/gomlx/pjrt-cpu-binaries](https://github.com/gomlx/pjrt-cpu-binaries), and the installer will download that
+  the user's local library (`.local/lib/go-xla` in Linux, and the equivalent in Darwin/Windows).
 
 ## Updating `coverage.out` file
 
