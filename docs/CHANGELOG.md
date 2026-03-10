@@ -25,6 +25,7 @@
 - Installation: 
   - prevent race condition of concurrent (auto-)installations (using flock, so it works cross-processes).
 - Bumped XLA's `pjrt_c_api.h` to version 0.98
+- Added `Buffer.Bitcast`.
 
 # v0.1.4
 

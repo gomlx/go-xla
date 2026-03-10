@@ -13,7 +13,9 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/gomlx/go-xla/internal/shapeinference"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -392,4 +394,61 @@ func (b *Buffer) CopyToDevice(dstDevice *Device) (*Buffer, error) {
 
 	newBuff := newBuffer(b.wrapper.client, args.dst_buffer)
 	return newBuff, nil
+}
+
+// Bitcast bitcasts the buffer to a new type, following the same expansion/contraction rules
+// as used by shapeinference.BitcastConvert to figure out the output shape.
+func (b *Buffer) Bitcast(dtype dtypes.DType) (*Buffer, error) {
+	if err := b.Check(); err != nil {
+		return nil, err
+	}
+	plugin, err := b.getPlugin()
+	if err != nil {
+		return nil, err
+	}
+
+	currentDType, err := b.DType()
+	if err != nil {
+		return nil, err
+	}
+	currentDims, err := b.Dimensions()
+	if err != nil {
+		return nil, err
+	}
+
+	currentShape := shapes.Make(currentDType, currentDims...)
+	targetShape, err := shapeinference.BitcastConvert(currentShape, dtype)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to determine target shape for bitcast from %s to %s", currentShape, dtype)
+	}
+
+	defer runtime.KeepAlive(b)
+	arena := plugin.getDefaultArena()
+	defer plugin.returnArena(arena)
+
+	args := arenaAlloc[C.PJRT_Buffer_Bitcast_Args](arena)
+	args.struct_size = C.PJRT_Buffer_Bitcast_Args_STRUCT_SIZE
+	args.buffer = b.wrapper.c
+	args.element_type = C.PJRT_Buffer_Type(dtype)
+
+	if len(targetShape.Dimensions) > 0 {
+		cDims := arenaAllocSlice[C.int64_t](arena, len(targetShape.Dimensions))
+		for i, dim := range targetShape.Dimensions {
+			cDims[i] = C.int64_t(dim)
+		}
+		args.dims = (*C.int64_t)(unsafe.Pointer(&cDims[0]))
+		args.num_dims = C.size_t(len(targetShape.Dimensions))
+	}
+	args.device_layout = nil // use default layout
+
+	if plugin.api.PJRT_Buffer_Bitcast == nil {
+		return nil, errors.Errorf("PJRT_Buffer_Bitcast is not supported by the current plugin version %v", plugin)
+	}
+
+	err = toError(plugin, C.call_PJRT_Buffer_Bitcast(plugin.api, args))
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to call PJRT_Buffer_Bitcast")
+	}
+
+	return newBuffer(b.wrapper.client, args.out_buffer), nil
 }
