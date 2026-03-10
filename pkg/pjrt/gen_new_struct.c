@@ -107,6 +107,22 @@ PJRT_Event_OnReady_Args* new_PJRT_Event_OnReady_Args() {
 	return p;
 }
 
+// new_PJRT_Event_Create_Args allocates a zero-initialized C.PJRT_Event_Create_Args structure, sets its .struct_size, and returns it.
+PJRT_Event_Create_Args* new_PJRT_Event_Create_Args() {
+	PJRT_Event_Create_Args* p = malloc(sizeof(PJRT_Event_Create_Args));
+	memset(p, 0, sizeof(PJRT_Event_Create_Args));
+	p->struct_size = PJRT_Event_Create_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Event_Set_Args allocates a zero-initialized C.PJRT_Event_Set_Args structure, sets its .struct_size, and returns it.
+PJRT_Event_Set_Args* new_PJRT_Event_Set_Args() {
+	PJRT_Event_Set_Args* p = malloc(sizeof(PJRT_Event_Set_Args));
+	memset(p, 0, sizeof(PJRT_Event_Set_Args));
+	p->struct_size = PJRT_Event_Set_Args_STRUCT_SIZE;
+	return p;
+}
+
 // new_PJRT_KeyValueGetCallback_Args allocates a zero-initialized C.PJRT_KeyValueGetCallback_Args structure, sets its .struct_size, and returns it.
 PJRT_KeyValueGetCallback_Args* new_PJRT_KeyValueGetCallback_Args() {
 	PJRT_KeyValueGetCallback_Args* p = malloc(sizeof(PJRT_KeyValueGetCallback_Args));
@@ -248,6 +264,14 @@ PJRT_Client_Compile_Args* new_PJRT_Client_Compile_Args() {
 	PJRT_Client_Compile_Args* p = malloc(sizeof(PJRT_Client_Compile_Args));
 	memset(p, 0, sizeof(PJRT_Client_Compile_Args));
 	p->struct_size = PJRT_Client_Compile_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Client_Load_Args allocates a zero-initialized C.PJRT_Client_Load_Args structure, sets its .struct_size, and returns it.
+PJRT_Client_Load_Args* new_PJRT_Client_Load_Args() {
+	PJRT_Client_Load_Args* p = malloc(sizeof(PJRT_Client_Load_Args));
+	memset(p, 0, sizeof(PJRT_Client_Load_Args));
+	p->struct_size = PJRT_Client_Load_Args_STRUCT_SIZE;
 	return p;
 }
 
@@ -439,6 +463,7 @@ PJRT_DeviceDescription_ToString_Args* new_PJRT_DeviceDescription_ToString_Args()
 }
 
 // new_PJRT_Device_GetDescription_Args allocates a zero-initialized C.PJRT_Device_GetDescription_Args structure, sets its .struct_size, and returns it.
+// --------------------------------- Devices -----------------------------------
 PJRT_Device_GetDescription_Args* new_PJRT_Device_GetDescription_Args() {
 	PJRT_Device_GetDescription_Args* p = malloc(sizeof(PJRT_Device_GetDescription_Args));
 	memset(p, 0, sizeof(PJRT_Device_GetDescription_Args));
@@ -483,6 +508,38 @@ PJRT_Device_MemoryStats_Args* new_PJRT_Device_MemoryStats_Args() {
 	PJRT_Device_MemoryStats_Args* p = malloc(sizeof(PJRT_Device_MemoryStats_Args));
 	memset(p, 0, sizeof(PJRT_Device_MemoryStats_Args));
 	p->struct_size = PJRT_Device_MemoryStats_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Device_PoisonExecution_Args allocates a zero-initialized C.PJRT_Device_PoisonExecution_Args structure, sets its .struct_size, and returns it.
+PJRT_Device_PoisonExecution_Args* new_PJRT_Device_PoisonExecution_Args() {
+	PJRT_Device_PoisonExecution_Args* p = malloc(sizeof(PJRT_Device_PoisonExecution_Args));
+	memset(p, 0, sizeof(PJRT_Device_PoisonExecution_Args));
+	p->struct_size = PJRT_Device_PoisonExecution_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Device_GetAttributes_Args allocates a zero-initialized C.PJRT_Device_GetAttributes_Args structure, sets its .struct_size, and returns it.
+PJRT_Device_GetAttributes_Args* new_PJRT_Device_GetAttributes_Args() {
+	PJRT_Device_GetAttributes_Args* p = malloc(sizeof(PJRT_Device_GetAttributes_Args));
+	memset(p, 0, sizeof(PJRT_Device_GetAttributes_Args));
+	p->struct_size = PJRT_Device_GetAttributes_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Device_CreateAsyncTrackingEvent_Args allocates a zero-initialized C.PJRT_Device_CreateAsyncTrackingEvent_Args structure, sets its .struct_size, and returns it.
+PJRT_Device_CreateAsyncTrackingEvent_Args* new_PJRT_Device_CreateAsyncTrackingEvent_Args() {
+	PJRT_Device_CreateAsyncTrackingEvent_Args* p = malloc(sizeof(PJRT_Device_CreateAsyncTrackingEvent_Args));
+	memset(p, 0, sizeof(PJRT_Device_CreateAsyncTrackingEvent_Args));
+	p->struct_size = PJRT_Device_CreateAsyncTrackingEvent_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_AsyncTrackingEvent_Destroy_Args allocates a zero-initialized C.PJRT_AsyncTrackingEvent_Destroy_Args structure, sets its .struct_size, and returns it.
+PJRT_AsyncTrackingEvent_Destroy_Args* new_PJRT_AsyncTrackingEvent_Destroy_Args() {
+	PJRT_AsyncTrackingEvent_Destroy_Args* p = malloc(sizeof(PJRT_AsyncTrackingEvent_Destroy_Args));
+	memset(p, 0, sizeof(PJRT_AsyncTrackingEvent_Destroy_Args));
+	p->struct_size = PJRT_AsyncTrackingEvent_Destroy_Args_STRUCT_SIZE;
 	return p;
 }
 
@@ -615,11 +672,11 @@ PJRT_LoadedExecutable_AddressableDevices_Args* new_PJRT_LoadedExecutable_Address
 	return p;
 }
 
-// new_PJRT_Executable_OptimizedProgram_Args allocates a zero-initialized C.PJRT_Executable_OptimizedProgram_Args structure, sets its .struct_size, and returns it.
-PJRT_Executable_OptimizedProgram_Args* new_PJRT_Executable_OptimizedProgram_Args() {
-	PJRT_Executable_OptimizedProgram_Args* p = malloc(sizeof(PJRT_Executable_OptimizedProgram_Args));
-	memset(p, 0, sizeof(PJRT_Executable_OptimizedProgram_Args));
-	p->struct_size = PJRT_Executable_OptimizedProgram_Args_STRUCT_SIZE;
+// new_PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args allocates a zero-initialized C.PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args structure, sets its .struct_size, and returns it.
+PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args* new_PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args() {
+	PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args* p = malloc(sizeof(PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args));
+	memset(p, 0, sizeof(PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args));
+	p->struct_size = PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args_STRUCT_SIZE;
 	return p;
 }
 
@@ -731,6 +788,14 @@ PJRT_Executable_Serialize_Args* new_PJRT_Executable_Serialize_Args() {
 	return p;
 }
 
+// new_PJRT_Executable_GetCompileOptions_Args allocates a zero-initialized C.PJRT_Executable_GetCompileOptions_Args structure, sets its .struct_size, and returns it.
+PJRT_Executable_GetCompileOptions_Args* new_PJRT_Executable_GetCompileOptions_Args() {
+	PJRT_Executable_GetCompileOptions_Args* p = malloc(sizeof(PJRT_Executable_GetCompileOptions_Args));
+	memset(p, 0, sizeof(PJRT_Executable_GetCompileOptions_Args));
+	p->struct_size = PJRT_Executable_GetCompileOptions_Args_STRUCT_SIZE;
+	return p;
+}
+
 // new_PJRT_Executable_DeserializeAndLoad_Args allocates a zero-initialized C.PJRT_Executable_DeserializeAndLoad_Args structure, sets its .struct_size, and returns it.
 PJRT_Executable_DeserializeAndLoad_Args* new_PJRT_Executable_DeserializeAndLoad_Args() {
 	PJRT_Executable_DeserializeAndLoad_Args* p = malloc(sizeof(PJRT_Executable_DeserializeAndLoad_Args));
@@ -835,6 +900,22 @@ PJRT_Buffer_CopyRawToHost_Args* new_PJRT_Buffer_CopyRawToHost_Args() {
 	return p;
 }
 
+// new_PJRT_Buffer_CopyRawToHostFuture_Callback_Args allocates a zero-initialized C.PJRT_Buffer_CopyRawToHostFuture_Callback_Args structure, sets its .struct_size, and returns it.
+PJRT_Buffer_CopyRawToHostFuture_Callback_Args* new_PJRT_Buffer_CopyRawToHostFuture_Callback_Args() {
+	PJRT_Buffer_CopyRawToHostFuture_Callback_Args* p = malloc(sizeof(PJRT_Buffer_CopyRawToHostFuture_Callback_Args));
+	memset(p, 0, sizeof(PJRT_Buffer_CopyRawToHostFuture_Callback_Args));
+	p->struct_size = PJRT_Buffer_CopyRawToHostFuture_Callback_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Buffer_CopyRawToHostFuture_Args allocates a zero-initialized C.PJRT_Buffer_CopyRawToHostFuture_Args structure, sets its .struct_size, and returns it.
+PJRT_Buffer_CopyRawToHostFuture_Args* new_PJRT_Buffer_CopyRawToHostFuture_Args() {
+	PJRT_Buffer_CopyRawToHostFuture_Args* p = malloc(sizeof(PJRT_Buffer_CopyRawToHostFuture_Args));
+	memset(p, 0, sizeof(PJRT_Buffer_CopyRawToHostFuture_Args));
+	p->struct_size = PJRT_Buffer_CopyRawToHostFuture_Args_STRUCT_SIZE;
+	return p;
+}
+
 // new_PJRT_Buffer_CopyToDevice_Args allocates a zero-initialized C.PJRT_Buffer_CopyToDevice_Args structure, sets its .struct_size, and returns it.
 PJRT_Buffer_CopyToDevice_Args* new_PJRT_Buffer_CopyToDevice_Args() {
 	PJRT_Buffer_CopyToDevice_Args* p = malloc(sizeof(PJRT_Buffer_CopyToDevice_Args));
@@ -848,6 +929,14 @@ PJRT_Buffer_CopyToMemory_Args* new_PJRT_Buffer_CopyToMemory_Args() {
 	PJRT_Buffer_CopyToMemory_Args* p = malloc(sizeof(PJRT_Buffer_CopyToMemory_Args));
 	memset(p, 0, sizeof(PJRT_Buffer_CopyToMemory_Args));
 	p->struct_size = PJRT_Buffer_CopyToMemory_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Buffer_Bitcast_Args allocates a zero-initialized C.PJRT_Buffer_Bitcast_Args structure, sets its .struct_size, and returns it.
+PJRT_Buffer_Bitcast_Args* new_PJRT_Buffer_Bitcast_Args() {
+	PJRT_Buffer_Bitcast_Args* p = malloc(sizeof(PJRT_Buffer_Bitcast_Args));
+	memset(p, 0, sizeof(PJRT_Buffer_Bitcast_Args));
+	p->struct_size = PJRT_Buffer_Bitcast_Args_STRUCT_SIZE;
 	return p;
 }
 
@@ -912,6 +1001,22 @@ PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args* new_PJRT_Buffer_OpaqueDeviceMemo
 	PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args* p = malloc(sizeof(PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args));
 	memset(p, 0, sizeof(PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args));
 	p->struct_size = PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Buffer_DonateWithControlDependency_Callback_Args allocates a zero-initialized C.PJRT_Buffer_DonateWithControlDependency_Callback_Args structure, sets its .struct_size, and returns it.
+PJRT_Buffer_DonateWithControlDependency_Callback_Args* new_PJRT_Buffer_DonateWithControlDependency_Callback_Args() {
+	PJRT_Buffer_DonateWithControlDependency_Callback_Args* p = malloc(sizeof(PJRT_Buffer_DonateWithControlDependency_Callback_Args));
+	memset(p, 0, sizeof(PJRT_Buffer_DonateWithControlDependency_Callback_Args));
+	p->struct_size = PJRT_Buffer_DonateWithControlDependency_Callback_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_Buffer_DonateWithControlDependency_Args allocates a zero-initialized C.PJRT_Buffer_DonateWithControlDependency_Args structure, sets its .struct_size, and returns it.
+PJRT_Buffer_DonateWithControlDependency_Args* new_PJRT_Buffer_DonateWithControlDependency_Args() {
+	PJRT_Buffer_DonateWithControlDependency_Args* p = malloc(sizeof(PJRT_Buffer_DonateWithControlDependency_Args));
+	memset(p, 0, sizeof(PJRT_Buffer_DonateWithControlDependency_Args));
+	p->struct_size = PJRT_Buffer_DonateWithControlDependency_Args_STRUCT_SIZE;
 	return p;
 }
 

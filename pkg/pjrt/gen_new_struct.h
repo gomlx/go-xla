@@ -49,6 +49,12 @@ extern PJRT_Event_Await_Args* new_PJRT_Event_Await_Args();
 // new_PJRT_Event_OnReady_Args allocates a zero-initialized C.PJRT_Event_OnReady_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Event_OnReady_Args* new_PJRT_Event_OnReady_Args();
 
+// new_PJRT_Event_Create_Args allocates a zero-initialized C.PJRT_Event_Create_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Event_Create_Args* new_PJRT_Event_Create_Args();
+
+// new_PJRT_Event_Set_Args allocates a zero-initialized C.PJRT_Event_Set_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Event_Set_Args* new_PJRT_Event_Set_Args();
+
 // new_PJRT_KeyValueGetCallback_Args allocates a zero-initialized C.PJRT_KeyValueGetCallback_Args structure, sets its .struct_size, and returns it.
 extern PJRT_KeyValueGetCallback_Args* new_PJRT_KeyValueGetCallback_Args();
 
@@ -104,6 +110,9 @@ extern PJRT_Program* new_PJRT_Program();
 
 // new_PJRT_Client_Compile_Args allocates a zero-initialized C.PJRT_Client_Compile_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Client_Compile_Args* new_PJRT_Client_Compile_Args();
+
+// new_PJRT_Client_Load_Args allocates a zero-initialized C.PJRT_Client_Load_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Client_Load_Args* new_PJRT_Client_Load_Args();
 
 // new_PJRT_Client_DefaultDeviceAssignment_Args allocates a zero-initialized C.PJRT_Client_DefaultDeviceAssignment_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Client_DefaultDeviceAssignment_Args* new_PJRT_Client_DefaultDeviceAssignment_Args();
@@ -178,6 +187,7 @@ extern PJRT_DeviceDescription_DebugString_Args* new_PJRT_DeviceDescription_Debug
 extern PJRT_DeviceDescription_ToString_Args* new_PJRT_DeviceDescription_ToString_Args();
 
 // new_PJRT_Device_GetDescription_Args allocates a zero-initialized C.PJRT_Device_GetDescription_Args structure, sets its .struct_size, and returns it.
+// --------------------------------- Devices -----------------------------------
 extern PJRT_Device_GetDescription_Args* new_PJRT_Device_GetDescription_Args();
 
 // new_PJRT_Device_IsAddressable_Args allocates a zero-initialized C.PJRT_Device_IsAddressable_Args structure, sets its .struct_size, and returns it.
@@ -194,6 +204,18 @@ extern PJRT_Device_DefaultMemory_Args* new_PJRT_Device_DefaultMemory_Args();
 
 // new_PJRT_Device_MemoryStats_Args allocates a zero-initialized C.PJRT_Device_MemoryStats_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Device_MemoryStats_Args* new_PJRT_Device_MemoryStats_Args();
+
+// new_PJRT_Device_PoisonExecution_Args allocates a zero-initialized C.PJRT_Device_PoisonExecution_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Device_PoisonExecution_Args* new_PJRT_Device_PoisonExecution_Args();
+
+// new_PJRT_Device_GetAttributes_Args allocates a zero-initialized C.PJRT_Device_GetAttributes_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Device_GetAttributes_Args* new_PJRT_Device_GetAttributes_Args();
+
+// new_PJRT_Device_CreateAsyncTrackingEvent_Args allocates a zero-initialized C.PJRT_Device_CreateAsyncTrackingEvent_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Device_CreateAsyncTrackingEvent_Args* new_PJRT_Device_CreateAsyncTrackingEvent_Args();
+
+// new_PJRT_AsyncTrackingEvent_Destroy_Args allocates a zero-initialized C.PJRT_AsyncTrackingEvent_Destroy_Args structure, sets its .struct_size, and returns it.
+extern PJRT_AsyncTrackingEvent_Destroy_Args* new_PJRT_AsyncTrackingEvent_Destroy_Args();
 
 // new_PJRT_Memory_Id_Args allocates a zero-initialized C.PJRT_Memory_Id_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Memory_Id_Args* new_PJRT_Memory_Id_Args();
@@ -244,8 +266,8 @@ extern PJRT_Executable_NumPartitions_Args* new_PJRT_Executable_NumPartitions_Arg
 // new_PJRT_LoadedExecutable_AddressableDevices_Args allocates a zero-initialized C.PJRT_LoadedExecutable_AddressableDevices_Args structure, sets its .struct_size, and returns it.
 extern PJRT_LoadedExecutable_AddressableDevices_Args* new_PJRT_LoadedExecutable_AddressableDevices_Args();
 
-// new_PJRT_Executable_OptimizedProgram_Args allocates a zero-initialized C.PJRT_Executable_OptimizedProgram_Args structure, sets its .struct_size, and returns it.
-extern PJRT_Executable_OptimizedProgram_Args* new_PJRT_Executable_OptimizedProgram_Args();
+// new_PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args allocates a zero-initialized C.PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args structure, sets its .struct_size, and returns it.
+extern PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args* new_PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args();
 
 // new_PJRT_LoadedExecutable_Delete_Args allocates a zero-initialized C.PJRT_LoadedExecutable_Delete_Args structure, sets its .struct_size, and returns it.
 extern PJRT_LoadedExecutable_Delete_Args* new_PJRT_LoadedExecutable_Delete_Args();
@@ -289,6 +311,9 @@ extern PJRT_Executable_OutputMemoryKinds_Args* new_PJRT_Executable_OutputMemoryK
 // new_PJRT_Executable_Serialize_Args allocates a zero-initialized C.PJRT_Executable_Serialize_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Executable_Serialize_Args* new_PJRT_Executable_Serialize_Args();
 
+// new_PJRT_Executable_GetCompileOptions_Args allocates a zero-initialized C.PJRT_Executable_GetCompileOptions_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Executable_GetCompileOptions_Args* new_PJRT_Executable_GetCompileOptions_Args();
+
 // new_PJRT_Executable_DeserializeAndLoad_Args allocates a zero-initialized C.PJRT_Executable_DeserializeAndLoad_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Executable_DeserializeAndLoad_Args* new_PJRT_Executable_DeserializeAndLoad_Args();
 
@@ -328,11 +353,20 @@ extern PJRT_Buffer_IsDeleted_Args* new_PJRT_Buffer_IsDeleted_Args();
 // new_PJRT_Buffer_CopyRawToHost_Args allocates a zero-initialized C.PJRT_Buffer_CopyRawToHost_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Buffer_CopyRawToHost_Args* new_PJRT_Buffer_CopyRawToHost_Args();
 
+// new_PJRT_Buffer_CopyRawToHostFuture_Callback_Args allocates a zero-initialized C.PJRT_Buffer_CopyRawToHostFuture_Callback_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Buffer_CopyRawToHostFuture_Callback_Args* new_PJRT_Buffer_CopyRawToHostFuture_Callback_Args();
+
+// new_PJRT_Buffer_CopyRawToHostFuture_Args allocates a zero-initialized C.PJRT_Buffer_CopyRawToHostFuture_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Buffer_CopyRawToHostFuture_Args* new_PJRT_Buffer_CopyRawToHostFuture_Args();
+
 // new_PJRT_Buffer_CopyToDevice_Args allocates a zero-initialized C.PJRT_Buffer_CopyToDevice_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Buffer_CopyToDevice_Args* new_PJRT_Buffer_CopyToDevice_Args();
 
 // new_PJRT_Buffer_CopyToMemory_Args allocates a zero-initialized C.PJRT_Buffer_CopyToMemory_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Buffer_CopyToMemory_Args* new_PJRT_Buffer_CopyToMemory_Args();
+
+// new_PJRT_Buffer_Bitcast_Args allocates a zero-initialized C.PJRT_Buffer_Bitcast_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Buffer_Bitcast_Args* new_PJRT_Buffer_Bitcast_Args();
 
 // new_PJRT_Buffer_IsOnCpu_Args allocates a zero-initialized C.PJRT_Buffer_IsOnCpu_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Buffer_IsOnCpu_Args* new_PJRT_Buffer_IsOnCpu_Args();
@@ -357,6 +391,12 @@ extern PJRT_Buffer_DecreaseExternalReferenceCount_Args* new_PJRT_Buffer_Decrease
 
 // new_PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args allocates a zero-initialized C.PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args* new_PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args();
+
+// new_PJRT_Buffer_DonateWithControlDependency_Callback_Args allocates a zero-initialized C.PJRT_Buffer_DonateWithControlDependency_Callback_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Buffer_DonateWithControlDependency_Callback_Args* new_PJRT_Buffer_DonateWithControlDependency_Callback_Args();
+
+// new_PJRT_Buffer_DonateWithControlDependency_Args allocates a zero-initialized C.PJRT_Buffer_DonateWithControlDependency_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Buffer_DonateWithControlDependency_Args* new_PJRT_Buffer_DonateWithControlDependency_Args();
 
 // new_PJRT_CopyToDeviceStream_Destroy_Args allocates a zero-initialized C.PJRT_CopyToDeviceStream_Destroy_Args structure, sets its .struct_size, and returns it.
 extern PJRT_CopyToDeviceStream_Destroy_Args* new_PJRT_CopyToDeviceStream_Destroy_Args();

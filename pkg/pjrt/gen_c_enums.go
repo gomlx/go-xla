@@ -47,6 +47,24 @@ const (
 
 	// PJRT_Extension_Type_TpuTopology is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
 	PJRT_Extension_Type_TpuTopology PJRT_Extension_Type = 13
+
+	// PJRT_Extension_Type_TpuExecutable is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_TpuExecutable PJRT_Extension_Type = 14
+
+	// PJRT_Extension_Type_Megascale is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_Megascale PJRT_Extension_Type = 15
+
+	// PJRT_Extension_Type_Shardings is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_Shardings PJRT_Extension_Type = 16
+
+	// PJRT_Extension_Type_AbiVersion is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_AbiVersion PJRT_Extension_Type = 17
+
+	// PJRT_Extension_Type_Collectives is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_Collectives PJRT_Extension_Type = 18
+
+	// PJRT_Extension_Type_MultiSlice is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_MultiSlice PJRT_Extension_Type = 19
 )
 
 // PJRT_Error_Code is mapping of the corresponded C enum defined in pjrt_c_api.h.
