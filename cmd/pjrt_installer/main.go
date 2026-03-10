@@ -25,7 +25,7 @@ var (
 
 	flagPlugin, flagPath *string
 	flagVersion          = flag.String("version", "latest",
-		"For PJRT for CPUs, this is the https://github.com/gomlx/pjrt-cpu-binaries release version (e.g.: v0.83.1) "+
+		"For PJRT for CPUs, this is the https://github.com/gomlx/pjrt-cpu-binaries release version (e.g.: v0.98.0) "+
 			"from where to download the plugin. "+
 			"For the CUDA PJRT this is based on the Jax version in https://pypi.org/project/jax/ (e.g.: 0.7.2), "+
 			"which is where it downloads the plugin and Nvidia libraries from. "+

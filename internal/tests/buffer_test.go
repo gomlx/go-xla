@@ -70,6 +70,59 @@ func TestSubByteDTypes(t *testing.T) {
 			}
 		})
 
+		t.Run("Int4-BufferBitcast", func(t *testing.T) {
+			builder := New(t.Name())
+			fn := builder.Main()
+			{
+				// Build computation graph.
+				input := must1(fn.NamedInput("x", shapes.Make(dtypes.Int4, 2)))
+				output := must1(Convert(input, dtypes.Int8))
+				must(fn.Return(output))
+			}
+			// Build and compile
+			program := must1(builder.Build())
+			fmt.Printf("Sub-byte dtype test StableHLO:\n%s\n", string(program))
+			loadedExec, err := client.Compile().WithStableHLO(program).Done()
+			must(err)
+			defer func() {
+				must(loadedExec.Destroy())
+			}()
+
+			// Create input buffer "x".
+			x := must1(client.BufferFromHost().FromRawData([]byte{0xE1}, dtypes.Uint8, nil).Done())
+			xTmp := must1(x.Bitcast(dtypes.Int4))
+			x.Destroy()
+			x = xTmp
+			defer func() {
+				must(x.Destroy())
+			}()
+
+			// Execute with x as input.
+			outputBuffers, err := loadedExec.Execute(x).Done()
+			must(err)
+			defer func() {
+				for _, b := range outputBuffers {
+					must(b.Destroy())
+				}
+			}()
+
+			// Check that the output is int8
+			if len(outputBuffers) != 1 {
+				t.Fatalf("expected 1 output buffer, got %d", len(outputBuffers))
+			}
+			output := outputBuffers[0]
+			if outputDType := must1(output.DType()); outputDType != dtypes.Int8 {
+				t.Errorf("expected output dtype to be Int8, got %v", outputDType)
+			}
+
+			gotFlat, gotDims := must2(pjrt.BufferToArray[int8](output))
+			fmt.Printf("\t- Got %v (dims=%v)\n", gotFlat, gotDims)
+			want := []int8{1, -2}
+			if !slices.Equal(gotFlat, want) || !slices.Equal(gotDims, []int{2}) {
+				t.Errorf("expected %v output, got %v (dimensions=%v)", want, gotFlat, gotDims)
+			}
+		})
+
 		t.Run("Int4-AsLiteral", func(t *testing.T) {
 			if true {
 				t.Skip("Skipping broken test: see https://github.com/openxla/xla/issues/38964")

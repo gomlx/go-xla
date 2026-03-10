@@ -80,6 +80,18 @@ PJRT_Error* call_PJRT_Event_OnReady(const PJRT_Api *api, PJRT_Event_OnReady_Args
 	return api->PJRT_Event_OnReady(args);
 }
 
+// call_PJRT_Event_Create calls the corresponding PJRT API method.
+// Creates a new PJRT_Event.
+PJRT_Error* call_PJRT_Event_Create(const PJRT_Api *api, PJRT_Event_Create_Args* args) {
+	return api->PJRT_Event_Create(args);
+}
+
+// call_PJRT_Event_Set calls the corresponding PJRT API method.
+// Sets the PJRT_Event as completed with the given error code and message.
+PJRT_Error* call_PJRT_Event_Set(const PJRT_Api *api, PJRT_Event_Set_Args* args) {
+	return api->PJRT_Event_Set(args);
+}
+
 // call_PJRT_Client_Create calls the corresponding PJRT API method.
 // Creates and initializes a new PJRT_Client and returns in `client`.
 PJRT_Error* call_PJRT_Client_Create(const PJRT_Api *api, PJRT_Client_Create_Args* args) {
@@ -174,6 +186,12 @@ PJRT_Error* call_PJRT_Client_Compile(const PJRT_Api *api, PJRT_Client_Compile_Ar
 	return api->PJRT_Client_Compile(args);
 }
 
+// call_PJRT_Client_Load calls the corresponding PJRT API method.
+// Loads a PJRT_Executable.
+PJRT_Error* call_PJRT_Client_Load(const PJRT_Api *api, PJRT_Client_Load_Args* args) {
+	return api->PJRT_Client_Load(args);
+}
+
 // call_PJRT_Client_DefaultDeviceAssignment calls the corresponding PJRT API method.
 PJRT_Error* call_PJRT_Client_DefaultDeviceAssignment(const PJRT_Api *api, PJRT_Client_DefaultDeviceAssignment_Args* args) {
 	return api->PJRT_Client_DefaultDeviceAssignment(args);
@@ -243,6 +261,9 @@ PJRT_Error* call_PJRT_Client_CreateUninitializedBuffer(const PJRT_Api *api, PJRT
 }
 
 // call_PJRT_Client_CreateErrorBuffer calls the corresponding PJRT API method.
+// Creates a buffer in the given memory space that carries an error future
+// without allocating memory. If this buffer is passed to an Execute call, the
+// execution will fail with the given error code and message.
 PJRT_Error* call_PJRT_Client_CreateErrorBuffer(const PJRT_Api *api, PJRT_Client_CreateErrorBuffer_Args* args) {
 	return api->PJRT_Client_CreateErrorBuffer(args);
 }
@@ -363,6 +384,32 @@ PJRT_Error* call_PJRT_Device_MemoryStats(const PJRT_Api *api, PJRT_Device_Memory
 	return api->PJRT_Device_MemoryStats(args);
 }
 
+// call_PJRT_Device_PoisonExecution calls the corresponding PJRT API method.
+// Poisons the earliest execution on this device with given launch_id if it's
+// not finished yet, i.e. makes its output buffers error.
+PJRT_Error* call_PJRT_Device_PoisonExecution(const PJRT_Api *api, PJRT_Device_PoisonExecution_Args* args) {
+	return api->PJRT_Device_PoisonExecution(args);
+}
+
+// call_PJRT_Device_GetAttributes calls the corresponding PJRT API method.
+// Returns an array of device attributes.
+PJRT_Error* call_PJRT_Device_GetAttributes(const PJRT_Api *api, PJRT_Device_GetAttributes_Args* args) {
+	return api->PJRT_Device_GetAttributes(args);
+}
+
+// call_PJRT_Device_CreateAsyncTrackingEvent calls the corresponding PJRT API method.
+// Creates an async tracking event. The caller is responsible for destroying the
+// event.
+PJRT_Error* call_PJRT_Device_CreateAsyncTrackingEvent(const PJRT_Api *api, PJRT_Device_CreateAsyncTrackingEvent_Args* args) {
+	return api->PJRT_Device_CreateAsyncTrackingEvent(args);
+}
+
+// call_PJRT_AsyncTrackingEvent_Destroy calls the corresponding PJRT API method.
+// Destroys the async tracking event.
+PJRT_Error* call_PJRT_AsyncTrackingEvent_Destroy(const PJRT_Api *api, PJRT_AsyncTrackingEvent_Destroy_Args* args) {
+	return api->PJRT_AsyncTrackingEvent_Destroy(args);
+}
+
 // call_PJRT_Memory_Id calls the corresponding PJRT API method.
 // The ID of this memory. IDs are unique among memories of this type.
 PJRT_Error* call_PJRT_Memory_Id(const PJRT_Api *api, PJRT_Memory_Id_Args* args) {
@@ -464,6 +511,12 @@ PJRT_Error* call_PJRT_Executable_NumPartitions(const PJRT_Api *api, PJRT_Executa
 // Returns a list of devices this executable will run on.
 PJRT_Error* call_PJRT_LoadedExecutable_AddressableDevices(const PJRT_Api *api, PJRT_LoadedExecutable_AddressableDevices_Args* args) {
 	return api->PJRT_LoadedExecutable_AddressableDevices(args);
+}
+
+// call_PJRT_LoadedExecutable_AddressableDeviceLogicalIds calls the corresponding PJRT API method.
+// Returns a list of logical device ids this executable will run on.
+PJRT_Error* call_PJRT_LoadedExecutable_AddressableDeviceLogicalIds(const PJRT_Api *api, PJRT_LoadedExecutable_AddressableDeviceLogicalIds_Args* args) {
+	return api->PJRT_LoadedExecutable_AddressableDeviceLogicalIds(args);
 }
 
 // call_PJRT_Executable_OptimizedProgram calls the corresponding PJRT API method.
@@ -580,6 +633,12 @@ PJRT_Error* call_PJRT_Executable_Serialize(const PJRT_Api *api, PJRT_Executable_
 	return api->PJRT_Executable_Serialize(args);
 }
 
+// call_PJRT_Executable_GetCompileOptions calls the corresponding PJRT API method.
+// Returns the CompileOptions that were used to compile this executable.
+PJRT_Error* call_PJRT_Executable_GetCompileOptions(const PJRT_Api *api, PJRT_Executable_GetCompileOptions_Args* args) {
+	return api->PJRT_Executable_GetCompileOptions(args);
+}
+
 // call_PJRT_Executable_DeserializeAndLoad calls the corresponding PJRT API method.
 // Deserializes an executable serialized by `PJRT_Executable_Serialize`.
 // `serialized_executable` must have been produced by the same platform and
@@ -679,6 +738,13 @@ PJRT_Error* call_PJRT_Buffer_CopyRawToHost(const PJRT_Api *api, PJRT_Buffer_Copy
 	return api->PJRT_Buffer_CopyRawToHost(args);
 }
 
+// call_PJRT_Buffer_CopyRawToHostFuture calls the corresponding PJRT API method.
+// Similar to PJRT_Buffer_CopyRawToHost, but the transfer will not happen until
+// `future_ready_callback` is invoked.
+PJRT_Error* call_PJRT_Buffer_CopyRawToHostFuture(const PJRT_Api *api, PJRT_Buffer_CopyRawToHostFuture_Args* args) {
+	return api->PJRT_Buffer_CopyRawToHostFuture(args);
+}
+
 // call_PJRT_Buffer_CopyToDevice calls the corresponding PJRT API method.
 // Copies the buffer to device `dst_device` within the same client. Caller is
 // responsible for freeing returned `dst_buffer` with PJRT_Buffer_Destroy.
@@ -693,6 +759,12 @@ PJRT_Error* call_PJRT_Buffer_CopyToDevice(const PJRT_Api *api, PJRT_Buffer_CopyT
 // Returns an error if the buffer is already on `dst_memory`.
 PJRT_Error* call_PJRT_Buffer_CopyToMemory(const PJRT_Api *api, PJRT_Buffer_CopyToMemory_Args* args) {
 	return api->PJRT_Buffer_CopyToMemory(args);
+}
+
+// call_PJRT_Buffer_Bitcast calls the corresponding PJRT API method.
+// Bitcasts the buffer to a new type, dimensions, and layout.
+PJRT_Error* call_PJRT_Buffer_Bitcast(const PJRT_Api *api, PJRT_Buffer_Bitcast_Args* args) {
+	return api->PJRT_Buffer_Bitcast(args);
 }
 
 // call_PJRT_Buffer_IsOnCpu calls the corresponding PJRT API method.
@@ -758,6 +830,11 @@ PJRT_Error* call_PJRT_Buffer_DecreaseExternalReferenceCount(const PJRT_Api *api,
 // count is greater than 0 via PJRT_Buffer_IncreaseExternalReferenceCount.
 PJRT_Error* call_PJRT_Buffer_OpaqueDeviceMemoryDataPointer(const PJRT_Api *api, PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args* args) {
 	return api->PJRT_Buffer_OpaqueDeviceMemoryDataPointer(args);
+}
+
+// call_PJRT_Buffer_DonateWithControlDependency calls the corresponding PJRT API method.
+PJRT_Error* call_PJRT_Buffer_DonateWithControlDependency(const PJRT_Api *api, PJRT_Buffer_DonateWithControlDependency_Args* args) {
+	return api->PJRT_Buffer_DonateWithControlDependency(args);
 }
 
 // call_PJRT_CopyToDeviceStream_Destroy calls the corresponding PJRT API method.

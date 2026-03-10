@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -386,4 +387,64 @@ func TestBufferDestroyAfterClient(t *testing.T) {
 		err = buffer2.Destroy()
 	})
 	requireNoError(t, err)
+}
+
+func TestBufferBitcast(t *testing.T) {
+	plugin, err := GetPlugin(*FlagPluginName)
+	requireNoError(t, err)
+	client, err := plugin.NewClient(nil)
+	requireNoError(t, err)
+	defer func() {
+		err := client.Destroy()
+		requireNoError(t, err)
+	}()
+
+	// Create a Uint8 buffer with one value.
+	// 0x47 = 0100 0111 in binary.
+	// If bitcasted to Int4, it should stay as the same byte, but with different dimensions.
+	val := uint8(0x47)
+	buf, err := ScalarToBuffer(client, val)
+	requireNoError(t, err)
+
+	// Bitcast to Int4.
+	// Uint8 is 8 bits, Int4 is 4 bits.
+	// Bitcast from larger to smaller appends a new dimension: 8/4 = 2.
+	// So (uint8)[] -> (int4)[2]
+	bufInt4, err := buf.Bitcast(dtypes.Int4)
+	if err != nil {
+		if strings.Contains(err.Error(), "not supported") {
+			t.Skipf("Bitcast not supported: %v", err)
+		}
+		requireNoError(t, err)
+	}
+
+	dtype, err := bufInt4.DType()
+	requireNoError(t, err)
+	assertEqual(t, dtypes.Int4, dtype)
+
+	dims, err := bufInt4.Dimensions()
+	requireNoError(t, err)
+	assertEqualSlice(t, []int{2}, dims)
+
+	// Bitcast back to uint8:
+	bufUint8, err := bufInt4.Bitcast(dtypes.Uint8)
+	requireNoError(t, err)
+	dtype, err = bufUint8.DType()
+	requireNoError(t, err)
+	assertEqual(t, dtypes.Uint8, dtype)
+
+	dims, err = bufUint8.Dimensions()
+	requireNoError(t, err)
+	assertEqualSlice(t, []int{}, dims)
+
+	// To check the data, we use ToHost.
+	// ToHost for Int4 will return the packed bytes.
+	size, err := bufUint8.Size()
+	requireNoError(t, err)
+	assertEqual(t, 1, size) // 2 * 4 bits = 8 bits = 1 byte.
+	data := make([]byte, 1)
+	err = bufUint8.ToHost(data)
+	requireNoError(t, err)
+	fmt.Printf("\t- data=[0x%X]\n", data)
+	assertEqual(t, val, data[0])
 }
