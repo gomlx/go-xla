@@ -5,7 +5,8 @@
 
 ## StableHLO
 
-- Added `Call()` op (thx @ajroetker)
+- Added `Call()` op (thx @ajroetker).
+- Added `Value.OpName()` for introspection.
 - Dynamic Shapes (thx @ajroetker) -- with and without dynamic bounds.
   - Added `DimensionBounds` and `EncodeBounds` fields to `Shape` struct
   - Added ops: `DynamicReshape`, `DynamicBroadcastInDim`, `DynamicIota`, `DynamicGather`,
