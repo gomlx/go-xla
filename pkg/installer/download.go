@@ -377,7 +377,7 @@ retry:
 }
 
 // GitHubDownloadReleaseAssets downloads the list of assets available for the given repository/release version.
-// E.g.: repo = "gomlx/pjrt-cpu-binaries", version = "v0.83.1"
+// E.g.: repo = "gomlx/pjrt-cpu-binaries", version = "v0.98.0"
 func GitHubDownloadReleaseAssets(repo string, version string) ([]string, error) {
 	// Construct release URL based on the version -- "latest" is not supported at this point.
 	releaseURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, version)
