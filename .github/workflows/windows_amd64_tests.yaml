@@ -41,7 +41,7 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Diagnostic Check CPU Features
+      - name: "Diagnostic: Check CPU Features"
         run: |
           # Check if the runner CPU actually supports AVX-512
           # If this returns nothing, the AVX-512 kernels will crash during DLL init
@@ -53,7 +53,7 @@ jobs:
           go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
           go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
 
-      - name: Diagnostic: Debug DLL Imports
+      - name: "Diagnostic: Debug DLL Imports"
         if: failure()
         run: |
           # Find where the DLL was installed (usually ~/AppData/Local/go-xla)
