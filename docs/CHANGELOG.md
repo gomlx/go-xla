@@ -1,3 +1,7 @@
+# v0.2.1: CUDA plugin fixes
+
+- Fixed CUDA library paths -- it was hardcoded to a test directory.
+
 # v0.2.0: Dynamic Shapes (thx @ajroetker); added `Call()`; Quantized shapes;
 
 - `go.mod`: updated to Go 1.25: needed for `synctest`.

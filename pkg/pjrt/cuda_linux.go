@@ -94,8 +94,7 @@ func cudaPluginCheckDrivers(name string) {
 			plugin.Path(), nvidiaPath, plugin.Path(), nvidiaPath)
 		return
 	}
-	// cudaSetCUDADir(nvidiaPath)
-	cudaSetCUDADir("/home/janpf/.local/lib/go-xla/nvidia")
+	cudaSetCUDADir(nvidiaPath)
 }
 
 // cudaNVidiaPath returns the path to the nvidia libraries. If they are not found in the same directory as the plugin.
