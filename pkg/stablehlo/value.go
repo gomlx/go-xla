@@ -49,14 +49,18 @@ func (v *Value) String() string {
 	return "%" + v.name
 }
 
+// InputParameterName is the fake "OpName()" for a value that is an input parameter for a function.
+const InputParameterName = "InputParameter"
+
 // OpName returns the name of the operation that created this value.
+//
+// For input parameters, it returns InputParameterName.
 func (v *Value) OpName() string {
 	if v.stmt == nil {
-		return "nil"
+		return InputParameterName
 	}
 	return v.stmt.OpType.String()
 }
-
 
 // ConvertToValidName replaces any characters not in { "0"-"9", "a"-"z", "A-Z", "_" } to a "_",
 // making it a valid name for values and function arguments.

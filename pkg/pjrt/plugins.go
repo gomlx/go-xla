@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -152,6 +153,12 @@ func (p *Plugin) Attributes() NamedValuesMap {
 // It's not perfect.
 func (p *Plugin) IsCUDA() bool {
 	return isCuda(p.name)
+}
+
+// IsCPU attempts to guess if the plugin is CPU based.
+// XLA PJRT for cpu has its quirks ... and sometimes this is needed.
+func (p *Plugin) IsCPU() bool {
+	return strings.Contains(strings.ToUpper(p.name), "CPU")
 }
 
 // String implements fmt.Stringer. It returns the platform and version of the plugin.

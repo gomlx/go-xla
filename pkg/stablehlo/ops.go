@@ -2372,3 +2372,27 @@ func Call(callee *Function, operands ...*Value) ([]*Value, error) {
 
 	return stmt.Outputs, nil
 }
+
+// OptimizationBarrier creates an optimization barrier for the given operands.
+//
+// It takes a variable length number of operands, and returns the same operands (a slice of *Value).
+//
+// Semantically, they create an optimization barriers, indicating the returned values are only available to start processing when all the inputs are ready.
+func OptimizationBarrier(operands ...*Value) ([]*Value, error) {
+	op := optypes.OptimizationBarrier
+	if len(operands) == 0 {
+		return nil, errors.New("OptimizationBarrier requires at least one operand")
+	}
+	fn, err := innerMostFunction(operands...)
+	if err != nil {
+		return nil, err
+	}
+	if fn.Returned {
+		return nil, errors.Errorf("cannot add operation %s after returning, in function %q",
+			op, fn.Name)
+	}
+
+	outputShapes := valuesToShapes(operands)
+	stmt := fn.addMultiOp(op, outputShapes, operands)
+	return stmt.Outputs, nil
+}
