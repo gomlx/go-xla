@@ -20,7 +20,9 @@ const (
 
 	Abs
 	Add
+	AllGather
 	AllReduce
+	AllToAll
 	And
 	Atan2
 	BatchNormInference
@@ -33,6 +35,7 @@ const (
 	Ceil
 	Clamp
 	CollectiveBroadcast
+	CollectivePermute
 	Compare
 	Complex
 	Concatenate
@@ -42,6 +45,11 @@ const (
 	CountLeadingZeros
 	Divide
 	DotGeneral
+	DynamicBroadcastInDim
+	DynamicConv
+	DynamicGather
+	DynamicIota
+	DynamicPad
 	DynamicSlice
 	DynamicUpdateSlice
 	Erf
@@ -62,6 +70,7 @@ const (
 	Multiply
 	Negate
 	Not
+	OptimizationBarrier
 	Or
 	Pad
 	Popcnt
@@ -91,6 +100,8 @@ const (
 	Tan
 	Tanh
 	Transpose
+	UniformDequantize
+	UniformQuantize
 	While
 	Xor
 
@@ -98,22 +109,13 @@ const (
 
 	// Here the ones not implemented yet, please add an issue in the repo if you need them.
 
-	AllGather
-	AllToAll
 	Case
 	Cholesky
-	CollectivePermute
 	Composite
 	CustomCall
-	DynamicBroadcastInDim
-	DynamicConv
-	DynamicGather
-	DynamicIota
-	DynamicPad
 	DynamicReshape
 	GetTupleElement
 	Infeed
-	OptimizationBarrier
 	Outfeed
 	PartitionId
 	Recv
@@ -122,8 +124,6 @@ const (
 	Send
 	TriangularSolve
 	Tuple
-	UniformDequantize
-	UniformQuantize
 
 	// Last should always be kept the last, it is used as a counter/marker for .
 	Last
