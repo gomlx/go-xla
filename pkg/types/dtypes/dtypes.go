@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/pkg/errors"
-	"github.com/x448/float16"
 )
 
 // panicf panics with the formatted description.

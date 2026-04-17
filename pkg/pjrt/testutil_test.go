@@ -302,4 +302,3 @@ func formatMsgAndArgs(msgAndArgs ...any) string {
 	}
 	return fmt.Sprintf("%v", msgAndArgs[0])
 }
-

@@ -23,8 +23,8 @@ import (
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/pkg/errors"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/x448/float16"
 )
 
 // ConvertTo converts any scalar (typically returned by `tensor.Local.Value()`) of the
@@ -40,7 +40,7 @@ func ConvertTo[T dtypes.NumberNotComplex](value any) T {
 	}
 	if reflect.TypeOf(t) == float16Type {
 		v32 := ConvertTo[float32](value)
-		return T(float16.Fromfloat32(v32))
+		return T(float16.FromFloat32(v32))
 	}
 
 	switch v := value.(type) {
@@ -155,7 +155,7 @@ func CastAsDType(value any, dtype dtypes.DType) any {
 		}
 		if dtype == dtypes.Float16 {
 			v32 := valueOf.Convert(float32Type).Interface().(float32)
-			return float16.Fromfloat32(v32)
+			return float16.FromFloat32(v32)
 		}
 		if dtype == dtypes.BFloat16 {
 			v32 := valueOf.Convert(float32Type).Interface().(float32)

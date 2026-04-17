@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
-	"github.com/x448/float16"
 )
 
 func TestDType_HighestLowestSmallestValues(t *testing.T) {
@@ -74,8 +74,8 @@ func TestFromAny(t *testing.T) {
 	if FromAny(bfloat16.FromFloat32(1.0)) != BFloat16 {
 		t.Fatalf("expected FromAny(bfloat16.FromFloat32(1.0)) to be BFloat16, got %v", FromAny(bfloat16.FromFloat32(1.0)))
 	}
-	if FromAny(float16.Fromfloat32(3.0)) != Float16 {
-		t.Fatalf("expected FromAny(float16.Fromfloat32(3.0)) to be Float16, got %v", FromAny(float16.Fromfloat32(3.0)))
+	if FromAny(float16.FromFloat32(3.0)) != Float16 {
+		t.Fatalf("expected FromAny(float16.FromFloat32(3.0)) to be Float16, got %v", FromAny(float16.FromFloat32(3.0)))
 	}
 }
 

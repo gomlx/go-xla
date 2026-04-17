@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/x448/float16"
 )
 
 func TestZeroDim(t *testing.T) {

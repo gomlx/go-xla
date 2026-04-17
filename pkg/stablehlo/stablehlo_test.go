@@ -329,13 +329,13 @@ func TestDynamicOperations(t *testing.T) {
 
 		// Gather with dimension configuration
 		gathered := must1(DynamicGather(operand, startIndices, sliceSizes,
-			2,           // indexVectorAxis
-			[]int{2},    // offsetOutputAxes
-			[]int{0, 1}, // collapsedSliceAxes
-			[]int{},     // operandBatchingAxes
-			[]int{},     // startIndicesBatchingAxes
-			[]int{0, 1}, // startIndexMap
-			false,       // indicesAreSorted
+			2,               // indexVectorAxis
+			[]int{2},        // offsetOutputAxes
+			[]int{0, 1},     // collapsedSliceAxes
+			[]int{},         // operandBatchingAxes
+			[]int{},         // startIndicesBatchingAxes
+			[]int{0, 1},     // startIndexMap
+			false,           // indicesAreSorted
 			[]int{2, 3, 2})) // bounds
 
 		if err := fn.Return(gathered); err != nil {
@@ -398,9 +398,9 @@ func TestDynamicOperations(t *testing.T) {
 
 		// Dynamic conv with bounds
 		convolved := must1(DynamicConv(input, kernel, padding,
-			[]int{1, 1},    // strides
-			[]int{1, 1},    // inputDilations
-			[]int{1, 1},    // kernelDilations
+			[]int{1, 1},       // strides
+			[]int{1, 1},       // inputDilations
+			[]int{1, 1},       // kernelDilations
 			0, 3, []int{1, 2}, // input: batch=0, channels=3, spatial=[1,2]
 			2, 3, []int{0, 1}, // kernel: inChannels=2, outChannels=3, spatial=[0,1]
 			0, 3, []int{1, 2}, // output: batch=0, channels=3, spatial=[1,2]

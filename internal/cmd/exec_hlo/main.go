@@ -7,8 +7,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/internal/must"
+	"github.com/gomlx/go-xla/pkg/pjrt"
 	"k8s.io/klog/v2"
 )
 

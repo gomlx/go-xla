@@ -10,12 +10,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/internal/optypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/pkg/errors"
-	"github.com/x448/float16"
 )
 
 // Statement represents a single operation line in ToStableHLO.
