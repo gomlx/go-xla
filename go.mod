@@ -1,6 +1,6 @@
 module github.com/gomlx/go-xla
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/gofrs/flock v0.13.0
@@ -15,6 +15,7 @@ require (
 require (
 	github.com/dmarkham/enumer v1.6.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/gomlx/compute v0.0.0-20260417180430-de734ec5bdc7 // indirect
 	github.com/pascaldekloe/name v1.0.0 // indirect
 	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
 	golang.org/x/mod v0.29.0 // indirect
