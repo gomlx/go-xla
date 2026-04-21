@@ -1,3 +1,9 @@
+# Next: API changes for GoMLX v0.28.0 and gomlx/compute v0.1.0
+
+- New `github.com/gomlx/compute/dtypes` repo will host `dtypes`.
+- Package `shapes` for go-xla diverged enough (having quantization, dimension bounds, etc.) that it 
+  stays a fork local to `go-xla`.
+
 # v0.2.2: New `OptimizationBarrier` op, `pjrt.IsCPU()`
 
 - StableHLO: added `OptimizationBarrier()` op.
