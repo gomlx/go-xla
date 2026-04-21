@@ -1157,14 +1157,11 @@ func Convolution(input, kernel *Value,
 	precisionConfig := literalStrF("[#stablehlo<precision %s>, #stablehlo<precision %s>]",
 		inputPrecision.ToStableHLO(), kernelPrecision.ToStableHLO())
 
-	allPaddings := make([]int, 0, rankSpatial*2)
+	allPaddings := make([]int64, 0, rankSpatial*2)
 	for _, pad := range paddings {
-		allPaddings = append(allPaddings, pad[0], pad[1])
+		allPaddings = append(allPaddings, int64(pad[0]), int64(pad[1]))
 	}
-	paddingsConfig, err := newTensorLiteralFromFlatAndDimensions(allPaddings, rankSpatial, 2)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "in Convolution paddings values")
-	}
+	paddingsConfig := newTensorLiteralFromFlatAndShape(allPaddings, shapes.Make(dtypes.Int64, rankSpatial, 2))
 	convConfig := getConvAxesConfig(inputBatchAxis, inputChannelsAxis, inputSpatialAxes,
 		kernelInputChannelsAxis, kernelOutputChannelsAxis, kernelSpatialAxes,
 		outputBatchAxis, outputChannelsAxis, outputSpatialAxes)
@@ -1387,14 +1384,11 @@ func MultiReduceWindow(inputs, initialValues []*Value, reductionFn *Function,
 	stmt.AddFunctionParameter("reductionFn", reductionFn)
 
 	// Encode paddings:
-	allPaddings := make([]int, 0, rank*2)
+	allPaddings := make([]int64, 0, rank*2)
 	for _, pad := range paddings {
-		allPaddings = append(allPaddings, pad[0], pad[1])
+		allPaddings = append(allPaddings, int64(pad[0]), int64(pad[1]))
 	}
-	paddingsConfig, err := newTensorLiteralFromFlatAndDimensions(allPaddings, rank, 2)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "in Convolution paddings values")
-	}
+	paddingsConfig := newTensorLiteralFromFlatAndShape(allPaddings, shapes.Make(dtypes.Int64, rank, 2))
 	stmt.Attributes["padding"] = paddingsConfig
 
 	return stmt.Outputs, nil
@@ -1453,14 +1447,11 @@ func SelectAndScatter(input, scatterSource, initialValue *Value,
 	stmt.AddFunctionParameter("scatterFn", scatterFn)
 
 	// Encode paddings:
-	allPaddings := make([]int, 0, rank*2)
+	allPaddings := make([]int64, 0, rank*2)
 	for _, pad := range paddings {
-		allPaddings = append(allPaddings, pad[0], pad[1])
+		allPaddings = append(allPaddings, int64(pad[0]), int64(pad[1]))
 	}
-	paddingsConfig, err := newTensorLiteralFromFlatAndDimensions(allPaddings, rank, 2)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "in Convolution paddings values")
-	}
+	paddingsConfig := newTensorLiteralFromFlatAndShape(allPaddings, shapes.Make(dtypes.Int64, rank, 2))
 	stmt.Attributes["padding"] = paddingsConfig
 	return stmt.Outputs[0], nil
 }

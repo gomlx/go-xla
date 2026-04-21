@@ -199,16 +199,12 @@ func (fn *Function) ConstantFromScalar(value any) (*Value, error) {
 		return nil, errors.Errorf("unsupported constant value type %T", value)
 	}
 	shape := shapes.Make(dtype)
-	t, err := newTensorLiteralFromFlatAndDimensions(value)
-	if err != nil {
-		return nil, err
-	}
 	c := &Statement{
 		Builder:  fn.Builder,
 		Function: fn,
 		OpType:   optypes.Constant,
 		Attributes: map[string]any{
-			"value": t,
+			"value": newTensorLiteralFromFlatAndShape(value, shapes.Make(dtype)),
 		},
 		Outputs: []*Value{fn.newValue(shape)},
 	}
@@ -220,6 +216,8 @@ func (fn *Function) ConstantFromScalar(value any) (*Value, error) {
 }
 
 // ConstantFromFlatAndDimensions creates a new constant statement from a flat slice with the raw values and the dimensions of the shape.
+//
+// Deprecated: use FromFlatAndShape instead, because there is not a clear 1-to-1 mapping from dtypes and Go types. In particular, there .
 func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (*Value, error) {
 	if fn.Returned {
 		return nil, errors.Errorf("Function.Return already called for %q", fn.Name)
@@ -233,6 +231,14 @@ func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (
 	if shape.Size() != flatV.Len() {
 		return nil, errors.Errorf("flat values size %d doesn't match shape size %d (%s)", flatV.Len(), shape.Size(), shape)
 	}
+	return fn.ConstantFromFlatAndShape(flat, shape)
+}
+
+// ConstantFromFlatAndShape creates a new constant statement from a flat slice with the raw values of the given shape.
+func (fn *Function) ConstantFromFlatAndShape(flat any, shape shapes.Shape) (*Value, error) {
+	if fn.Returned {
+		return nil, errors.Errorf("Function.Return already called for %q", fn.Name)
+	}
 	c := &Statement{
 		Builder:    fn.Builder,
 		Function:   fn,
@@ -243,15 +249,7 @@ func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (
 	// Set the statement reference and output index for the output value
 	c.Outputs[0].stmt = c
 	c.Outputs[0].outputIndex = 0
-	var err error
-	if shape.IsScalar() {
-		c.Attributes["value"], err = newTensorLiteralFromFlatAndDimensions(flatV.Index(0).Interface())
-	} else {
-		c.Attributes["value"], err = newTensorLiteralFromFlatAndDimensions(flat, dimensions...)
-	}
-	if err != nil {
-		return nil, err
-	}
+	c.Attributes["value"] = newTensorLiteralFromFlatAndShape(flat, shape)
 	fn.Statements = append(fn.Statements, c)
 	return c.Outputs[0], nil
 }

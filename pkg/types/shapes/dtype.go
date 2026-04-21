@@ -20,11 +20,10 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
-	"github.com/pkg/errors"
-
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/pkg/errors"
 )
 
 // ConvertTo converts any scalar (typically returned by `tensor.Local.Value()`) of the

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/pkg/errors"
 )
 

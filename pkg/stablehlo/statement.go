@@ -10,12 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/internal/optypes"
 	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/pkg/errors"
 )
 
 // Statement represents a single operation line in ToStableHLO.
@@ -375,57 +374,48 @@ type tensorLiteral struct {
 	// value is either a scalar value or a flat slice of the values.
 	value any
 
-	// dims has the dimensions of the tensor or nil if the value is a scalar.
-	dims []int
+	// Notice it's not always possible to infer it from the value
+	// as there is not a 1-to-1 mapping from Go types and XLA dtypes (e.g. DTypes Int2, UInt4, UInt8 all map to Go's uint8).
+	//
+	// Also this handles the case where the value is nil, for zero sized tensors.
+	shape shapes.Shape
 }
 
-// newTensorLiteralFromFlatAndDimensions creates a new tensorLiteral that can be used to render constants.
+// newTensorLiteralFromFlatAndShape creates a new tensorLiteral that can be used to render constants.
 //
 // Args:
 // - value is either a scalar value or a flat slice of the values.
-// - dims has the dimensions of the tensor or nil if the value is a scalar.
-func newTensorLiteralFromFlatAndDimensions(value any, dims ...int) (t tensorLiteral, err error) {
-	size := 1
-	for _, dim := range dims {
-		size *= dim
-	}
-
-	valueV := reflect.ValueOf(value)
-	if valueV.Kind() != reflect.Slice && valueV.Kind() != reflect.Array {
-		if len(dims) != 0 {
-			err = errors.Errorf("flat value is not a slice or array for a non-scalar shape, got %T instead (%s)", value, valueV.Kind())
-			return
-		}
-		// Simple scalar value:
-		return tensorLiteral{value: value}, nil
-	}
-
-	if valueV.Len() != size {
-		err = errors.Errorf("expected %d flat elements for shape %v, got %d instead", size, dims, valueV.Len())
-		return
-	}
-	return tensorLiteral{value: value, dims: dims}, nil
+// - shape has the dimensions of the tensor or nil if the value is a scalar.
+func newTensorLiteralFromFlatAndShape(value any, shape shapes.Shape) tensorLiteral {
+	return tensorLiteral{value: value, shape: shape}
 }
 
 // ToStableHLO returns the string representation of the tensor literal.
 func (t tensorLiteral) ToStableHLO() string {
-	valueV := reflect.ValueOf(t.value)
-	var shape shapes.Shape
-	if valueV.Kind() != reflect.Slice && valueV.Kind() != reflect.Array {
-		// Scalar value:
-		shape.DType = dtypes.FromGoType(valueV.Type())
-		return fmt.Sprintf("dense<%s> : %s", podToStableHLO(t.value), shape.ToStableHLO())
-	}
+	switch {
+	case t.value == nil:
+		return fmt.Sprintf("dense<> : %s", t.shape.ToStableHLO())
 
-	shape.DType = dtypes.FromGoType(valueV.Type().Elem())
-	shape.Dimensions = slices.Clone(t.dims)
-	var flatIdx int
-	var sb strings.Builder
-	recursiveTensorToStableHLO(valueV, shape, flatIdx, 0, &sb)
-	return fmt.Sprintf("dense<%s> : %s", sb.String(), shape.ToStableHLO())
+	case t.shape.Rank() == 0:
+		// Value should be a scalar or a slice with one value only.
+		var valStr string
+		val := reflect.ValueOf(t.value)
+		if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
+			valStr = podToStableHLO(reflect.ValueOf(t.value).Index(0).Interface())
+		} else {
+			valStr = podToStableHLO(t.value)
+		}
+		return fmt.Sprintf("dense<%s> : %s", valStr, t.shape.ToStableHLO())
+
+	default:
+		flatIdx := 0
+		var sb strings.Builder
+		recursiveTensorToStableHLO(reflect.ValueOf(t.value), t.shape, flatIdx, 0, &sb)
+		return fmt.Sprintf("dense<%s> : %s", sb.String(), t.shape.ToStableHLO())
+	}
 }
 
-func recursiveTensorToStableHLO(valueV reflect.Value, shape shapes.Shape, flatIdx, axis int, sb *strings.Builder) int {
+func recursiveTensorToStableHLO(valueV reflect.Value, shape shapes.Shape, flatIdx int, axis int, sb *strings.Builder) int {
 	sb.WriteString("[")
 	if axis == shape.Rank()-1 {
 		// Case 1: the last axis we actually print the values.

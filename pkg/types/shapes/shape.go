@@ -22,8 +22,8 @@
 // Shape and DType are used both by the concrete tensor values (see tensor package) and when
 // working on the computation graph (see graph package).
 //
-// Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation,
-// and bfloat16 uses a simple implementation in github.com/gomlx/go-xla/pkg/types/dtypes/bfloat16.
+// Go float16 and bfloat16 support (commonly used by Nvidia GPUs) uses a minimal implementation under
+// github.com/compute/dtypes/float16 and github.com/compute/dtypes/bfloat16.
 //
 // ## Glossary
 //
