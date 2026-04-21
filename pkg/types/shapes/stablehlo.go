@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // ToStableHLO returns the ToStableHLO representation of the shape's type.
@@ -59,7 +61,7 @@ func (s Shape) WriteStableHLO(writer io.Writer) error {
 	if s.Quantization != nil {
 		w("%s", s.Quantization.ToStableHLO())
 	} else {
-		w("%s", s.DType.ToStableHLO())
+		w("%s", utils.DTypeToStableHLO(s.DType))
 	}
 
 	// Encode bounds only if explicitly requested via EncodeBounds flag.

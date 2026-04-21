@@ -5,7 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // Quantization represents the metadata for a !quant.uniform type.
@@ -61,7 +62,7 @@ func (q *Quantization) ToStableHLO() string {
 	w := func(format string, args ...any) {
 		_, _ = fmt.Fprintf(&sb, format, args...) // Writing to stringbuffer shouldn't return an error.
 	}
-	w("!quant.uniform<%s:%s", q.StorageType.ToStableHLO(), q.ExpressedType.ToStableHLO())
+	w("!quant.uniform<%s:%s", utils.DTypeToStableHLO(q.StorageType), utils.DTypeToStableHLO(q.ExpressedType))
 
 	// 2. Axis/Block Info
 	// If QuantizedAxes is provided, we add the axis metadata.

@@ -5,7 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/go-xla/internal/utils"
 )
 
 // ComparisonType enum defined for the Compare op.
@@ -133,7 +134,7 @@ func (f FloatPrecisionType) ToStableHLO() string {
 	if f.TF32 {
 		return "tf32"
 	}
-	return f.DType.ToStableHLO()
+	return utils.DTypeToStableHLO(f.DType)
 }
 
 // DotGeneralAlgorithm defines fine-control of the algorithm used for the dot product.

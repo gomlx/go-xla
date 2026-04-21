@@ -3,7 +3,7 @@ package stablehlo
 import (
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/stretchr/testify/require"
 )

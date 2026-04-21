@@ -22,7 +22,7 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/pkg/errors"
 )
 

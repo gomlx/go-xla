@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/internal/optypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/internal/utils"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
@@ -207,7 +208,7 @@ func literalToStableHLO(attr any) string {
 		dtype := dtypes.FromAny(v)
 		return fmt.Sprintf("%s : %s",
 			podToStableHLO(v),
-			dtype.ToStableHLO())
+			utils.DTypeToStableHLO(dtype))
 
 	case bool:
 		return fmt.Sprintf("%s", podToStableHLO(v))

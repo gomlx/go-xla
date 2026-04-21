@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/internal/shapeinference"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"

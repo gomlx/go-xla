@@ -10,7 +10,7 @@ import (
 
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

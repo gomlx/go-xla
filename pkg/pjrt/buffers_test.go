@@ -8,8 +8,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 )
 
