@@ -17,7 +17,7 @@ extern const PJRT_Api* GetPjrtApi();
 */
 import "C"
 import (
-	"github.com/gomlx/go-xla/pkg/pjrt"
+	"github.com/gomlx/go-xla/pjrt"
 	"k8s.io/klog/v2"
 	"unsafe"
 )
