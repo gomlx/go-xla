@@ -2,9 +2,10 @@
 
 - Moved packages out of `pkg/` (that was only used before `/internal` had a special meaning).
 - New `github.com/gomlx/compute/dtypes` repo will host `dtypes`.
+- Added `compute/xla` with the XLA backend implementation for github.com/gomlx/compute, moved out of 
+  github.com/gomlx/gomlx.
 - Package `shapes` for go-xla diverged enough (having quantization, dimension bounds, etc.) that it 
   stays a fork local to `go-xla`.
-
 
 # v0.2.2: New `OptimizationBarrier` op, `pjrt.IsCPU()`
 

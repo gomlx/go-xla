@@ -84,9 +84,11 @@ form pypi.org) .
 
 ### Package `compute/xla`
 
-It implements an XLA backend for the `github.com/gomlx/compute` project. By simply importing this, you make an XLA
+Implements an XLA backend for the `github.com/gomlx/compute` project. By simply importing this, you make an XLA
 backend available for use, for instance, with GoMLX. It's actually imported by default in GoMLX for the platforms that
 support it.
+
+See details in [compute/xla/README.md](https://github.com/gomlx/go-xla/blob/master/compute/xla/README.md).
 
 ## 🗺️ How to use it?
 
