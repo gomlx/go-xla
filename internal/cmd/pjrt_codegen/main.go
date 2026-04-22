@@ -7,8 +7,8 @@ import (
 	"os"
 	"path"
 
+	"github.com/gomlx/go-xla/installer"
 	"github.com/gomlx/go-xla/internal/must"
-	"github.com/gomlx/go-xla/pkg/installer"
 )
 
 const (

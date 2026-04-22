@@ -7,8 +7,8 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/pjrt"
-	. "github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	. "github.com/gomlx/go-xla/stablehlo"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 func TestCollectiveOps(t *testing.T) {

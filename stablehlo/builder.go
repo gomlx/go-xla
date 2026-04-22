@@ -7,8 +7,8 @@ import (
 	"slices"
 
 	"github.com/gomlx/go-xla/internal/utils"
-	"github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/shardy"
+	"github.com/gomlx/go-xla/types"
+	"github.com/gomlx/go-xla/types/shardy"
 	"github.com/pkg/errors"
 )
 

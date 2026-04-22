@@ -6,7 +6,7 @@ import (
 
 	"github.com/gomlx/go-xla/internal/optypes"
 	"github.com/gomlx/go-xla/internal/shapeinference"
-	"github.com/gomlx/go-xla/pkg/types"
+	"github.com/gomlx/go-xla/types"
 	"github.com/pkg/errors"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/pjrt"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 func TestShardy(t *testing.T) {

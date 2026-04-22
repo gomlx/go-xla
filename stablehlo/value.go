@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types/shapes"
 	"github.com/pkg/errors"
 )
 

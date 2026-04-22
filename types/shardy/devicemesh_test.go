@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/shardy"
+	"github.com/gomlx/go-xla/types/shardy"
 )
 
 func TestDeviceMesh(t *testing.T) {

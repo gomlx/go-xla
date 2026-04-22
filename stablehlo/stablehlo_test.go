@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
-	"github.com/gomlx/go-xla/pkg/types/shardy"
+	"github.com/gomlx/go-xla/types/shapes"
+	"github.com/gomlx/go-xla/types/shardy"
 )
 
 func must1[T any](value T, err error) T {

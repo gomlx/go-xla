@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 func TestWhile(t *testing.T) {
