@@ -32,7 +32,7 @@
 //     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
 //     (plural axes), and its size as its dimension.
 //   - Dimension: the size of a multi-dimension Tensor in one of its axes. See the example below.
-//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/go-xla/pkg/types/dtypes
+//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/go-xla/types/dtypes
 //   - Scalar: is a shape where there are no axes (or dimensions), only a single value
 //     of the associated DType.
 //
@@ -95,7 +95,7 @@ const DimUnknown = -1
 //
 // Use Make to create a new shape. See example in package shapes documentation.
 type Shape struct {
-	// DType is the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/go-xla/pkg/types/dtypes
+	// DType is the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/go-xla/types/dtypes
 	DType dtypes.DType
 
 	// Dimensions (lengths) for each axis of the tensor/array being represented.

@@ -11,10 +11,10 @@ import (
 func init() {
 	pjrtAPI := cpustatictest.GetPjrtApi()
 	if pjrtAPI == 0 {
-		klog.Fatal("Failed to get PJRT API pointer when initializing static PJRT (github.com/gomlx/go-xla/pkg/pjrt/static).")
+		klog.Fatal("Failed to get PJRT API pointer when initializing static PJRT (github.com/gomlx/go-xla/pjrt/static).")
 	}
 	err := RegisterPreloadedPlugin("cpu", pjrtAPI)
 	if err != nil {
-		klog.Fatalf("Failed to register static PJRT plugin for CPU (github.com/gomlx/go-xla/pkg/pjrt/static): %+v", err)
+		klog.Fatalf("Failed to register static PJRT plugin for CPU (github.com/gomlx/go-xla/pjrt/static): %+v", err)
 	}
 }

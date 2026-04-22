@@ -3,7 +3,7 @@
 //
 // To use it simply import with:
 //
-//	import _ "github.com/gomlx/go-xla/pkg/pjrt/static"
+//	import _ "github.com/gomlx/go-xlapjrt/dynamic"
 //
 // And calls to pjrt.GetPlugin("cpu") will return the dynamically linked one.
 //
@@ -29,10 +29,10 @@ import (
 func init() {
 	pjrtAPI := uintptr(unsafe.Pointer(C.GetPjrtApi()))
 	if pjrtAPI == 0 {
-		klog.Fatal("Failed to get PJRT API pointer when initializing dynamically preloaded PJRT (github.com/gomlx/go-xla/pkg/pjrt/cpu/dynamic).")
+		klog.Fatal("Failed to get PJRT API pointer when initializing dynamically preloaded PJRT (github.com/gomlx/go-xla/pjrt/cpu/dynamic).")
 	}
 	err := pjrt.RegisterPreloadedPlugin("cpu", pjrtAPI)
 	if err != nil {
-		klog.Fatalf("Failed to register dynamically preloaded PJRT plugin for CPU (github.com/gomlx/go-xla/pkg/pjrt/cpu/dynamic): %+v", err)
+		klog.Fatalf("Failed to register dynamically preloaded PJRT plugin for CPU (github.com/gomlx/go-xla/pjrt/cpu/dynamic): %+v", err)
 	}
 }

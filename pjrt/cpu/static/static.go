@@ -2,7 +2,7 @@
 //
 // To use it simply import with:
 //
-//	import _ "github.com/gomlx/go-xla/pkg/pjrt/static"
+//	import _ "github.com/gomlx/go-xla/pjrt/static"
 //
 // And calls to pjrt.GetPlugin("cpu") will return the statically linked one.
 //
@@ -17,18 +17,19 @@ extern const PJRT_Api* GetPjrtApi();
 */
 import "C"
 import (
+	"unsafe"
+
 	"github.com/gomlx/go-xla/pjrt"
 	"k8s.io/klog/v2"
-	"unsafe"
 )
 
 func init() {
 	pjrtAPI := uintptr(unsafe.Pointer(C.GetPjrtApi()))
 	if pjrtAPI == 0 {
-		klog.Fatal("Failed to get PJRT API pointer when initializing statically preloaded PJRT (github.com/gomlx/go-xla/pkg/pjrt/cpu/static).")
+		klog.Fatal("Failed to get PJRT API pointer when initializing statically preloaded PJRT (github.com/gomlx/go-xla/pjrt/cpu/static).")
 	}
 	err := pjrt.RegisterPreloadedPlugin("cpu", pjrtAPI)
 	if err != nil {
-		klog.Fatalf("Failed to register statically preloaded PJRT plugin for CPU (github.com/gomlx/go-xla/pkg/pjrt/cpu/static): %+v", err)
+		klog.Fatalf("Failed to register statically preloaded PJRT plugin for CPU (github.com/gomlx/go-xla/pjrt/cpu/static): %+v", err)
 	}
 }

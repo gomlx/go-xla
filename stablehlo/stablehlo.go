@@ -1,5 +1,5 @@
 // Package stablehlo helps build a ToStableHLO program (text format) to then be
-// JIT-compiled and executed by PJRT (github.com/gomlx/go-xla/pkg/pjrt).
+// JIT-compiled and executed by PJRT (github.com/gomlx/go-xla/pjrt).
 //
 // Among its features:
 //
