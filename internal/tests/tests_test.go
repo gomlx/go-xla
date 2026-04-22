@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/go-xla/pjrt"
 	"github.com/gomlx/go-xla/pkg/installer"
-	"github.com/gomlx/go-xla/pkg/pjrt"
 	"github.com/gomlx/go-xla/pkg/stablehlo"
 	"github.com/gomlx/go-xla/pkg/types/shapes"
 	"k8s.io/klog/v2"
