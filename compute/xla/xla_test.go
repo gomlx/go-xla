@@ -8,48 +8,55 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/backends/xla"
-	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/compute/support/testutil"
+	"github.com/gomlx/go-xla/compute/xla"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2"
 )
-
-var backend compute.Backend
 
 func init() {
 	klog.InitFlags(nil)
 }
 
-func setup() {
-	fmt.Printf("Available backends: %q\n", compute.List())
-	if os.Getenv(compute.ConfigEnvVar) == "" {
-		must.M(os.Setenv(compute.ConfigEnvVar, xla.BackendName))
-	} else {
-		fmt.Printf("\t$%s=%q\n", compute.ConfigEnvVar, os.Getenv(compute.ConfigEnvVar))
+func testAllPlugins(t *testing.T, fn func(t *testing.T, backend compute.Backend)) {
+	envBackend := os.Getenv(compute.ConfigEnvVar)
+	if envBackend != "" {
+		backend, err := compute.New()
+		if err != nil {
+			t.Fatalf("Failed to create backend %q: %v", envBackend, err)
+		}
+		defer backend.Finalize()
+		fn(t, backend)
+		return
 	}
-	backend = compute.MustNew()
-	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
-	fmt.Printf("\t- Add flag -vmodule=executable=2 to log the StableHLO program being executed.\n")
-	for deviceNum := range compute.DeviceNum(backend.NumDevices()) {
-		fmt.Printf("\t- Device #%d: %s\n", deviceNum, backend.DeviceDescription(deviceNum))
+
+	plugins := []string{"cpu", "cuda", "tpu"}
+	for _, plugin := range plugins {
+		t.Run(plugin, func(t *testing.T) {
+			backendName := fmt.Sprintf("%s:%s", xla.BackendName, plugin)
+			if err := os.Setenv(compute.ConfigEnvVar, backendName); err != nil {
+				t.Fatalf("Failed to set env %s=%s", compute.ConfigEnvVar, backendName)
+			}
+			defer os.Unsetenv(compute.ConfigEnvVar)
+
+			backend, err := compute.New()
+			if err != nil {
+				t.Skipf("Plugin %q not available: %v", plugin, err)
+				return
+			}
+			defer backend.Finalize()
+			fn(t, backend)
+		})
 	}
-}
-
-func teardown() {
-	backend.Finalize()
-}
-
-func TestMain(m *testing.M) {
-	setup()
-	code := m.Run() // Run all tests in the file
-	teardown()
-	os.Exit(code)
 }
 
 func TestCompileAndRun(t *testing.T) {
-	// Just return a constant.
-	exec := graph.MustNewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
-	y0 := exec.MustExec()[0]
-	assert.Equal(t, float32(-7), y0.Value())
+	testAllPlugins(t, func(t *testing.T, backend compute.Backend) {
+		// Just return a constant.
+		y0, err := testutil.Exec1(backend, nil, func(f compute.Function, params []compute.Value) (compute.Value, error) {
+			return f.Constant([]float32{-7})
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, float32(-7), y0)
+	})
 }

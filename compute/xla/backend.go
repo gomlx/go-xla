@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/pjrt"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -112,7 +111,7 @@ func (backend *Backend) IsFinalized() bool {
 func castToPJRT(buffer compute.Buffer) *pjrt.Buffer {
 	pb, ok := buffer.(*pjrt.Buffer)
 	if !ok {
-		exceptions.Panicf("buffer given is not a %q backend (pjrt) buffer", BackendName)
+		panic(errors.Errorf("buffer given is not a %q backend (pjrt) buffer", BackendName))
 	}
 	return pb
 }

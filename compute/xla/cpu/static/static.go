@@ -7,14 +7,16 @@
 //
 // To use it, import it:
 //
-//	import _ "github.com/gomlx/gomlx/backends/stablehlo/cpu/static"
+//	import _ "github.com/gomlx/go-xla/compute/xla/cpu/static"
 //
-// It also automatically includes the XLA engine ("github.com/gomlx/gomlx/backends/stablehlo").
+// It also automatically includes the XLA engine ("github.com/gomlx/go-xla/compute/xla").
+//
+// See also github.com/gomlx/go-xla/compute/xla/cpu/dynamic for dynamic linking.
 package static
 
 import (
 	// Link XLA engine.
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/go-xla/compute/xla"
 
 	// Link CPU PJRT statically.
 	_ "github.com/gomlx/go-xla/pjrt/cpu/static"
