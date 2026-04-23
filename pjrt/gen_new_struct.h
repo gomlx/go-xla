@@ -24,6 +24,9 @@ extern PJRT_Error_Message_Args* new_PJRT_Error_Message_Args();
 // new_PJRT_Error_GetCode_Args allocates a zero-initialized C.PJRT_Error_GetCode_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Error_GetCode_Args* new_PJRT_Error_GetCode_Args();
 
+// new_PJRT_Error_ForEachPayload_Args allocates a zero-initialized C.PJRT_Error_ForEachPayload_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Error_ForEachPayload_Args* new_PJRT_Error_ForEachPayload_Args();
+
 // new_PJRT_NamedValue allocates a zero-initialized C.PJRT_NamedValue structure, sets its .struct_size, and returns it.
 // Named value for key-value pairs.
 extern PJRT_NamedValue* new_PJRT_NamedValue();
@@ -305,6 +308,9 @@ extern PJRT_Executable_OutputElementTypes_Args* new_PJRT_Executable_OutputElemen
 // new_PJRT_Executable_OutputDimensions_Args allocates a zero-initialized C.PJRT_Executable_OutputDimensions_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Executable_OutputDimensions_Args* new_PJRT_Executable_OutputDimensions_Args();
 
+// new_PJRT_Executable_ParameterMemoryKinds_Args allocates a zero-initialized C.PJRT_Executable_ParameterMemoryKinds_Args structure, sets its .struct_size, and returns it.
+extern PJRT_Executable_ParameterMemoryKinds_Args* new_PJRT_Executable_ParameterMemoryKinds_Args();
+
 // new_PJRT_Executable_OutputMemoryKinds_Args allocates a zero-initialized C.PJRT_Executable_OutputMemoryKinds_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Executable_OutputMemoryKinds_Args* new_PJRT_Executable_OutputMemoryKinds_Args();
 
@@ -436,6 +442,9 @@ extern PJRT_TopologyDescription_Deserialize_Args* new_PJRT_TopologyDescription_D
 
 // new_PJRT_TopologyDescription_Attributes_Args allocates a zero-initialized C.PJRT_TopologyDescription_Attributes_Args structure, sets its .struct_size, and returns it.
 extern PJRT_TopologyDescription_Attributes_Args* new_PJRT_TopologyDescription_Attributes_Args();
+
+// new_PJRT_TopologyDescription_Fingerprint_Args allocates a zero-initialized C.PJRT_TopologyDescription_Fingerprint_Args structure, sets its .struct_size, and returns it.
+extern PJRT_TopologyDescription_Fingerprint_Args* new_PJRT_TopologyDescription_Fingerprint_Args();
 
 // new_PJRT_Compile_Args allocates a zero-initialized C.PJRT_Compile_Args structure, sets its .struct_size, and returns it.
 extern PJRT_Compile_Args* new_PJRT_Compile_Args();

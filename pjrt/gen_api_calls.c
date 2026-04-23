@@ -24,6 +24,13 @@ PJRT_Error* call_PJRT_Error_GetCode(const PJRT_Api *api, PJRT_Error_GetCode_Args
 	return api->PJRT_Error_GetCode(args);
 }
 
+// call_PJRT_Error_ForEachPayload calls the corresponding PJRT API method.
+// Iterates over the stored payloads and calls the `visitor`
+// callable for each one.
+PJRT_Error* call_PJRT_Error_ForEachPayload(const PJRT_Api *api, PJRT_Error_ForEachPayload_Args* args) {
+	return api->PJRT_Error_ForEachPayload(args);
+}
+
 // call_PJRT_Plugin_Initialize calls the corresponding PJRT API method.
 // One-time plugin setup. Must be called before any other functions are called.
 PJRT_Error* call_PJRT_Plugin_Initialize(const PJRT_Api *api, PJRT_Plugin_Initialize_Args* args) {
@@ -620,6 +627,12 @@ PJRT_Error* call_PJRT_Executable_OutputDimensions(const PJRT_Api *api, PJRT_Exec
 	return api->PJRT_Executable_OutputDimensions(args);
 }
 
+// call_PJRT_Executable_ParameterMemoryKinds calls the corresponding PJRT API method.
+// Returns a list of memory kind strings for parameters.
+PJRT_Error* call_PJRT_Executable_ParameterMemoryKinds(const PJRT_Api *api, PJRT_Executable_ParameterMemoryKinds_Args* args) {
+	return api->PJRT_Executable_ParameterMemoryKinds(args);
+}
+
 // call_PJRT_Executable_OutputMemoryKinds calls the corresponding PJRT API method.
 // Returns a list of memory kind strings for outputs.
 PJRT_Error* call_PJRT_Executable_OutputMemoryKinds(const PJRT_Api *api, PJRT_Executable_OutputMemoryKinds_Args* args) {
@@ -924,6 +937,11 @@ PJRT_Error* call_PJRT_TopologyDescription_Deserialize(const PJRT_Api *api, PJRT_
 // Returns platform-specific topology attributes.
 PJRT_Error* call_PJRT_TopologyDescription_Attributes(const PJRT_Api *api, PJRT_TopologyDescription_Attributes_Args* args) {
 	return api->PJRT_TopologyDescription_Attributes(args);
+}
+
+// call_PJRT_TopologyDescription_Fingerprint calls the corresponding PJRT API method.
+PJRT_Error* call_PJRT_TopologyDescription_Fingerprint(const PJRT_Api *api, PJRT_TopologyDescription_Fingerprint_Args* args) {
+	return api->PJRT_TopologyDescription_Fingerprint(args);
 }
 
 // call_PJRT_Compile calls the corresponding PJRT API method.

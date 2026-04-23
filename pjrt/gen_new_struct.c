@@ -42,6 +42,14 @@ PJRT_Error_GetCode_Args* new_PJRT_Error_GetCode_Args() {
 	return p;
 }
 
+// new_PJRT_Error_ForEachPayload_Args allocates a zero-initialized C.PJRT_Error_ForEachPayload_Args structure, sets its .struct_size, and returns it.
+PJRT_Error_ForEachPayload_Args* new_PJRT_Error_ForEachPayload_Args() {
+	PJRT_Error_ForEachPayload_Args* p = malloc(sizeof(PJRT_Error_ForEachPayload_Args));
+	memset(p, 0, sizeof(PJRT_Error_ForEachPayload_Args));
+	p->struct_size = PJRT_Error_ForEachPayload_Args_STRUCT_SIZE;
+	return p;
+}
+
 // new_PJRT_NamedValue allocates a zero-initialized C.PJRT_NamedValue structure, sets its .struct_size, and returns it.
 // Named value for key-value pairs.
 PJRT_NamedValue* new_PJRT_NamedValue() {
@@ -772,6 +780,14 @@ PJRT_Executable_OutputDimensions_Args* new_PJRT_Executable_OutputDimensions_Args
 	return p;
 }
 
+// new_PJRT_Executable_ParameterMemoryKinds_Args allocates a zero-initialized C.PJRT_Executable_ParameterMemoryKinds_Args structure, sets its .struct_size, and returns it.
+PJRT_Executable_ParameterMemoryKinds_Args* new_PJRT_Executable_ParameterMemoryKinds_Args() {
+	PJRT_Executable_ParameterMemoryKinds_Args* p = malloc(sizeof(PJRT_Executable_ParameterMemoryKinds_Args));
+	memset(p, 0, sizeof(PJRT_Executable_ParameterMemoryKinds_Args));
+	p->struct_size = PJRT_Executable_ParameterMemoryKinds_Args_STRUCT_SIZE;
+	return p;
+}
+
 // new_PJRT_Executable_OutputMemoryKinds_Args allocates a zero-initialized C.PJRT_Executable_OutputMemoryKinds_Args structure, sets its .struct_size, and returns it.
 PJRT_Executable_OutputMemoryKinds_Args* new_PJRT_Executable_OutputMemoryKinds_Args() {
 	PJRT_Executable_OutputMemoryKinds_Args* p = malloc(sizeof(PJRT_Executable_OutputMemoryKinds_Args));
@@ -1121,6 +1137,14 @@ PJRT_TopologyDescription_Attributes_Args* new_PJRT_TopologyDescription_Attribute
 	PJRT_TopologyDescription_Attributes_Args* p = malloc(sizeof(PJRT_TopologyDescription_Attributes_Args));
 	memset(p, 0, sizeof(PJRT_TopologyDescription_Attributes_Args));
 	p->struct_size = PJRT_TopologyDescription_Attributes_Args_STRUCT_SIZE;
+	return p;
+}
+
+// new_PJRT_TopologyDescription_Fingerprint_Args allocates a zero-initialized C.PJRT_TopologyDescription_Fingerprint_Args structure, sets its .struct_size, and returns it.
+PJRT_TopologyDescription_Fingerprint_Args* new_PJRT_TopologyDescription_Fingerprint_Args() {
+	PJRT_TopologyDescription_Fingerprint_Args* p = malloc(sizeof(PJRT_TopologyDescription_Fingerprint_Args));
+	memset(p, 0, sizeof(PJRT_TopologyDescription_Fingerprint_Args));
+	p->struct_size = PJRT_TopologyDescription_Fingerprint_Args_STRUCT_SIZE;
 	return p;
 }
 

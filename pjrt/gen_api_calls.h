@@ -21,6 +21,11 @@ extern void call_PJRT_Error_Message(const PJRT_Api *api, PJRT_Error_Message_Args
 // call_PJRT_Error_GetCode calls the corresponding PJRT API method.
 extern PJRT_Error* call_PJRT_Error_GetCode(const PJRT_Api *api, PJRT_Error_GetCode_Args* args);
 
+// call_PJRT_Error_ForEachPayload calls the corresponding PJRT API method.
+// Iterates over the stored payloads and calls the `visitor`
+// callable for each one.
+extern PJRT_Error* call_PJRT_Error_ForEachPayload(const PJRT_Api *api, PJRT_Error_ForEachPayload_Args* args);
+
 // call_PJRT_Plugin_Initialize calls the corresponding PJRT API method.
 // One-time plugin setup. Must be called before any other functions are called.
 extern PJRT_Error* call_PJRT_Plugin_Initialize(const PJRT_Api *api, PJRT_Plugin_Initialize_Args* args);
@@ -445,6 +450,10 @@ extern PJRT_Error* call_PJRT_Executable_OutputElementTypes(const PJRT_Api *api, 
 // are concatenated into a single list of dimensions.
 extern PJRT_Error* call_PJRT_Executable_OutputDimensions(const PJRT_Api *api, PJRT_Executable_OutputDimensions_Args* args);
 
+// call_PJRT_Executable_ParameterMemoryKinds calls the corresponding PJRT API method.
+// Returns a list of memory kind strings for parameters.
+extern PJRT_Error* call_PJRT_Executable_ParameterMemoryKinds(const PJRT_Api *api, PJRT_Executable_ParameterMemoryKinds_Args* args);
+
 // call_PJRT_Executable_OutputMemoryKinds calls the corresponding PJRT API method.
 // Returns a list of memory kind strings for outputs.
 extern PJRT_Error* call_PJRT_Executable_OutputMemoryKinds(const PJRT_Api *api, PJRT_Executable_OutputMemoryKinds_Args* args);
@@ -666,6 +675,9 @@ extern PJRT_Error* call_PJRT_TopologyDescription_Deserialize(const PJRT_Api *api
 // call_PJRT_TopologyDescription_Attributes calls the corresponding PJRT API method.
 // Returns platform-specific topology attributes.
 extern PJRT_Error* call_PJRT_TopologyDescription_Attributes(const PJRT_Api *api, PJRT_TopologyDescription_Attributes_Args* args);
+
+// call_PJRT_TopologyDescription_Fingerprint calls the corresponding PJRT API method.
+extern PJRT_Error* call_PJRT_TopologyDescription_Fingerprint(const PJRT_Api *api, PJRT_TopologyDescription_Fingerprint_Args* args);
 
 // call_PJRT_Compile calls the corresponding PJRT API method.
 // Compiles a program in specified format (such as MLIR or HLO) with given

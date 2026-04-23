@@ -65,6 +65,9 @@ const (
 
 	// PJRT_Extension_Type_MultiSlice is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
 	PJRT_Extension_Type_MultiSlice PJRT_Extension_Type = 19
+
+	// PJRT_Extension_Type_HostMemoryAllocator is a 1:1 mapping of the corresponding C enum value defined in pjrt_c_api.h.
+	PJRT_Extension_Type_HostMemoryAllocator PJRT_Extension_Type = 20
 )
 
 // PJRT_Error_Code is mapping of the corresponded C enum defined in pjrt_c_api.h.
