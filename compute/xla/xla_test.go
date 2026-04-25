@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/backendtest"
 	"github.com/gomlx/compute/support/testutil"
 	"github.com/gomlx/go-xla/compute/xla"
 	"github.com/stretchr/testify/assert"
@@ -58,5 +59,12 @@ func TestCompileAndRun(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, float32(-7), y0)
+	})
+}
+
+// TestCompliance runs all compute.Backend compliance tests.
+func TestCompliance(t *testing.T) {
+	testAllPlugins(t, func(t *testing.T, backend compute.Backend) {
+		backendtest.RunAll(t, backend)
 	})
 }

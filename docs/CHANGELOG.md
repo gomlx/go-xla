@@ -6,6 +6,8 @@
   github.com/gomlx/gomlx.
 - Package `shapes` for go-xla diverged enough (having quantization, dimension bounds, etc.) that it 
   stays a fork local to `go-xla`.
+- Updated to XLA/PJRT v0.104
+- Added `gomlx/compile/support/backendtest` compliance tests to `compute/xla` backend.
 
 # v0.2.2: New `OptimizationBarrier` op, `pjrt.IsCPU()`
 

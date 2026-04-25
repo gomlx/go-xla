@@ -178,6 +178,22 @@ func (e *Executable) Execute(
 			BackendName, e.name, len(donate), numParams, numDevices)
 	}
 	pInputs := xslices.Map(inputs, castToPJRT)
+	for i, input := range pInputs {
+		inputDType, err := input.DType()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "backend %q: failed to get dtype for parameter %d to Execute %q", BackendName, i, e.name)
+		}
+		if inputDType != e.parameterShapes[i].DType {
+			inputDims, err := input.Dimensions()
+			if err != nil {
+				return nil, errors.WithMessagef(err, "backend %q: failed to get dimensions for parameter %d to Execute %q", BackendName, i, e.name)
+			}
+			inputShape := shapes.Make(inputDType, inputDims...)
+			return nil, errors.Errorf(
+				"backend %q: wrong shape for parameter %d to Execute %q: %v given, %v expected",
+				BackendName, i, e.name, inputShape, e.parameterShapes[i])
+		}
+	}
 	execBuilder := e.exec.Execute(pInputs...)
 	if len(donate) == 0 {
 		execBuilder = execBuilder.DonateNone()
