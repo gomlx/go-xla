@@ -1379,7 +1379,7 @@ func MultiReduceWindow(inputs, initialValues []*Value, reductionFn *Function,
 		"window_dimensions": intSliceToArrayI64StableHLO(windowDimensions),
 		"window_strides":    intSliceToArrayI64StableHLO(strides),
 		"window_dilations":  intSliceToArrayI64StableHLO(windowDilations),
-		"base_dilations":    intSliceToArrayI64StableHLO(windowDilations),
+		"base_dilations":    intSliceToArrayI64StableHLO(inputDilations),
 	}
 	stmt.AddFunctionParameter("reductionFn", reductionFn)
 
