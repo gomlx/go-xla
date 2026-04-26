@@ -13,6 +13,8 @@ github.com/gomlx/compute v0.0.0-20260422045539-e601c0f37ad4 h1:mlOeoCVymuJIyfxUY
 github.com/gomlx/compute v0.0.0-20260422045539-e601c0f37ad4/go.mod h1:DgsC7R05wlGZ6rqklCzf3pkT9zHodJm/Qo4/F70aNX4=
 github.com/gomlx/compute v0.0.0-20260422091102-a2c61cba9127 h1:qWxMYbC7h2U2+L7vatlz2WzKraobfTUWR0Szs2L18vw=
 github.com/gomlx/compute v0.0.0-20260422091102-a2c61cba9127/go.mod h1:DgsC7R05wlGZ6rqklCzf3pkT9zHodJm/Qo4/F70aNX4=
+github.com/gomlx/compute v0.0.0-20260426084914-c478a14b5283 h1:BaF3KEDnR9bCQK7gfmPNcOCo2DXDXRD5F5qztTO2meE=
+github.com/gomlx/compute v0.0.0-20260426084914-c478a14b5283/go.mod h1:QhKiAzMBnZNJhssZ1kAGFO+B8hHU6/xxFNu5vujIRmY=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/janpfeifer/go-benchmarks v0.1.1 h1:gLLy07/JrOKSnMWeUxSnjTdhkglgmrNR2IBDnR4kRqw=
