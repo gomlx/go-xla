@@ -533,7 +533,35 @@ func (f *Function) Pad(x, fillValue compute.Value, axesConfig ...compute.PadAxis
 	return f.newNode(output), nil
 }
 
-// ConvGeneral implements the compute.Function interface.
+// ConvGeneral is a generic Convolution operation with arbitrary number of spatial axes, strides,
+// paddings, dilations, and grouping.
+//
+// Arguments:
+//
+//   - input: it must have one batch and one channel axis, and arbitrary number of spatial axes.
+//   - kernel: its rank must match the input's spatial axes.
+//   - axes: defines how the axes of input and kernel are mapped.
+//   - strides: stride of the convolution window, how it moves. If set, one value per spatial axis,
+//     and values must be >= 1. If not set, strides default to 1.
+//   - paddings: padding applied to the start and end of each axis of the input.
+//     If nil, it defaults to no padding.
+//   - inputDilations: "virtually" expand the input by inserting `2-1` copies of `0` (or whatever
+//     is the reduciton "zero" value) between the elements in each dimension.
+//     If nil, it's assumed to be 1 (no dilation) for each axis. Values must be >= 1.
+//   - kernelDilations: "virtually" expand the kernel by inserting `2-1` copies of `0` between the
+//     elements in each dimension.
+//     If nil, it's assumed to be 1 (no dilation) for each axis. Values must be >= 1.
+//     Also known as "atrous convolution".
+//   - channelGroupCount: number of input channels to group together for the convolution.
+//     (aka "grouped convolution"). If <= 1 it's disabled.
+//   - batchGroupCount: number of input batches to group together for the convolution.
+//     If <= 1 it's disabled.
+//
+// There is a more detailed description in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
+// Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
+// Note:
+//   - Another common term for "channels" is "features".
+//   - "Kernel" is also commonly called "weights" or "filters".
 func (f *Function) ConvGeneral(input, kernel compute.Value,
 	axes compute.ConvolveAxesConfig, strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (compute.Value, error) {
@@ -542,6 +570,32 @@ func (f *Function) ConvGeneral(input, kernel compute.Value,
 		return nil, err
 	}
 	inputN, kernelN := nodes[0], nodes[1]
+	spatialRank := inputN.shape.Rank() - 2
+	if spatialRank < 0 {
+		return nil, errors.Errorf("ConvGeneral: invalid input shape %s, it requires one batch and one channel axis, "+
+			"plus at least one spatial dimension", inputN.shape)
+	}
+
+	// Set default values to specification.
+	if len(strides) == 0 {
+		strides = xslices.SliceWithValue(spatialRank, 1)
+	}
+	if len(paddings) == 0 {
+		paddings = xslices.SliceWithValue(spatialRank, [2]int{0, 0})
+	}
+	if len(inputDilations) == 0 {
+		inputDilations = xslices.SliceWithValue(spatialRank, 1)
+	}
+	if len(kernelDilations) == 0 {
+		kernelDilations = xslices.SliceWithValue(spatialRank, 1)
+	}
+	if channelGroupCount <= 1 {
+		channelGroupCount = 1
+	}
+	if batchGroupCount <= 1 {
+		batchGroupCount = 1
+	}
+
 	output, err := stablehlo.Convolution(inputN.value, kernelN.value,
 		strides, paddings, inputDilations, kernelDilations,
 		axes.InputBatch, axes.InputChannels, axes.InputSpatial,

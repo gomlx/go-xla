@@ -154,6 +154,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		plugin:       plugin,
 		client:       client,
 		pluginName:   pluginName,
+		config:       config,
 		capabilities: Capabilities.Clone(),
 		numDevices:   len(client.AddressableDevices()),
 

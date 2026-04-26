@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/backendtest"
 	"github.com/gomlx/compute/support/testutil"
 	"github.com/gomlx/go-xla/compute/xla"
@@ -19,7 +20,7 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-func testAllPlugins(t *testing.T, fn func(t *testing.T, backend compute.Backend)) {
+func testAllPlugins(t *testing.T, fn func(t *testing.T, backend compute.Backend, plugin string)) {
 	envBackend := os.Getenv(compute.ConfigEnvVar)
 	if envBackend != "" {
 		backend, err := compute.New()
@@ -27,7 +28,8 @@ func testAllPlugins(t *testing.T, fn func(t *testing.T, backend compute.Backend)
 			t.Fatalf("Failed to create backend %q: %v", envBackend, err)
 		}
 		defer backend.Finalize()
-		fn(t, backend)
+		xlaBackend := backend.(*xla.Backend)
+		fn(t, backend, xlaBackend.PluginName())
 		return
 	}
 
@@ -46,13 +48,13 @@ func testAllPlugins(t *testing.T, fn func(t *testing.T, backend compute.Backend)
 				return
 			}
 			defer backend.Finalize()
-			fn(t, backend)
+			fn(t, backend, plugin)
 		})
 	}
 }
 
 func TestCompileAndRun(t *testing.T) {
-	testAllPlugins(t, func(t *testing.T, backend compute.Backend) {
+	testAllPlugins(t, func(t *testing.T, backend compute.Backend, plugin string) {
 		// Just return a constant.
 		y0, err := testutil.Exec1(backend, nil, func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.Constant([]float32{-7})
@@ -64,7 +66,12 @@ func TestCompileAndRun(t *testing.T) {
 
 // TestCompliance runs all compute.Backend compliance tests.
 func TestCompliance(t *testing.T) {
-	testAllPlugins(t, func(t *testing.T, backend compute.Backend) {
-		backendtest.RunAll(t, backend)
+	testAllPlugins(t, func(t *testing.T, backend compute.Backend, plugin string) {
+		cfg := &backendtest.AllTestsConfiguration{}
+		if plugin == "cuda" {
+			// CUDA only support float32 and uint8 convolutions (!?)
+			cfg.ConvGeneralDTypes = []dtypes.DType{dtypes.Float32}
+		}
+		backendtest.RunAll(t, backend, cfg)
 	})
 }

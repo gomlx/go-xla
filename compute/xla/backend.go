@@ -16,12 +16,12 @@ import (
 
 // Backend implements the XLA/PJRT compute.Backend for GoMLX.
 type Backend struct {
-	plugin           *pjrt.Plugin
-	client           *pjrt.Client
-	pluginName       string
-	hasSharedBuffers bool
-	capabilities     compute.Capabilities
-	numDevices       int
+	plugin             *pjrt.Plugin
+	client             *pjrt.Client
+	config, pluginName string
+	hasSharedBuffers   bool
+	capabilities       compute.Capabilities
+	numDevices         int
 
 	// DotGeneralUseTF32 controls whether to use TF32 for DotGeneral operations that are using float32.
 	// (it can be faster in modern GPUs, and it's enabled by default)
@@ -45,9 +45,20 @@ func (backend *Backend) CheckValid() error {
 	return nil
 }
 
-// Name returns the short name of the backend. E.g.: "stablehlo" for the StableHLO/PJRT plugin.
+// Name returns the short name of the backend. E.g.: "xla" for the StableHLO/PJRT plugin.
 func (backend *Backend) Name() string {
 	return BackendName
+}
+
+// PluginName returns the name of the PJRT plugin.
+func (backend *Backend) PluginName() string {
+	return backend.pluginName
+}
+
+// Config returns the config used to create the backend.
+// If no configuration was used, it returns "".
+func (backend *Backend) Config() string {
+	return backend.config
 }
 
 // String returns Name().

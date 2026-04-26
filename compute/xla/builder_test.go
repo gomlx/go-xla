@@ -12,7 +12,7 @@ import (
 
 // TestBinaryOp covers the different types of automatic broadcasting for binary operations.
 func TestBinaryOp(t *testing.T) {
-	testAllPlugins(t, func(t *testing.T, backend compute.Backend) {
+	testAllPlugins(t, func(t *testing.T, backend compute.Backend, plugin string) {
 		runTestCase := func(name string, lhs, rhs, want any) {
 			t.Run(name, func(t *testing.T) {
 				result, err := testutil.Exec1(backend, []any{lhs, rhs}, func(f compute.Function, params []compute.Value) (compute.Value, error) {
