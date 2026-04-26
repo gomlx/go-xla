@@ -504,16 +504,33 @@ func (f *Function) ArgMinMax(x compute.Value, axis int, outputDType dtypes.DType
 	return f.newNode(results[0]), nil
 }
 
-// ReduceWindow runs a reduction function of the type given by reduceType.
-// It can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+// ReduceWindow runs a reduction function of the type given by reductionType,
+// it can be either ReduceMaxNode, ReduceSumNode, or ReduceMultiplyNode.
 //
-// The parameter windowDimensions must be set and have a value for each axis.
-// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
-// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
-// If paddings is nil, they are assumed to be 0.
-func (f *Function) ReduceWindow(x compute.Value, reductionType compute.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (compute.Value, error) {
+//   - reductionType: the type of reduction to perform. E.g.: [ReduceOpMax], [ReduceOpSum],...
+//   - windowDimensions: the dimensions of the window, must be defined for each axis.
+//   - strides: stride over elements in each axis for each window reduction. If nil, it's assume to be the
+//     same as the windowDimensions -- that is, the strides jump a window at a time.
+//   - inputDilations: "virtually" expand the input by introducing "holes" between elements. I.e. if
+//     inputDilations are 2, then the input is expanded by inserting `2-1` copies of `0` (or whatever
+//     is the reduciton "zero" value) between the elements in each dimension.
+//     If nil, it's assumed to be 1 (no dilation) for each axis. Values must be >= 1.
+//   - windowDilations: "virtually" expand the window by inserting `2-1` copies of `0` between the
+//     elements in each dimension.
+//     If nil, it's assumed to be 1 (no dilation) for each axis. Values must be >= 1.
+//   - paddings: virtual padding to be added to the input at the edges (start and end) of each axis.
+//     If nil, it's assumed to be 0 for each axis.
+func (f *Function) ReduceWindow(
+	input compute.Value,
+	reductionType compute.ReduceOpType,
+	windowDimensions,
+	strides,
+	inputDilations,
+	windowDilations []int,
+	paddings [][2]int,
+) (compute.Value, error) {
 	opType := compute.OpTypeReduceWindow
-	nodes, err := f.verifyAndCastValues(opType.String(), x)
+	nodes, err := f.verifyAndCastValues(opType.String(), input)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +551,7 @@ func (f *Function) ReduceWindow(x compute.Value, reductionType compute.ReduceOpT
 	}
 
 	value, err := stablehlo.ReduceWindow(xNode.value, initialValue, reductionFn,
-		windowDimensions, strides, baseDilations, windowDilations, paddings)
+		windowDimensions, strides, inputDilations, windowDilations, paddings)
 	if err != nil {
 		return nil, err
 	}
