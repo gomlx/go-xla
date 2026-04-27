@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/go-xla/installer"
 	"github.com/gomlx/go-xla/internal/utils"
-	"github.com/gomlx/go-xla/pkg/installer"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

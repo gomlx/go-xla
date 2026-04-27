@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/internal/optypes"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 // Aliases
@@ -600,7 +600,7 @@ func TestReduceWindow(t *testing.T) {
 		operandShape         shapes.Shape
 		windowDimensions     []int
 		strides              []int
-		baseDilations        []int
+		inputDilations       []int
 		windowDilations      []int
 		paddings             [][2]int
 		expectedShape        shapes.Shape
@@ -614,7 +614,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32), // Rank 0
 			windowDimensions: nil,                         // Should be handled as empty for rank 0
 			strides:          nil,                         // Should be handled as empty for rank 0
-			baseDilations:    nil,
+			inputDilations:   nil,
 			windowDilations:  nil,
 			paddings:         nil, // Should be handled as empty for rank 0
 			expectedShape:    shapes.Make(dtypes.Float32),
@@ -625,7 +625,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{1},
 			strides:          []int{1},
-			baseDilations:    []int{1},
+			inputDilations:   []int{1},
 			windowDilations:  []int{1},
 			paddings:         [][2]int{{0, 0}},
 			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10. Num=10-1=9. Out=(9/1)+1=10.
@@ -637,7 +637,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{3}, // EffWin=3
 			strides:          []int{3},
-			baseDilations:    []int{1},
+			inputDilations:   []int{1},
 			windowDilations:  []int{1},
 			paddings:         [][2]int{{0, 0}},
 			// Calculation: EffIn=10, EffWin=3. PaddedEffIn=10. Num=10-3=7. Out=(7/3)+1=3.
@@ -649,7 +649,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{1},
 			strides:          []int{2},
-			baseDilations:    []int{1},
+			inputDilations:   []int{1},
 			windowDilations:  []int{1},
 			paddings:         [][2]int{{0, 0}},
 			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10. Num=10-1=9. Out=(9/2)+1=4+1=5.
@@ -661,7 +661,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{1},
 			strides:          []int{1},
-			baseDilations:    []int{1},
+			inputDilations:   []int{1},
 			windowDilations:  []int{1},
 			paddings:         [][2]int{{1, 1}},
 			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10+1+1=12. Num=12-1=11. Out=(11/1)+1=12.
@@ -673,7 +673,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 5),
 			windowDimensions: []int{3}, // EffWin=3
 			strides:          []int{1},
-			baseDilations:    []int{2}, // EffIn=(5-1)*2+1 = 9
+			inputDilations:   []int{2}, // EffIn=(5-1)*2+1 = 9
 			windowDilations:  []int{1},
 			paddings:         [][2]int{{0, 0}},
 			// Calculation: PaddedEffIn=9. Num=9-3=6. Out=(6/1)+1=7.
@@ -685,7 +685,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{3},
 			strides:          []int{1},
-			baseDilations:    []int{1},
+			inputDilations:   []int{1},
 			windowDilations:  []int{2}, // EffWin=(3-1)*2+1=5
 			paddings:         [][2]int{{0, 0}},
 			// Calculation: EffIn=10. PaddedEffIn=10. Num=10-5=5. Out=(5/1)+1=6.
@@ -697,7 +697,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Int32, 10, 12),
 			windowDimensions: []int{3, 4},
 			strides:          []int{2, 3},
-			baseDilations:    []int{2, 1},
+			inputDilations:   []int{2, 1},
 			windowDilations:  []int{1, 2},
 			paddings:         [][2]int{{1, 1}, {0, 2}},
 			// Dim0: In=10,Win=3,Str=2,Pad=[1,1],BD=2,WD=1. EffIn=(10-1)*2+1=19. EffWin=(3-1)*1+1=3. PaddedEffIn=19+1+1=21. Num=21-3=18. Out=18/2+1=10.
@@ -710,7 +710,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:     shapes.Make(dtypes.Float32, 1, 20, 22, 3), // N, H, W, C
 			windowDimensions: []int{1, 3, 3, 1},                         // Window on H, W
 			strides:          []int{1, 2, 2, 1},                         // Stride on H, W
-			baseDilations:    []int{1, 1, 1, 1},
+			inputDilations:   []int{1, 1, 1, 1},
 			windowDilations:  []int{1, 1, 1, 1},
 			paddings:         [][2]int{{0, 0}, {1, 0}, {0, 1}, {0, 0}}, // Padding H (low), W (high)
 			// Dim0(N): In=1,Win=1,Str=1,Pad0,BD1,WD1. EffIn=1,EffWin=1.Padded=1.Num=0.Out=1.
@@ -725,7 +725,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{6},
 			strides:              []int{1},
-			baseDilations:        []int{1}, // Added explicit base dilation
+			inputDilations:       []int{1}, // Added explicit base dilation
 			windowDilations:      []int{1}, // Added explicit window dilation
 			paddings:             [][2]int{{0, 0}},
 			expectError:          true,
@@ -736,7 +736,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{2},
 			strides:              []int{0},
-			baseDilations:        []int{1},         // Added explicit base dilation
+			inputDilations:       []int{1},         // Added explicit base dilation
 			windowDilations:      []int{1},         // Added explicit window dilation
 			paddings:             [][2]int{{0, 0}}, // Added explicit padding
 			expectError:          true,
@@ -747,7 +747,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{0},
 			strides:              []int{1},
-			baseDilations:        []int{1},         // Added explicit base dilation
+			inputDilations:       []int{1},         // Added explicit base dilation
 			windowDilations:      []int{1},         // Added explicit window dilation
 			paddings:             [][2]int{{0, 0}}, // Added explicit padding
 			expectError:          true,
@@ -758,7 +758,7 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{2},
 			strides:              []int{1},
-			baseDilations:        []int{1}, // Added explicit base dilation
+			inputDilations:       []int{1}, // Added explicit base dilation
 			windowDilations:      []int{1}, // Added explicit window dilation
 			paddings:             [][2]int{{-1, 0}},
 			expectError:          true,
@@ -769,18 +769,18 @@ func TestReduceWindow(t *testing.T) {
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{2},
 			strides:              []int{1},
-			baseDilations:        []int{0},
+			inputDilations:       []int{0},
 			windowDilations:      []int{1},         // Added explicit window dilation
 			paddings:             [][2]int{{0, 0}}, // Added explicit padding
 			expectError:          true,
-			errorMessageContains: "baseDilations[0]=0 must be >= 1",
+			errorMessageContains: "inputDilations[0]=0 must be >= 1",
 		},
 		{
 			name:                 "Error_InvalidWindowDilationZero",
 			operandShape:         shapes.Make(dtypes.Float32, 5),
 			windowDimensions:     []int{2},
 			strides:              []int{1},
-			baseDilations:        []int{1}, // Added explicit base dilation
+			inputDilations:       []int{1}, // Added explicit base dilation
 			windowDilations:      []int{0},
 			paddings:             [][2]int{{0, 0}}, // Added explicit padding
 			expectError:          true,
@@ -797,7 +797,7 @@ func TestReduceWindow(t *testing.T) {
 				[]shapes.Shape{shapes.Make(tc.operandShape.DType)},
 				tc.windowDimensions,
 				tc.strides,
-				tc.baseDilations,
+				tc.inputDilations,
 				tc.windowDilations,
 				tc.paddings,
 			)

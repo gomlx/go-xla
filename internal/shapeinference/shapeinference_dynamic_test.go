@@ -3,8 +3,8 @@ package shapeinference
 import (
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 // TestSelectWithDynamicDimensions verifies that Select handles dynamic dimensions correctly.

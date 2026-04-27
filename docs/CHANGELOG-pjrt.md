@@ -64,7 +64,7 @@
   - Doesn't download unnecessary jax files.* 
 * Updated README.md, with links to `gopjrt_installer` for installation.
   * Moved `xlabuilder` documentation under `xlabuilder/README.md`, and marked it as deprecated.
-  * Changed Mandelbrot example to use `github.com/gomlx/go-xla/pkg/stablehlo` instead.
+  * Changed Mandelbrot example to use `github.com/gomlx/go-xla/stablehlo` instead.
 
 # v0.8.2 - 2025/09/29 Updated CUDA drivers
 
@@ -210,10 +210,10 @@
 # v0.4.9 - 2024-11-25
 
 * Optional preloading CPU PJRT plugin:
-  * `github.com/gomlx/go-xla/pkg/pjrt/cpu/static` that statically links the PJRT CPU plugin, making it easy to deploy 
+  * `github.com/gomlx/go-xla/pjrt/cpu/static` that statically links the PJRT CPU plugin, making it easy to deploy 
     binaries. 
     It includes the corresponding C BUILD rule to build the static library (`libpjrt_c_api_cpu_static.a`)
-  * `github.com/gomlx/go-xla/pkg/pjrt/cpu/dynamic` that dynamically links (and preloads) the PJRT CPU plugin.
+  * `github.com/gomlx/go-xla/pjrt/cpu/dynamic` that dynamically links (and preloads) the PJRT CPU plugin.
 * `pjrt_c_api_cpu.so` now compiled directly from `gopjrt`, and doesn't require cloning `xla` separately. It will
   be distributed in the same `tar.gz` file.
 * Added MacOS support by statically linking the CPU PJRT plugin.

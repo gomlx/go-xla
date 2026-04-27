@@ -64,7 +64,7 @@ package xlabuilder_test
 
 import (
 	"fmt"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
+	"github.com/gomlx/go-xla/types/dtypes"
 	. "github.com/gomlx/go-xla/xlabuilder"
 	"testing"
 )

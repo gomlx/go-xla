@@ -14,11 +14,11 @@ package shapeinference
 import (
 	"slices"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/internal/optypes"
 	"github.com/gomlx/go-xla/internal/utils"
-	"github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types"
+	"github.com/gomlx/go-xla/types/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -1092,7 +1092,7 @@ func ArgMinMax(operand shapes.Shape, axis int, outputDType dtypes.DType) (output
 //
 // Notice it doesn't take as input the reductionType parameter, since it doesn't affect the output shape.
 func ReduceWindow(inputs, initialValues []shapes.Shape, reductionInputs, reductionOutputs []shapes.Shape,
-	windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (outputs []shapes.Shape, err error) {
+	windowDimensions, strides, inputDilations, windowDilations []int, paddings [][2]int) (outputs []shapes.Shape, err error) {
 	numReductions := len(inputs)
 	if numReductions < 0 {
 		return nil, errors.New("ReduceWindow requires at least one input")
@@ -1152,8 +1152,8 @@ func ReduceWindow(inputs, initialValues []shapes.Shape, reductionInputs, reducti
 	if len(paddings) != rank {
 		return nil, errors.Errorf("ReduceWindow: len(paddings)=%d, but inputs rank is %d", len(paddings), rank)
 	}
-	if len(baseDilations) != rank {
-		return nil, errors.Errorf("ReduceWindow: baseDilations is not nil and len(baseDilations)=%d, but inputs rank is %d", len(baseDilations), rank)
+	if len(inputDilations) != rank {
+		return nil, errors.Errorf("ReduceWindow: inputDilations is not nil and len(inputDilations)=%d, but inputs rank is %d", len(inputDilations), rank)
 	}
 	if len(windowDilations) != rank {
 		return nil, errors.Errorf("ReduceWindow: windowDilations is not nil and len(windowDilations)=%d, but inputs rank is %d", len(windowDilations), rank)
@@ -1185,9 +1185,9 @@ func ReduceWindow(inputs, initialValues []shapes.Shape, reductionInputs, reducti
 		if paddingLow < 0 || paddingHigh < 0 {
 			return nil, errors.Errorf("ReduceWindow: paddings[%d]=[%d, %d] must be non-negative for operand shape %s", i, paddingLow, paddingHigh, operand)
 		}
-		baseDilation := baseDilations[i]
+		baseDilation := inputDilations[i]
 		if baseDilation < 1 {
-			return nil, errors.Errorf("ReduceWindow: baseDilations[%d]=%d must be >= 1 for operand shape %s", i, baseDilation, operand)
+			return nil, errors.Errorf("ReduceWindow: inputDilations[%d]=%d must be >= 1 for operand shape %s", i, baseDilation, operand)
 		}
 		windowDilation := windowDilations[i]
 		if windowDilation < 1 {

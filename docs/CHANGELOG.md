@@ -1,3 +1,16 @@
+# Next: API changes for GoMLX v0.28.0 and gomlx/compute v0.1.0
+
+- Moved packages out of `pkg/` (that was only used before `/internal` had a special meaning).
+- New `github.com/gomlx/compute/dtypes` repo will host `dtypes`.
+- Added `compute/xla` with the XLA backend implementation for github.com/gomlx/compute, moved out of 
+  github.com/gomlx/gomlx.
+- Package `shapes` for go-xla diverged enough (having quantization, dimension bounds, etc.) that it 
+  stays a fork local to `go-xla`.
+- Updated to XLA/PJRT v0.104
+- Added `github.com/gomlx/compile/support/backendtest` compliance tests to `compute/xla` backend.
+- Fixed `ReduceWindow` window and base dilation attributes: it was previously using window dilation for base 
+  dilation as well.
+
 # v0.2.2: New `OptimizationBarrier` op, `pjrt.IsCPU()`
 
 - StableHLO: added `OptimizationBarrier()` op.

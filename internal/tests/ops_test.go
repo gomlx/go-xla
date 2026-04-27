@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/pjrt"
-	"github.com/gomlx/go-xla/pkg/stablehlo"
-	. "github.com/gomlx/go-xla/pkg/stablehlo"
-	"github.com/gomlx/go-xla/pkg/types"
-	"github.com/gomlx/go-xla/pkg/types/dtypes"
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/go-xla/pjrt"
+	"github.com/gomlx/go-xla/stablehlo"
+	. "github.com/gomlx/go-xla/stablehlo"
+	"github.com/gomlx/go-xla/types"
+	"github.com/gomlx/go-xla/types/shapes"
 	"k8s.io/klog/v2"
 )
 
@@ -1295,7 +1295,7 @@ func testConstants(t *testing.T, client *pjrt.Client) {
 	t.Run("3D-bool", func(t *testing.T) { testTensor(t, []bool{false, true, false, true}, 2, 1, 2) })
 }
 
-func TestCall(t *testing.T) {
+func TestFunctionCall(t *testing.T) {
 	iterateClientsAndTest(t, func(t *testing.T, client *pjrt.Client) {
 		t.Run("pjrt-only", func(t *testing.T) {
 			program := []byte(`module @TestCall_simple {
