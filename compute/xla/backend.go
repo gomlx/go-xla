@@ -119,71 +119,79 @@ func (backend *Backend) IsFinalized() bool {
 }
 
 // castToPJRT casts the buffer to pjrt.Buffer and panics if not possible.
-func castToPJRT(buffer compute.Buffer) *pjrt.Buffer {
-	pb, ok := buffer.(*pjrt.Buffer)
+func (backend *Backend) castToPJRT(buffer compute.Buffer) *pjrt.Buffer {
+	b, ok := buffer.(*Buffer)
 	if !ok {
 		panic(errors.Errorf("buffer given is not a %q backend (pjrt) buffer", BackendName))
 	}
-	return pb
+	return b.pjrtBuffer
 }
 
-// BufferFinalize implements compute.DataInterface.
-func (backend *Backend) BufferFinalize(buffer compute.Buffer) error {
-	if err := backend.CheckValid(); err != nil {
+// Buffer implements compute.Buffer for XLA/PJRT.
+type Buffer struct {
+	backend    *Backend
+	pjrtBuffer *pjrt.Buffer
+}
+
+// Compile-time check:
+var _ compute.Buffer = (*Buffer)(nil)
+
+// Backend implements compute.Buffer.
+func (b *Buffer) Backend() compute.Backend {
+	return b.backend
+}
+
+// Finalize implements compute.Buffer.
+func (b *Buffer) Finalize() error {
+	if err := b.backend.CheckValid(); err != nil {
 		return errors.WithMessagef(err, "backend %q is invalid", BackendName)
 	}
-	buf := castToPJRT(buffer)
-	err := buf.Destroy()
+	err := b.pjrtBuffer.Destroy()
 	if err != nil {
-		return errors.WithMessagef(err, "backend %q: BufferFinalize", BackendName)
+		return errors.WithMessagef(err, "backend %q: Buffer.Finalize", BackendName)
 	}
 	return nil
 }
 
-// BufferShape returns the shape for the buffer.
-func (backend *Backend) BufferShape(buffer compute.Buffer) (shapes.Shape, error) {
+// Shape implements compute.Buffer.
+func (b *Buffer) Shape() (shapes.Shape, error) {
 	var noShape shapes.Shape
-	if err := backend.CheckValid(); err != nil {
+	if err := b.backend.CheckValid(); err != nil {
 		return noShape, err
 	}
-	pBuffer := castToPJRT(buffer)
-	xlaDType, err := pBuffer.DType()
+	xlaDType, err := b.pjrtBuffer.DType()
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
-	dims, err := pBuffer.Dimensions()
+	dims, err := b.pjrtBuffer.Dimensions()
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
 	return shapes.Make(xlaDType, dims...), nil
 }
 
-// BufferDeviceNum returns the deviceNum for the buffer.
-func (backend *Backend) BufferDeviceNum(buffer compute.Buffer) (compute.DeviceNum, error) {
-	if err := backend.CheckValid(); err != nil {
+// DeviceNum implements compute.Buffer.
+func (b *Buffer) DeviceNum() (compute.DeviceNum, error) {
+	if err := b.backend.CheckValid(); err != nil {
 		return 0, err
 	}
-	pBuffer := castToPJRT(buffer)
-	device, err := pBuffer.Device()
+	device, err := b.pjrtBuffer.Device()
 	if err != nil {
 		return 0, errors.WithMessagef(err, "backend %q", BackendName)
 	}
-	num := pBuffer.Client().NumForDevice(device)
+	num := b.pjrtBuffer.Client().NumForDevice(device)
 	if num == -1 {
 		return 0, errors.Errorf("backend %q: pjrt buffer stored on an unknown device!?", BackendName)
 	}
 	return compute.DeviceNum(num), nil
 }
 
-// BufferToFlatData transfers the flat values of buffer to the Go flat array.
-// The slice flat must have the exact number of elements required to store the Buffer shape.
-//
-// See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error {
-	if err := backend.CheckValid(); err != nil {
+// ToFlatData implements compute.Buffer.
+func (b *Buffer) ToFlatData(flat any) error {
+	if err := b.backend.CheckValid(); err != nil {
 		return err
 	}
-	shape, err := backend.BufferShape(buffer)
+	shape, err := b.Shape()
 	if err != nil {
 		return err
 	}
@@ -193,29 +201,75 @@ func (backend *Backend) BufferToFlatData(buffer compute.Buffer, flat any) error 
 	}
 
 	dstData := dtypes.UnsafeByteSliceFromAny(flat)
-	pBuffer := castToPJRT(buffer)
 	var pinner runtime.Pinner
-	pinner.Pin(pBuffer)
+	pinner.Pin(b.pjrtBuffer)
 	defer pinner.Unpin()
-	err = pBuffer.ToHost(dstData)
+	err = b.pjrtBuffer.ToHost(dstData)
 	if err != nil {
-		return errors.WithMessagef(err, "backend %q: BuffferToFlatData", BackendName)
+		return errors.WithMessagef(err, "backend %q: Buffer.ToFlatData", BackendName)
 	}
 	return nil
+}
+
+// Data implements compute.Buffer.
+func (b *Buffer) Data() (flat any, err error) {
+	if err := b.backend.CheckValid(); err != nil {
+		return nil, err
+	}
+	if err = b.pjrtBuffer.Check(); err != nil {
+		return nil, err
+	}
+	flat, err = b.pjrtBuffer.Data()
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
+	}
+	return
+}
+
+// CopyToDevice implements compute.Buffer.
+func (b *Buffer) CopyToDevice(deviceNum compute.DeviceNum) (compute.Buffer, error) {
+	if err := b.backend.CheckValid(); err != nil {
+		return nil, err
+	}
+	if err := b.pjrtBuffer.Check(); err != nil {
+		return nil, err
+	}
+	srcDevice, err := b.pjrtBuffer.Device()
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: Buffer.CopyToDevice failed to get device information", BackendName)
+	}
+
+	devices := b.backend.client.AddressableDevices()
+	if deviceNum < 0 || int(deviceNum) >= len(devices) {
+		return nil, errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+	}
+	device := devices[deviceNum]
+	if srcDevice == device {
+		return nil, errors.Errorf("backend %q: Buffer.CopyToDevice source and destination (#%d) "+
+			"are the same device", BackendName, deviceNum)
+	}
+
+	var newPJRTBuf *pjrt.Buffer
+	newPJRTBuf, err = b.pjrtBuffer.CopyToDevice(device)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: Buffer.CopyToDevice failed to copy "+
+			"buffer to device", BackendName)
+	}
+	return &Buffer{backend: b.backend, pjrtBuffer: newPJRTBuf}, nil
 }
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
 func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
 	srcData := dtypes.UnsafeByteSliceFromAny(flat)
-	buffer, err := backend.client.BufferFromHost().
+	pjrtBuffer, err := backend.client.BufferFromHost().
 		FromRawData(srcData, shape.DType, shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
 		Done()
 	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: BuffferFromFlatData", BackendName)
+		return nil, errors.WithMessagef(err, "backend %q: BufferFromFlatData", BackendName)
 	}
-	return buffer, nil
+	return &Buffer{backend: backend, pjrtBuffer: pjrtBuffer}, nil
 }
 
 // HasSharedBuffers returns whether this PJRT plugin supports "shared buffers".
@@ -238,76 +292,17 @@ func (backend *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shape
 		return
 	}
 	device := devices[deviceNum]
-	buffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
+	var pjrtBuffer *pjrt.Buffer
+	pjrtBuffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
 	if err != nil {
 		err = errors.WithMessagef(err, "backend %q NewSharedBuffer", BackendName)
 		return
 	}
-	return
-}
-
-// BufferData implements compute.Backend interface.
-//
-// For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
-// to create a buffer that shares the memory.
-func (backend *Backend) BufferData(buffer compute.Buffer) (flat any, err error) {
-	if err := backend.CheckValid(); err != nil {
-		return nil, err
-	}
-	buf, ok := buffer.(*pjrt.Buffer)
-	if !ok {
-		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
-	}
-	if err = buf.Check(); err != nil {
-		return nil, err
-	}
-	flat, err = buf.Data()
-	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
-	}
+	buffer = &Buffer{backend: backend, pjrtBuffer: pjrtBuffer}
 	return
 }
 
 // Capabilities returns information about what is supported by this backend.
 func (backend *Backend) Capabilities() compute.Capabilities {
 	return backend.capabilities
-}
-
-// BufferCopyToDevice implements the compute.Backend interface.
-func (backend *Backend) BufferCopyToDevice(source compute.Buffer, deviceNum compute.DeviceNum) (
-	bufferOnDevice compute.Buffer, err error) {
-	if err := backend.CheckValid(); err != nil {
-		return nil, err
-	}
-	srcBuf, ok := source.(*pjrt.Buffer)
-	if !ok {
-		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
-	}
-	if err = srcBuf.Check(); err != nil {
-		return nil, err
-	}
-	var srcDevice *pjrt.Device
-	srcDevice, err = srcBuf.Device()
-	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to get device information", BackendName)
-	}
-
-	devices := backend.client.AddressableDevices()
-	if deviceNum < 0 || int(deviceNum) >= len(devices) {
-		err = errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
-		return
-	}
-	device := devices[deviceNum]
-	if srcDevice == device {
-		return nil, errors.Errorf("backend %q: BufferCopyToDevice source and destination (#%d) "+
-			"are the same device", BackendName, deviceNum)
-	}
-
-	var newBuf *pjrt.Buffer
-	newBuf, err = srcBuf.CopyToDevice(device)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "backend %q: BufferCopyToDevice failed to copy "+
-			"buffer to device", BackendName)
-	}
-	return newBuf, nil
 }

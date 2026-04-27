@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/compute/support/backendparser"
 	"github.com/gomlx/go-xla/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
@@ -55,7 +55,7 @@ func GenerateSingleOp(method backendparser.Method) {
 	w := func(format string, args ...any) {
 		_, err := fmt.Fprintf(writer, format, args...)
 		if err != nil {
-			exceptions.Panicf("Failed to write to stdout: %v", err)
+			panic(errors.Errorf("Failed to write to stdout: %v", err))
 		}
 	}
 
@@ -76,13 +76,14 @@ func GenerateSingleOp(method backendparser.Method) {
 			// This parameter will use the same type as the next one, no need to repeat it here.
 			continue
 		}
-		if param.Type == "Value" {
+		switch param.Type {
+		case "Value":
 			w(" backends.Value")
-		} else if param.Type == "...Value" {
+		case "...Value":
 			w(" ...backends.Value")
-		} else if param.Type == "[]Value" {
+		case "[]Value":
 			w(" []backends.Value")
-		} else {
+		default:
 			w(" %s", param.Type)
 		}
 	}

@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/gofrs/flock v0.13.0
-	github.com/gomlx/compute v0.0.0-20260426084914-c478a14b5283
+	github.com/gomlx/compute v0.0.0-20260427075025-d268f3535dae
 	github.com/janpfeifer/go-benchmarks v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
@@ -14,12 +14,13 @@ require (
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dmarkham/enumer v1.6.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pascaldekloe/name v1.0.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect

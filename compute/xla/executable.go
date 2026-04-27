@@ -9,9 +9,9 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/pjrt"
-	"github.com/gomlx/gomlx/pkg/support/humanize"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -192,7 +192,7 @@ func (e *Executable) Execute(
 			"backend %q: wrong number of donate values to Execute %q: %d given, nil or %d * %d expected",
 			BackendName, e.name, len(donate), numParams, numDevices)
 	}
-	pInputs := xslices.Map(inputs, castToPJRT)
+	pInputs := xslices.Map(inputs, e.backend.castToPJRT)
 	fmt.Printf("numParams=%d, numDevices=%d, e.parameterSpecs=%v\n", numParams, numDevices, e.parameterSpecs)
 	for i, input := range pInputs {
 		inputDType, err := input.DType()
@@ -234,5 +234,7 @@ func (e *Executable) Execute(
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name)
 	}
-	return xslices.Map(pOutputs, func(e *pjrt.Buffer) compute.Buffer { return e }), nil
+	return xslices.Map(pOutputs, func(pb *pjrt.Buffer) compute.Buffer {
+		return &Buffer{backend: e.backend, pjrtBuffer: pb}
+	}), nil
 }
