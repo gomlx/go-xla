@@ -193,7 +193,6 @@ func (e *Executable) Execute(
 			BackendName, e.name, len(donate), numParams, numDevices)
 	}
 	pInputs := xslices.Map(inputs, e.backend.castToPJRT)
-	fmt.Printf("numParams=%d, numDevices=%d, e.parameterSpecs=%v\n", numParams, numDevices, e.parameterSpecs)
 	for i, input := range pInputs {
 		inputDType, err := input.DType()
 		if err != nil {
