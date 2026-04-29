@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 )
 
-// Capabilities of the SimpleGo backends: the set of supported operations and data types.
+// Capabilities of the Go backends: the set of supported operations and data types.
 var Capabilities = compute.Capabilities{
 	Operations: map[compute.OpType]bool{
 		// Graph inputs (leaf nodes)
@@ -81,7 +81,6 @@ var Capabilities = compute.Capabilities{
 		compute.OpTypeBatchNormForTraining:  true,
 		compute.OpTypeBatchNormGradient:     true,
 		compute.OpTypeBitcast:               true,
-		compute.OpTypeBroadcast:             true,
 		compute.OpTypeBroadcastInDim:        true,
 		compute.OpTypeClamp:                 true,
 		compute.OpTypeConcatenate:           true,
