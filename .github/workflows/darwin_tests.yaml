@@ -25,7 +25,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
+          go test ./compute/xla -test.v -test.count=1
 
       - name: Install PJRT plugin
         env:
@@ -41,5 +41,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export LD_LIBRARY_PATH=/usr/local/lib
-          go test ./pkg/...
-          go test ./internal/tests/...
+          go test ./...

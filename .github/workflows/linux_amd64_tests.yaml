@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
+          go test ./compute/xla -test.v -test.count=1
 
       # See file pkg/pjrt/cpuversion.go for the default version of the CPU PJRT plugin to use.
       - name: Install PJRT plugin
@@ -57,8 +57,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go test ./pkg/...
-          go test ./internal/tests/...
+          go test ./...
 
       # - name: Go Coverage Badge
       #   if: github.ref == 'refs/heads/main'

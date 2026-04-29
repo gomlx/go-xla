@@ -50,8 +50,7 @@ jobs:
 
       - name: Test with AutoInstall CPU PJRT plugin
         run: |
-          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
-          go test ./internal/tests/ -test.run=TestEndToEnd/fixed -test.v -test.count=1
+          go test ./compute/xla -test.v -test.count=1
 
       - name: "Diagnostic: Debug DLL Imports"
         if: failure()
@@ -79,5 +78,4 @@ jobs:
 
       - name: Test
         run: |
-          go test ./pkg/...
-          go test ./internal/tests/...
+          go test ./...
