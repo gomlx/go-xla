@@ -77,11 +77,6 @@ Hightlights:
 - _Quantization_ is supported according to specification. Unfortunately, the default PJRT doesn't seem to support it (
   so it can't be executed yet).
 
-### Package `installer` and `cmd/pjrt_installer`
-
-Installs latest pre-built PJRT for CPU, CUDA (using Jax distribution in pypi.org) or TPU (also using Jax distribution
-form pypi.org) .
-
 ### Package `compute/xla`
 
 Implements an XLA backend for the `github.com/gomlx/compute` project. By simply importing this, you make an XLA
@@ -89,6 +84,11 @@ backend available for use, for instance, with GoMLX. It's actually imported by d
 support it.
 
 See details in [compute/xla/README.md](https://github.com/gomlx/go-xla/blob/master/compute/xla/README.md).
+
+### Package `installer` and `cmd/pjrt_installer`
+
+Installs latest pre-built PJRT for CPU, CUDA (using Jax distribution in pypi.org) or TPU (also using Jax distribution
+form pypi.org) .
 
 ## 🗺️ How to use it?
 
