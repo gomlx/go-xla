@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gomlx/go-xla/pkg/types/shapes"
+	"github.com/gomlx/go-xla/types/shapes"
 )
 
 func TestConvolve(t *testing.T) {

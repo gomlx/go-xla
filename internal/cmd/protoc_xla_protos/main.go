@@ -10,6 +10,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -31,19 +33,25 @@ var protos = []string{
 	"xla/tsl/protobuf/dnn.proto",
 	"xla/autotune_results.proto",
 	"xla/autotuning.proto",
+	"xla/backends/autotuner/backends.proto",
 	"xla/pjrt/proto/compile_options.proto",
 	"xla/service/hlo.proto",
 	"xla/service/metrics.proto",
 	"xla/stream_executor/cuda/cuda_compute_capability.proto",
 	"xla/stream_executor/device_description.proto",
+	"xla/stream_executor/sycl/oneapi_compute_capability.proto",
 	"xla/xla.proto",
 	"xla/xla_data.proto",
 }
 
 func main() {
+	klog.InitFlags(nil)
+	defer klog.Flush()
+	flag.Parse()
+
 	xlaSrc := os.Getenv(xlaSrcEnvVar)
 	if xlaSrc == "" {
-		log.Fatalf("Please set %s to the directory containing the cloned github.com/openxla/xla repository.\n", xlaSrcEnvVar)
+		klog.Fatalf("Please set %s to the directory containing the cloned github.com/openxla/xla repository.\n", xlaSrcEnvVar)
 	}
 
 	// Generate the --go_opt=M... flags
@@ -58,12 +66,12 @@ func main() {
 		packageName := protoPackage(proto)
 		err := os.Mkdir(packageName, 0755)
 		if err != nil && !os.IsExist(err) {
-			log.Fatalf("Failed to create sub-directory %q: %+v", packageName, err)
+			klog.Fatalf("Failed to create sub-directory %q: %+v", packageName, err)
 		}
 		// Remove go_package options from the proto file
 		protoPath := filepath.Join(xlaSrc, proto)
 		if err := removeGoPackageOption(protoPath); err != nil {
-			log.Fatalf("Error removing go_package option from %s: %v\n", proto, err)
+			klog.Fatalf("Error removing go_package option from %s: %v\n", proto, err)
 		}
 
 		// Construct the protoc command
@@ -75,6 +83,7 @@ func main() {
 		}
 		args = append(args, goOpts...)
 		args = append(args, protoPath)
+		klog.V(1).Infof("Running protoc for %s with: %q", protoPath, args)
 
 		cmd := exec.Command("protoc", args...)
 		cmd.Stdout = os.Stdout
@@ -82,16 +91,16 @@ func main() {
 
 		if err := cmd.Run(); err != nil {
 			log.Printf("Command:\n%s\n", cmd)
-			log.Fatalf("Error executing protoc for %s: %v\n", proto, err)
+			klog.Fatalf("Error executing protoc for %s: %v\n", proto, err)
 		}
 
 		currentDir, err := os.Getwd()
 		if err != nil {
-			log.Fatalf("Failed to get current directory: %v", err)
+			klog.Fatalf("Failed to get current directory: %v", err)
 		}
 		localCopyPath := path.Join(currentDir, path.Base(protoPath))
 		if err := copyFile(localCopyPath, protoPath); err != nil {
-			log.Fatalf("Failed to copy file: %v", err)
+			klog.Fatalf("Failed to copy file: %v", err)
 		}
 		fmt.Printf("✅ Successfully proto-compiled %q\n", packageName)
 

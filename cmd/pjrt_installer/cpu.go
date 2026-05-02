@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"slices"
 
-	"github.com/gomlx/go-xla/pkg/installer"
+	"github.com/gomlx/go-xla/installer"
 	"k8s.io/klog/v2"
 )
 

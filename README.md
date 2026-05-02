@@ -52,9 +52,9 @@ other CPUs -- SIMD/AVX are well-supported), for TPUs (Google's accelerator),
 GPUs (Nvidia is well-supported; there are AMD and Intel's PJRT plugins, but they were not tested), 
 and others are in development. Some PJRT plugins are not open-source, but are available for download.
 
-The **go-xla** project provides the package `github.com/gomlx/go-xla/pkg/pjrt`, 
+The **go-xla** project provides the package `github.com/gomlx/go-xla/pjrt`, 
 a Go API for dynamically loading and calling the **PJRT** runtime.
-It also provides a installer or library (`github.com/gomlx/go-xla/pkg/installer`) to 
+It also provides a installer (`github.com/gomlx/go-xla/cmd/pjrt_installer`) or library (`github.com/gomlx/go-xla/installer`) to 
 auto-install (download pre-compiled binaries) **PJRT** plugins for CPU (from GitHub), 
 CUDA (from pypi.org Jax pacakges) and TPU (also from pypi.org).
 
@@ -64,7 +64,7 @@ The currently better supported IR (intermediary representation) supported by PJR
 in [StableHLO docs](https://openxla.org/stablehlo). It's a text representation of the computation
 that can easily be parsed by computers, but not easily written or read by humans.
 
-The package [`github.com/gomlx/go-xla/pkg/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/stablehlo)
+The package [`github.com/gomlx/go-xla/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/stablehlo)
 provides a Go API for writing StableHLO programs, including _shape inference_, needed to correctly 
 infer the output shape of operations as the program is being built.
 
@@ -77,11 +77,24 @@ Hightlights:
 - _Quantization_ is supported according to specification. Unfortunately, the default PJRT doesn't seem to support it (
   so it can't be executed yet).
 
+### Package `installer` and `cmd/pjrt_installer`
+
+Installs latest pre-built PJRT for CPU, CUDA (using Jax distribution in pypi.org) or TPU (also using Jax distribution
+form pypi.org) .
+
+### Package `compute/xla`
+
+Implements an XLA backend for the `github.com/gomlx/compute` project. By simply importing this, you make an XLA
+backend available for use, for instance, with GoMLX. It's actually imported by default in GoMLX for the platforms that
+support it.
+
+See details in [compute/xla/README.md](https://github.com/gomlx/go-xla/blob/master/compute/xla/README.md).
+
 ## 🗺️ How to use it?
 
 Use the `stablehlo` to define your computation. Then use `pjrt` to compile (once) and execute it.
 
-### [`github.com/gomlx/go-xla/pkg/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/pjrt)
+### [`github.com/gomlx/go-xla/stablehlo`](https://pkg.go.dev/github.com/gomlx/go-xla/pjrt)
 
 * Create a `Builder` object with `stablehlo.NewBuilder()`
 * Create a `Main` function with `Builder.Main()` (or other functions with `Builder.NewFunction()`)
@@ -119,7 +132,7 @@ module @x_times_x_plus_1 {
 }
 ```
 
-### [`github.com/gomlx/go-xla/pkg/pjrt`](https://pkg.go.dev/github.com/gomlx/go-xla/pkg/pjrt)
+### [`github.com/gomlx/go-xla/pjrt`](https://pkg.go.dev/github.com/gomlx/go-xla/pjrt)
 
 The `pjrt` package includes the following main concepts:
 

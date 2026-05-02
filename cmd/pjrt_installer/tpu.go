@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/gomlx/go-xla/pkg/installer"
+	"github.com/gomlx/go-xla/installer"
 )
 
 func init() {
