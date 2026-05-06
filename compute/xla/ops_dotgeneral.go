@@ -23,8 +23,10 @@ import (
 //   - Contracted (contracting axes), where the output does multiply the values and reduce sum
 //     those dimensions.
 //
-// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
-// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
+// The resulting shape is [batchIndices..., <lhs cross indices...>, <rhs cross indices...>], the
+// indices come in the order they were provided. The output dtype is by default the same as
+// the input, except if configured otherwise in config.OutputDType.
+//
 // It provides the basic means of implementing Einsum.
 //
 // The XLA implementation only supports accumulation in F32 (if different than the input dtypes).
@@ -39,10 +41,13 @@ func (f *Function) DotGeneral(
 	}
 	lhsNode := nodes[0]
 	rhsNode := nodes[1]
-	dtype := lhsNode.shape.DType
-	accumulationDType := dtype
+	inputDType := lhsNode.shape.DType
+	accumulationDType := inputDType
 	if config.AccumulatorDType != dtypes.InvalidDType {
 		accumulationDType = config.AccumulatorDType
+	}
+	if config.OutputDType == dtypes.InvalidDType {
+		config.OutputDType = inputDType
 	}
 
 	// Introduce a dependency to create a schedule barrier to prevent the compiler to try
@@ -55,14 +60,14 @@ func (f *Function) DotGeneral(
 	// The CUDA backend does not seem to need this (likely they do something like that internally).
 	isCPU := f.builder.backend.plugin.IsCPU()
 	lhsReady, rhsReady := lhsNode, rhsNode
-	if accumulationDType != dtype && isCPU {
+	if accumulationDType != inputDType && isCPU {
 		lhsReady, rhsReady, err = dotGeneralAddDependency(f, lhsReady, rhsReady)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if accumulationDType != dtype {
+	if accumulationDType != inputDType {
 		if accumulationDType != dtypes.F32 {
 			// XLA only supports accumulation in F32 (if different than the input dtypes).
 			// For other accumulation dtypes, we convert the inputs to the type.
@@ -76,7 +81,7 @@ func (f *Function) DotGeneral(
 				return nil, errors.WithMessagef(err, "failed to convert rhs to accumulation dtype")
 			}
 			lhsReady, rhsReady = lhsReadyValue.(*Node), rhsReadyValue.(*Node)
-			dtype = accumulationDType
+			inputDType = accumulationDType
 		}
 	}
 
@@ -89,7 +94,7 @@ func (f *Function) DotGeneral(
 	//
 	// So we make a simplification here: we only set the "dot_algorithm" is the plugin is not CUDA.
 	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
-	if useTF32 || accumulationDType != dtype {
+	if useTF32 || accumulationDType != inputDType {
 		isCUDA := f.builder.backend.plugin.IsCUDA()
 		if isCUDA {
 			// Set "precision_config"

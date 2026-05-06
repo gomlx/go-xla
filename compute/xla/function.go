@@ -43,6 +43,24 @@ func (f *Function) Parent() compute.Function {
 	return f.parent
 }
 
+// Builder returns the builder for this function.
+func (f *Function) Builder() compute.Builder {
+	return f.builder
+}
+
+// Shape returns the shape of a value in the function.
+func (f *Function) Shape(v compute.Value) (shapes.Shape, error) {
+	var s shapes.Shape
+	n, ok := v.(*Node)
+	if !ok {
+		return s, errors.Errorf("value is not a Node for a XLA backend, instead got a %T", v)
+	}
+	if err := f.CheckValid(); err != nil {
+		return s, err
+	}
+	return n.shape, nil
+}
+
 // Closure creates a new closure function, within this function.
 func (f *Function) Closure() (compute.Function, error) {
 	if err := f.CheckValid(); err != nil {
