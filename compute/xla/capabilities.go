@@ -125,7 +125,8 @@ var Capabilities = compute.Capabilities{
 		compute.OpTypeAllReduce: true,
 	},
 
-	Functions: true,
+	Functions:   true,
+	DynamicAxes: false,
 
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:       true,
