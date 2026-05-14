@@ -124,6 +124,11 @@ func (f *Function) Parameter(name string, shape shapes.Shape, sharding *compute.
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
+	if shape.IsDynamic() {
+		return nil, errors.Errorf(
+			"dynamic shapes are not supported by the XLA backend, you have to recompile to each input shape, or use "+
+			"padding (usually a mix of both): %s", shape)
+	}
 	normalizedName := stablehlo.NormalizeIdentifier(name)
 	if slices.Index(f.parameterNames, normalizedName) != -1 {
 		if name == normalizedName {
