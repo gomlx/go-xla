@@ -50,6 +50,14 @@
 //     (it can be faster in modern GPUs). It's enabled by default.
 //   - "shared_buffers", "noshared_buffers": controls whether to use shared buffers for the device buffer
 //     (where device=CPU). It's enabled by default if the plugin is called "cpu".
+//
+// # (NO) Dynamic Shapes
+//
+// XLA doesn't support dynamic shapes. Sort of ... it suppots, but any new shape triggers a re-compilation, something
+// that GoMLX and other [compute.Backend] clients already supprot.
+//
+// So it does NOT support dynamic shapes in the [compute.Backend] sense, which implies a low cost execution overhead
+// for various shapes.
 package xla
 
 import (
