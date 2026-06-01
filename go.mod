@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/gofrs/flock v0.13.0
-	github.com/gomlx/compute v0.0.0-20260524093418-b10c8ba83d44
+	github.com/gomlx/compute v0.0.0-20260601092454-b91e8854304a
 	github.com/janpfeifer/go-benchmarks v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1

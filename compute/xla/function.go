@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/notimplemented"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/stablehlo"
 	"github.com/gomlx/go-xla/types/shardy"
@@ -14,6 +15,7 @@ import (
 
 // Function implements compute.Function for XLA.
 type Function struct {
+	notimplemented.Function
 	builder *Builder
 	parent  *Function // parent function if this is a closure.
 	fn      *stablehlo.Function
@@ -61,16 +63,26 @@ func (f *Function) Shape(v compute.Value) (shapes.Shape, error) {
 	return n.shape, nil
 }
 
+func newFunction(b *Builder, fn *stablehlo.Function, name string) *Function {
+	return &Function{
+		Function: notimplemented.Function{
+			ErrFn: func(op compute.OpType) error {
+				return errors.Errorf("%s not implemented for XLA backend", op)
+			},
+		},
+		builder: b,
+		fn:      fn,
+		name:    name,
+	}
+}
+
 // Closure creates a new closure function, within this function.
 func (f *Function) Closure() (compute.Function, error) {
 	if err := f.CheckValid(); err != nil {
 		return nil, err
 	}
-	closure := &Function{
-		parent:  f,
-		builder: f.builder,
-		fn:      f.fn.Closure(),
-	}
+	closure := newFunction(f.builder, f.fn.Closure(), "")
+	closure.parent = f
 	return closure, nil
 }
 

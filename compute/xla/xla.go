@@ -166,9 +166,8 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		capabilities: Capabilities.Clone(),
 		numDevices:   len(client.AddressableDevices()),
 
-		// Use plugin.IsCUDA() to attempt to enable it if it thinks it's a CUDA backend.
-		// But since Jax PJRT 0.9.X it hasn't been working anymore.
-		DotGeneralUseTF32: false,
+		// Enable TF32 by default for CUDA.
+		DotGeneralUseTF32: isPluginType(pluginName, "cuda"),
 	}
 
 	// Support "shared buffers":

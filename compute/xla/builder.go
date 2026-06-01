@@ -77,11 +77,7 @@ func (b *Builder) Name() string {
 // Main returns the main function of this computation.
 func (b *Builder) Main() compute.Function {
 	if b.mainFn == nil {
-		b.mainFn = &Function{
-			builder: b,
-			fn:      b.builder.Main(),
-			name:    compute.MainName,
-		}
+		b.mainFn = newFunction(b, b.builder.Main(), compute.MainName)
 		b.topLevelFns[compute.MainName] = b.mainFn
 	}
 	return b.mainFn
@@ -95,11 +91,7 @@ func (b *Builder) NewFunction(name string) (compute.Function, error) {
 	if _, found := b.topLevelFns[name]; found {
 		return nil, errors.Errorf("function %q already exists", name)
 	}
-	f := &Function{
-		builder: b,
-		fn:      b.builder.NewFunction(name),
-		name:    name,
-	}
+	f := newFunction(b, b.builder.NewFunction(name), name)
 	b.topLevelFns[name] = f
 	return f, nil
 }
