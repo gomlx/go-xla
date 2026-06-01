@@ -89,19 +89,18 @@ func (f *Function) DotGeneral(
 		lhsReady.value, lhsContractingAxes, lhsBatchAxes,
 		rhsReady.value, rhsContractingAxes, rhsBatchAxes)
 
-	// Set algorithm based on config: this is tricky, the "dot_algorithm" is only supported by the CPU PJRT,
-	// and not very well supported by CUDA. TPU support is unknown.
-	//
-	// So we make a simplification here: we only set the "dot_algorithm" is the plugin is not CUDA.
-	useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
-	if useTF32 || accumulationDType != inputDType {
-		isCUDA := f.builder.backend.plugin.IsCUDA()
-		if isCUDA {
-			// Set "precision_config"
-			precisionConfig := stablehlotypes.DotGeneralPrecisionHighest
-			dotGeneralBuilder.Precision(precisionConfig, precisionConfig)
-
-		} else {
+	isCUDA := f.builder.backend.plugin.IsCUDA()
+	if isCUDA {
+		// Set "precision_config". If TF32 is NOT requested, we must explicitly request highest precision.
+		// If TF32 is requested, we leave it at Default (which enables TF32).
+		precisionConfig := stablehlotypes.DotGeneralPrecisionHighest
+		if f.builder.backend.DotGeneralUseTF32 && accumulationDType == dtypes.F32 {
+			precisionConfig = stablehlotypes.DotGeneralPrecisionDefault
+		}
+		dotGeneralBuilder.Precision(precisionConfig, precisionConfig)
+	} else {
+		useTF32 := accumulationDType == dtypes.F32 && f.builder.backend.DotGeneralUseTF32
+		if useTF32 || accumulationDType != inputDType {
 			// For all other PJRTs, set "dot_algorithm" instead.
 			var algo stablehlotypes.DotGeneralAlgorithm
 			algo.LhsComponentCount = 1
@@ -110,7 +109,6 @@ func (f *Function) DotGeneral(
 			algo.AllowImpreciseAccumulation = false
 			algo.AccumulationType = stablehlotypes.FloatPrecisionType{DType: accumulationDType}
 
-			useTF32 := f.builder.backend.DotGeneralUseTF32
 			if useTF32 && accumulationDType == dtypes.Float32 {
 				algo.LhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
 				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{TF32: true}
@@ -120,7 +118,6 @@ func (f *Function) DotGeneral(
 				algo.RhsPrecisionType = stablehlotypes.FloatPrecisionType{DType: accumulationDType}
 			}
 			dotGeneralBuilder.Algorithm(&algo)
-
 		}
 	}
 	if config.OutputDType != dtypes.InvalidDType {
