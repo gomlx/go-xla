@@ -3,11 +3,8 @@
 package xla
 
 import (
-	"reflect"
-
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/stablehlo"
 	stablehlotypes "github.com/gomlx/go-xla/types"
 	"github.com/pkg/errors"
@@ -144,34 +141,14 @@ func dotGeneralAddDependency(f *Function, lhs, rhs *Node) (*Node, *Node, error) 
 		lhs, rhs = rhs, lhs
 	}
 
-	// Create a fake barrier, by creating a dependency:
-	starts := make([]int, lhs.shape.Rank())
-	limits := xslices.SliceWithValue(lhs.shape.Rank(), 1)
-	dependency, err := f.Slice(lhs, starts, limits, nil)
+	// Create a scheduling barrier: rhs (the parameter) depends on lhs (the weight/non-parameter).
+	rhsVal, err := f.SchedulingBarrier(rhs, lhs)
 	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
+		return nil, nil, errors.WithMessagef(err, "failed to create scheduling barrier for DotGeneral operands")
 	}
-	dependency, err = f.Reshape(dependency) // Convert to scalar.
-	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
-	}
-	zeroFlatV := reflect.MakeSlice(reflect.SliceOf(lhs.shape.DType.GoType()), 1, 1)
-	zero, err := f.Constant(zeroFlatV.Interface())
-	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
-	}
-	dependency, err = f.Mul(dependency, zero)
-	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
-	}
-	rhsReady, err := f.Add(rhs, dependency) // Adds a dependency from the weights to the LHS.
-	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed to create fake barrier for DotGeneral operands")
-	}
-
-	lhsReady := compute.Value(lhs)
+	rhs = rhsVal.(*Node)
 	if isSwapped {
-		lhsReady, rhsReady = rhsReady, lhsReady
+		lhs, rhs = rhs, lhs
 	}
-	return lhsReady.(*Node), rhsReady.(*Node), nil
+	return lhs, rhs, nil
 }

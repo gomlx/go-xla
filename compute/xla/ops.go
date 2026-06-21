@@ -5,6 +5,8 @@ package xla
 // This file contains manually implemented operations.
 
 import (
+	"reflect"
+
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -795,13 +797,13 @@ func (f *Function) Call(target compute.Function, inputs ...compute.Value) ([]com
 }
 
 // OptimizationBarrier returned values are identity to the operands, but they become only available
-// in compilation time once all the inptus are calculated.
+// in compilation time once all the inputs are calculated.
 func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Value, error) {
 	if len(operands) == 0 {
 		return nil, errors.New("OptimizationBarrier requires at least one operand")
 	}
-	if len(operands) == 1 {
-		// No-op: a value already depends on itself.
+	if len(operands) == 1 && f.builder.backend.plugin.IsCPU() {
+		// No-op: XLA CPU compiler has a bug with single-operand OptimizationBarrier and produces garbage/crashes.
 		return operands, nil
 	}
 	nodes, err := f.verifyAndCastValues("OptimizationBarrier", operands...)
@@ -815,4 +817,86 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 	}
 	outputNodes := xslices.Map(values, func(v *stablehlo.Value) compute.Value { return f.newNode(v) })
 	return outputNodes, nil
+}
+
+// SchedulingBarrier introduces a scheduling barrier.
+// Returned value is identity to the operand, but it is guaranteed to depend on all the dependencies.
+//
+// Since XLA/StableHLO don't support this operation, we "hack" it by means of a no-op: taking a scalar of each depdency,
+// multiply by 0 and add them to the operand.
+//
+// See: https://github.com/openxla/stablehlo/issues/2923.
+func (f *Function) SchedulingBarrier(operand compute.Value, dependencies ...compute.Value) (compute.Value, error) {
+	if len(dependencies) == 0 {
+		return operand, nil
+	}
+	nodes, err := f.verifyAndCastValues("SchedulingBarrier", append([]compute.Value{operand}, dependencies...)...)
+	if err != nil {
+		return nil, err
+	}
+	opNode := nodes[0]
+	depNodes := nodes[1:]
+
+	opDType := opNode.shape.DType
+
+	// Create a constant zero of the operand's dtype.
+	zeroFlat := reflect.MakeSlice(reflect.SliceOf(opDType.GoType()), 1, 1)
+	zeroConst, err := f.Constant(zeroFlat.Interface())
+	if err != nil {
+		return nil, errors.WithMessage(err, "SchedulingBarrier: failed to create constant zero")
+	}
+
+	// Add OptimizationBarrier on the constant zero so it doesn't get optimized away.
+	zeroBarriers, err := f.OptimizationBarrier(zeroConst)
+	if err != nil {
+		return nil, errors.WithMessage(err, "SchedulingBarrier: failed to apply OptimizationBarrier to zero")
+	}
+	zero := zeroBarriers[0]
+
+	accumulatedZero := zero
+	for _, dep := range depNodes {
+		var scalarDep compute.Value
+		if dep.shape.Rank() == 0 {
+			scalarDep = dep
+		} else {
+			starts := make([]int, dep.shape.Rank())
+			limits := xslices.SliceWithValue(dep.shape.Rank(), 1)
+			slice, err := f.Slice(dep, starts, limits, nil)
+			if err != nil {
+				return nil, err
+			}
+			scalarDep, err = f.Reshape(slice)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if dep.shape.DType != opDType {
+			var err error
+			scalarDep, err = f.ConvertDType(scalarDep, opDType)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Multiply the scalar dependency by the constant zero.
+		term, err := f.Mul(scalarDep, zero)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add it to our accumulated zero.
+		accumulatedZero, err = f.Add(accumulatedZero, term)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Finally, add the accumulated zero (which depends on all dependencies) to the operand.
+	operandReady, err := f.Add(operand, accumulatedZero)
+	if err != nil {
+		return nil, err
+	}
+
+	return operandReady, nil
 }

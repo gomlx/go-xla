@@ -120,6 +120,8 @@ var Capabilities = compute.Capabilities{
 		compute.OpTypeSlice:                 true,
 		compute.OpTypeTranspose:             true,
 		compute.OpTypeWhere:                 true,
+		compute.OpTypeOptimizationBarrier:   true,
+		compute.OpTypeSchedulingBarrier:     true,
 
 		// Collective (distributed across devices) operations:
 		compute.OpTypeAllReduce: true,
