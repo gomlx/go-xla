@@ -802,6 +802,10 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 	if len(operands) == 0 {
 		return nil, errors.New("OptimizationBarrier requires at least one operand")
 	}
+	if len(operands) == 1 && f.builder.backend.plugin.IsCPU() {
+		// No-op: XLA CPU compiler has a bug with single-operand OptimizationBarrier and produces garbage/crashes.
+		return operands, nil
+	}
 	nodes, err := f.verifyAndCastValues("OptimizationBarrier", operands...)
 	if err != nil {
 		return nil, err
@@ -817,6 +821,11 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 
 // SchedulingBarrier introduces a scheduling barrier.
 // Returned value is identity to the operand, but it is guaranteed to depend on all the dependencies.
+//
+// Since XLA/StableHLO don't support this operation, we "hack" it by means of a no-op: taking a scalar of each depdency,
+// multiply by 0 and add them to the operand.
+//
+// See: https://github.com/openxla/stablehlo/issues/2923.
 func (f *Function) SchedulingBarrier(operand compute.Value, dependencies ...compute.Value) (compute.Value, error) {
 	if len(dependencies) == 0 {
 		return operand, nil
