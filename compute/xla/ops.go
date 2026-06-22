@@ -819,6 +819,32 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 	return outputNodes, nil
 }
 
+// CustomCall emits a StableHLO custom_call to spec.Target (see compute.Function.CustomCall).
+// It is multi-output: one result Value per spec.OutputShapes entry.
+func (f *Function) CustomCall(spec compute.CustomCallSpec, operands ...compute.Value) ([]compute.Value, error) {
+	if len(operands) == 0 {
+		return nil, errors.New("CustomCall requires at least one operand")
+	}
+	if len(spec.OutputShapes) == 0 {
+		return nil, errors.New("CustomCall requires at least one output shape")
+	}
+	nodes, err := f.verifyAndCastValues("CustomCall", operands...)
+	if err != nil {
+		return nil, err
+	}
+	operandValues := xslices.Map(nodes, func(n *Node) *stablehlo.Value { return n.value })
+	outputShapes := xslices.Map(spec.OutputShapes, func(s shapes.Shape) stablehloshapes.Shape {
+		return stablehloshapes.Make(s.DType, s.Dimensions...)
+	})
+	values, err := stablehlo.CustomCall(spec.Target, spec.APIVersion, spec.BackendConfig,
+		spec.OperandLayouts, spec.ResultLayouts, outputShapes, operandValues...)
+	if err != nil {
+		return nil, err
+	}
+	outputNodes := xslices.Map(values, func(v *stablehlo.Value) compute.Value { return f.newNode(v) })
+	return outputNodes, nil
+}
+
 // SchedulingBarrier introduces a scheduling barrier.
 // Returned value is identity to the operand, but it is guaranteed to depend on all the dependencies.
 //
