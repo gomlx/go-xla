@@ -829,9 +829,8 @@ func (f *Function) CustomCall(spec compute.CustomCallSpec, operands ...compute.V
 	if len(spec.OutputShapes) == 0 {
 		return nil, errors.New("CustomCall requires at least one output shape")
 	}
-	// cuDNN custom-call targets (__cudnn$...) only lower on the cuda plugin. Reject them on
-	// any other plugin at build time with ErrNotImplemented, so callers (e.g. flash attention)
-	// can fall back to a decomposed implementation instead of hitting a compile-time failure.
+	// cuDNN targets (__cudnn$...) only lower on the cuda plugin; reject them elsewhere at build
+	// time with ErrNotImplemented so callers can fall back instead of failing at compile time.
 	if strings.HasPrefix(spec.Target, "__cudnn$") && !isPluginType(f.builder.backend.pluginName, "cuda") {
 		return nil, errors.Wrapf(compute.ErrNotImplemented,
 			"custom_call target %q requires the cuda plugin, have %q", spec.Target, f.builder.backend.pluginName)
