@@ -6,7 +6,6 @@ package xla
 
 import (
 	"reflect"
-	"strings"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -820,31 +819,28 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 	return outputNodes, nil
 }
 
-// CustomCall emits a StableHLO custom_call to spec.Target (see compute.Function.CustomCall).
-// It is multi-output: one result Value per spec.OutputShapes entry.
-func (f *Function) CustomCall(spec compute.CustomCallSpec, operands ...compute.Value) ([]compute.Value, error) {
+// customCall emits a StableHLO custom_call. It is private: the only callers are the cuDNN
+// flash fused ops in flash.go, so the cuDNN target/backend_config/layout mapping never leaves
+// this package (it is not a cross-backend escape hatch on the compute.Function interface).
+// It is multi-output: one result Value per outputShapes entry.
+func (f *Function) customCall(target string, apiVersion int, backendConfig, operandLayouts, resultLayouts string,
+	outputShapes []shapes.Shape, operands ...compute.Value) ([]compute.Value, error) {
 	if len(operands) == 0 {
-		return nil, errors.New("CustomCall requires at least one operand")
+		return nil, errors.New("customCall requires at least one operand")
 	}
-	if len(spec.OutputShapes) == 0 {
-		return nil, errors.New("CustomCall requires at least one output shape")
+	if len(outputShapes) == 0 {
+		return nil, errors.New("customCall requires at least one output shape")
 	}
-	// cuDNN targets (__cudnn$...) only lower on the cuda plugin; reject them elsewhere at build
-	// time with ErrNotImplemented so callers can fall back instead of failing at compile time.
-	if strings.HasPrefix(spec.Target, "__cudnn$") && !isPluginType(f.builder.backend.pluginName, "cuda") {
-		return nil, errors.Wrapf(compute.ErrNotImplemented,
-			"custom_call target %q requires the cuda plugin, have %q", spec.Target, f.builder.backend.pluginName)
-	}
-	nodes, err := f.verifyAndCastValues("CustomCall", operands...)
+	nodes, err := f.verifyAndCastValues("customCall", operands...)
 	if err != nil {
 		return nil, err
 	}
 	operandValues := xslices.Map(nodes, func(n *Node) *stablehlo.Value { return n.value })
-	outputShapes := xslices.Map(spec.OutputShapes, func(s shapes.Shape) stablehloshapes.Shape {
+	outShapes := xslices.Map(outputShapes, func(s shapes.Shape) stablehloshapes.Shape {
 		return stablehloshapes.Make(s.DType, s.Dimensions...)
 	})
-	values, err := stablehlo.CustomCall(spec.Target, spec.APIVersion, spec.BackendConfig,
-		spec.OperandLayouts, spec.ResultLayouts, outputShapes, operandValues...)
+	values, err := stablehlo.CustomCall(target, apiVersion, backendConfig,
+		operandLayouts, resultLayouts, outShapes, operandValues...)
 	if err != nil {
 		return nil, err
 	}
