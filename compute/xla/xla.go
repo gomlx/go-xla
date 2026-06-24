@@ -170,6 +170,11 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		DotGeneralUseTF32: isPluginType(pluginName, "cuda"),
 	}
 
+	// The cuDNN flash fused attention (forward + VJP) only lowers on the cuda plugin; advertise
+	// the capability accordingly. The implementation also returns ErrNotImplemented on non-cuda
+	// (and for unsupported option combinations) so callers fall back to decomposed attention.
+	backend.capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention] = isPluginType(pluginName, "cuda")
+
 	// Support "shared buffers":
 	backend.hasSharedBuffers = isPluginType(pluginName, "cpu")
 	if idx := slices.Index(pluginOptions, "shared_buffers"); idx != -1 {

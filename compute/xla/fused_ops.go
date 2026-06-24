@@ -26,9 +26,8 @@ func (f *Function) FusedDense(x, weight, bias compute.Value, activation compute.
 	return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedDense not implemented in XLA backend")
 }
 
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (compute.Value, error) {
-	return nil, errors.Wrapf(compute.ErrNotImplemented, "FusedScaledDotProductAttention not implemented in XLA backend")
-}
+// FusedScaledDotProductAttention and FusedScaledDotProductAttentionVJP are the cuDNN flash
+// forward and backward; see flash.go.
 
 func (f *Function) FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV compute.Value, queryDim, keyValueDim int) (query, key, value compute.Value, err error) {
 	err = errors.Wrapf(compute.ErrNotImplemented, "FusedAttentionQKVProjection not implemented in XLA backend")
