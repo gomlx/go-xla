@@ -44,12 +44,17 @@
 //
 // # Options
 //
-// Those can be passed after the plugin name, e.g.: GOMLX_BACKEND="xla:my_pjrt,notf32,shared_buffers".
+// Those can be passed after the plugin name, e.g.: GOMLX_BACKEND="xla:cuda,tf32=false,preallocate=false".
 //
-//   - "tf32", "notf32": controls whether to use TF32 for DotGeneral operations that are using float32
+//   - "tf32" (boolean, default=true): controls whether to use TF32 for DotGeneral operations that are using float32
 //     (it can be faster in modern GPUs). It's enabled by default.
-//   - "shared_buffers", "noshared_buffers": controls whether to use shared buffers for the device buffer
+//   - "shared_buffer" (boolean, default=true): controls whether to use shared buffers for the device buffer
 //     (where device=CPU). It's enabled by default if the plugin is called "cpu".
+//   - "preallocate" (boolean, default=true): whether the CUDA PJRT preallocates a large portion of the memory.
+//   - "memory_fraction" (float, default=0.75): how much memory to preallocate.
+//   - "allocator" (string, default="default"): which allocator to use. For CUDA the available ones are "default"
+//     (== "bfc"), "bfc" ("best-fit for coalescing", avoids framementation), "cuda_async" (dynamic, no preallocation),
+//     "platform" (slow, good for debugging), "vmm"
 //
 // # (NO) Dynamic Shapes
 //
@@ -64,6 +69,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gomlx/compute"
@@ -113,14 +119,32 @@ func New(config string) (compute.Backend, error) {
 // This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
 	pluginName := config
-	var pluginOptions []string
-	parts := strings.Split(config, ",")
-	if len(parts) > 1 {
-		// Plugin options (exclude empty).
-		pluginOptions = slices.DeleteFunc(parts[1:], func(s string) bool { return s == "" })
-		pluginName = parts[0]
+
+	// Make shallow copy options, since we may change it:
+	pluginOptions := make(pjrt.NamedValuesMap)
+	for key, value := range options {
+		pluginOptions[key] = value
 	}
 
+	// Parse backendOptions from config string.
+	backendOptions := make(map[string]string)
+	parts := strings.Split(config, ",")
+	if len(parts) > 1 {
+		pluginName = parts[0]
+		for _, part := range parts[1:] {
+			if part == "" {
+				continue
+			}
+			key, val, found := strings.Cut(part, "=")
+			if !found {
+				backendOptions[part] = ""
+			} else {
+				backendOptions[key] = val
+			}
+		}
+	}
+
+	// FInd plugin.
 	if !filepath.IsAbs(pluginName) {
 		if autoInstall {
 			err := AutoInstall()
@@ -148,52 +172,105 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		}
 	}
 
+	// Create backend option (not associated with a plugin yet)
+	backend := &Backend{
+		pluginName:   pluginName,
+		config:       config,
+		capabilities: Capabilities.Clone(),
+
+		// Enable TF32 by default for CUDA.
+		DotGeneralUseTF32: isPluginType(pluginName, "cuda"),
+
+		// SharedBuffers is true for CPU by default
+		hasSharedBuffers: isPluginType(pluginName, "cpu"),
+	}
+
+	// Support "shared buffers":
+	const shareBuffersName = "shared_buffers"
+	if val := backendOptions[sharedBuffersName]; val != "" {
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", sharedBuffersName, val)
+		}
+		backend.hasSharedBuffers = b
+		delete(backendOptions, shareBuffersName)
+	} else if _, ok := backendOptions["noshared_buffers"]; ok {
+		backend.hasSharedBuffers = false
+		delete(backendOptions, "noshared_buffers")
+	}
+
+	// Support for tf32 DotGeneral.
+	const tf32Name = "tf32"
+	if val := backendOptions[tf32Name]; val != "" {
+		backend.DotGeneralUseTF32 = true
+		delete(backendOptions, "tf32")
+	} else if _, ok := backendOptions["notf32"]; ok {
+		// Deprecated, but still supported.
+		backend.DotGeneralUseTF32 = false
+		delete(backendOptions, "notf32")
+	}
+
+	// Support "preallocate":
+	const preallocateName = "preallocate"
+	if val := backendOptions[preallocateName]; val != "" {
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", preallocateName, val)
+		}
+		pluginOptions[preallocateName] = b
+		delete(backendOptions, preallocateName)
+	}
+
+	// Control memory fraction of preallocated memory:
+	const memoryFractionName = "memory_fraction"
+	if val := backendOptions[memoryFractionName]; val != "" {
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", memoryFractionName, val)
+		}
+		pluginOptions[memoryFractionName] = float32(f)
+		delete(backendOptions, memoryFractionName)
+	}
+
+	// Any leftover plugin options are unknown.
+	if len(backendOptions) != 0 {
+		klog.Errorf("backend %q: unknown plugin options %v", BackendName, backendOptions)
+	}
+
+	// Create plugin.
 	plugin, err := pjrt.GetPlugin(pluginName)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q:", BackendName)
 	}
 	var client *pjrt.Client
-	client, err = plugin.NewClient(options)
+	client, err = plugin.NewClient(pluginOptions)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while creating plugin %s for backend %q", pluginName, BackendName)
 	}
 	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
-	backend := &Backend{
-		plugin:       plugin,
-		client:       client,
-		pluginName:   pluginName,
-		config:       config,
-		capabilities: Capabilities.Clone(),
-		numDevices:   len(client.AddressableDevices()),
 
-		// Enable TF32 by default for CUDA.
-		DotGeneralUseTF32: isPluginType(pluginName, "cuda"),
-	}
+	// Set backend.
+	backend.plugin = plugin
+	backend.client = client
+	backend.numDevices = len(client.AddressableDevices())
 
-	// Support "shared buffers":
-	backend.hasSharedBuffers = isPluginType(pluginName, "cpu")
-	if idx := slices.Index(pluginOptions, "shared_buffers"); idx != -1 {
-		backend.hasSharedBuffers = true
-		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
-	} else if idx := slices.Index(pluginOptions, "noshared_buffers"); idx != -1 {
-		backend.hasSharedBuffers = false
-		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
-	}
-
-	// Support for tf32 DotGeneral.
-	if idx := slices.Index(pluginOptions, "tf32"); idx != -1 {
-		backend.DotGeneralUseTF32 = true
-		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
-	} else if idx := slices.Index(pluginOptions, "notf32"); idx != -1 {
-		backend.DotGeneralUseTF32 = false
-		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
-	}
-
-	// Any leftover plugin options are unknown.
-	if len(pluginOptions) != 0 {
-		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
-	}
 	return backend, nil
+}
+
+// parseOption parses the optionName from backendOptions (string).
+// If optionName is found, it's removed from backendOptions.
+// It returns the parsed value and whether it was found.
+func parseOption[T interface{ string | bool | float32 }](
+	optionName string, backendOptions map[string]string) (T, bool) {
+	var val T
+	valStr := backendOptions[optionName]
+	if valStr == "" {
+		return val, false
+	}
+	delete(backendOptions, optionName)
+	switch any(val).type {
+		
+	}
 }
 
 // Registers New() as the default constructor for "xla" backend.

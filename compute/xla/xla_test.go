@@ -75,3 +75,42 @@ func TestCompliance(t *testing.T) {
 		backendtest.RunAll(t, backend, cfg)
 	})
 }
+
+func TestNewWithOptions(t *testing.T) {
+	// Test cpu backend default hasSharedBuffers behavior
+	backend, err := xla.NewWithOptions("cpu", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	} else {
+		t.Logf("cpu plugin not available, skipping test: %v", err)
+	}
+
+	// Test cpu with shared_buffers=false
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=false", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers=0
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=0", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers=true
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=true", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers (no value, should default to true)
+	backend, err = xla.NewWithOptions("cpu,shared_buffers", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	}
+}
