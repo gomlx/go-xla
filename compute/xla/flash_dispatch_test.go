@@ -51,6 +51,46 @@ func TestSelectFMHAVariant_FP8NotImplemented(t *testing.T) {
 	require.True(t, compute.IsNotImplemented(err), "fp8 e5m2 must be NotImplemented (paused), got %v", err)
 }
 
+// TestSelectFMHAVariant_SeqLenPadding confirms that both-seqlens routes to PADDING (non-causal)
+// or PADDING_CAUSAL (causal), and nil cfg still routes to CAUSAL. CPU-runnable.
+func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
+	// sentinel is a non-nil compute.Value (any). selectFMHAVariant only checks != nil.
+	var sent compute.Value = struct{}{}
+
+	cfgBoth := &compute.ScaledDotProductAttentionConfig{
+		QuerySeqLen:    sent,
+		KeyValueSeqLen: sent,
+	}
+
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfgBoth)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v.maskType != "PADDING" {
+		t.Errorf("maskType = %q, want PADDING", v.maskType)
+	}
+	if !v.hasSeqLens {
+		t.Errorf("hasSeqLens = false, want true")
+	}
+
+	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, cfgBoth)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v.maskType != "PADDING_CAUSAL" {
+		t.Errorf("maskType = %q, want PADDING_CAUSAL", v.maskType)
+	}
+
+	// nil cfg still routes causal -> CAUSAL (no regression).
+	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v.maskType != "CAUSAL" {
+		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
+	}
+}
+
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
 	v := fmhaVariant{maskType: "NO_MASK"}
 	cfg := flashBackendConfigV(2, 12, 2048, 0.125, `"x": 1`, v)

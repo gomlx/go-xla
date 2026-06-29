@@ -107,17 +107,27 @@ func formatScale(scale float64) string {
 	return strconv.FormatFloat(scale, 'g', -1, 64)
 }
 
-// flashSupported reports whether the cuDNN flash path can serve this call. The cuDNN fMHA
-// custom-calls here are causal, bf16, BSHD-layout, equal-head only, on a cuda plugin; anything
-// else returns ErrNotImplemented so the graph layer differentiates the decomposed attention.
+// flashSupported reports whether the cuDNN flash path can serve this call. cuDNN fMHA here is
+// f16/bf16 (fp8 paused), BSHD-layout, equal-head, on a cuda plugin. Causality and
+// per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
+// an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
 func (f *Function) flashSupported(op string, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
 	}
-	if !causal || mask != nil || axesLayout != compute.AxesLayoutBSHD || numKVHeads != numHeads {
+	if mask != nil {
 		return errors.Wrapf(compute.ErrNotImplemented,
-			"%s: cuDNN flash path supports causal, no explicit mask, BSHD layout, equal q/kv heads only (got causal=%v mask!=nil=%v layout=%v heads=%d/%d)",
-			op, causal, mask != nil, axesLayout, numHeads, numKVHeads)
+			"%s: cuDNN flash path takes seqlens, not a materialized mask", op)
+	}
+	if axesLayout != compute.AxesLayoutBSHD || numKVHeads != numHeads {
+		return errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN flash path supports BSHD layout, equal q/kv heads only (got layout=%v heads=%d/%d)",
+			op, axesLayout, numHeads, numKVHeads)
+	}
+	// One of QuerySeqLen/KeyValueSeqLen set without the other is ambiguous.
+	if options != nil && (options.QuerySeqLen != nil) != (options.KeyValueSeqLen != nil) {
+		return errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN flash padding mask needs both QuerySeqLen and KeyValueSeqLen", op)
 	}
 	return nil
 }
