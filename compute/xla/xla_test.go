@@ -75,3 +75,80 @@ func TestCompliance(t *testing.T) {
 		backendtest.RunAll(t, backend, cfg)
 	})
 }
+
+func TestNewWithOptions(t *testing.T) {
+	// Test cpu backend default hasSharedBuffers behavior
+	backend, err := xla.NewWithOptions("cpu", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	} else {
+		t.Logf("cpu plugin not available, skipping test: %v", err)
+	}
+
+	// Test cpu with shared_buffers=false
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=false", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers=0
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=0", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers=true
+	backend, err = xla.NewWithOptions("cpu,shared_buffers=true", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with shared_buffers (no value, should default to true)
+	backend, err = xla.NewWithOptions("cpu,shared_buffers", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with noshared_buffers
+	backend, err = xla.NewWithOptions("cpu,noshared_buffers", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.HasSharedBuffers())
+	}
+
+	// Test cpu with notf32
+	backend, err = xla.NewWithOptions("cpu,notf32", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.DotGeneralUseTF32)
+	}
+
+	// Test cpu with tf32=false
+	backend, err = xla.NewWithOptions("cpu,tf32=false", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.False(t, backend.DotGeneralUseTF32)
+	}
+
+	// Test cpu with tf32 (no value, should default to true)
+	backend, err = xla.NewWithOptions("cpu,tf32", nil)
+	if err == nil {
+		defer backend.Finalize()
+		assert.True(t, backend.DotGeneralUseTF32)
+	}
+
+	// Test help requested via pluginName
+	_, err = xla.NewWithOptions("help", nil)
+	assert.Error(t, err)
+	assert.Equal(t, "Help requested", err.Error())
+
+	// Test help requested via option
+	_, err = xla.NewWithOptions("cpu,help", nil)
+	assert.Error(t, err)
+	assert.Equal(t, "Help requested", err.Error())
+}
