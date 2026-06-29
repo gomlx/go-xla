@@ -28,23 +28,6 @@ import (
 const (
 	fmhaForwardTarget  = "__cudnn$fmhaSoftmax"
 	fmhaBackwardTarget = "__cudnn$fmhaSoftmaxBackward"
-	fmhaAPIVersion     = 2 // STATUS_RETURNING
-)
-
-// Layouts are rank-determined, so fixed: q,k,v BSHD [3,2,1,0], cuDNN output BHSD [3,1,2,0],
-// stats [2,1,0], scratch u8 [0].
-const (
-	layoutBSHD  = "dense<[3, 2, 1, 0]> : tensor<4xindex>"
-	layoutBHSD  = "dense<[3, 1, 2, 0]> : tensor<4xindex>"
-	layoutStats = "dense<[2, 1, 0]> : tensor<3xindex>"
-	layoutU8    = "dense<0> : tensor<1xindex>"
-
-	flashFwdOperandLayouts = "[" + layoutBSHD + ", " + layoutBSHD + ", " + layoutBSHD + "]"
-	flashFwdResultLayouts  = "[" + layoutBHSD + ", " + layoutStats + ", " + layoutU8 + "]"
-	// Backward operands: q, k, v (BSHD), softmax stats, dOutput (BSHD), output (BSHD).
-	flashBwdOperandLayouts = "[" + layoutBSHD + ", " + layoutBSHD + ", " + layoutBSHD + ", " + layoutStats + ", " + layoutBSHD + ", " + layoutBSHD + "]"
-	// Backward results: dQ, dK, dV (BHSD), scratch.
-	flashBwdResultLayouts = "[" + layoutBHSD + ", " + layoutBHSD + ", " + layoutBHSD + ", " + layoutU8 + "]"
 )
 
 // flashFwdBackendConfig builds the forward cudnn_fmha_backend_config for q,k,v [B,S,H,D]
@@ -134,8 +117,12 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
 	stats := shapes.Make(dtypes.Float32, b, h, s)
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	outs, err := f.customCall(fmhaForwardTarget, fmhaAPIVersion, flashFwdBackendConfig(b, h, s, scale),
-		flashFwdOperandLayouts, flashFwdResultLayouts, []shapes.Shape{bhsd, stats, scratch}, q, k, v)
+	// Forward operand layouts: q,k,v BSHD [3,2,1,0]. Result layouts: output BHSD [3,1,2,0],
+	// stats [2,1,0], scratch u8 [0].
+	fwdOperandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	fwdResultLayouts := [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
+	outs, err := f.customCall(fmhaForwardTarget, flashFwdBackendConfig(b, h, s, scale),
+		fwdOperandLayouts, []shapes.Shape{bhsd, stats, scratch}, fwdResultLayouts, q, k, v)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -182,9 +169,12 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	}
 	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	// Backward operands: q, k, v (BSHD), softmax stats, dOutput (BSHD), output (BSHD).
-	grads, err := f.customCall(fmhaBackwardTarget, fmhaAPIVersion, flashBwdBackendConfig(b, h, s, scale),
-		flashBwdOperandLayouts, flashBwdResultLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch},
+	// Backward operands: q,k,v BSHD, stats [2,1,0], dOutput BSHD, output BSHD.
+	bwdOperandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	// Backward results: dQ, dK, dV BHSD, scratch u8.
+	bwdResultLayouts := [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
+	grads, err := f.customCall(fmhaBackwardTarget, flashBwdBackendConfig(b, h, s, scale),
+		bwdOperandLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResultLayouts,
 		q, k, v, softmaxStats, dOut, out)
 	if err != nil {
 		return nil, nil, nil, err
