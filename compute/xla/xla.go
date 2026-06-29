@@ -55,6 +55,8 @@
 //   - "allocator" (string, default="default"): which allocator to use. For CUDA the available ones are "default"
 //     (== "bfc"), "bfc" ("best-fit for coalescing", avoids framementation), "cuda_async" (dynamic, no preallocation),
 //     "platform" (slow, good for debugging), "vmm"
+//   - "visible_devices" (list of integers, e.g., "0;1;2"): list IDs of the devices made visible to the backend.
+//   - "use_tfrt_gpu_client" (boolean, default=false): uses the "TFRT" dispatcher for GPU.
 //
 // # (NO) Dynamic Shapes
 //
@@ -113,6 +115,20 @@ func New(config string) (compute.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
+// optionsDocumentation contains the help text for the options.
+const optionsDocumentation = `"xla" backend extra options:
+  - "tf32" (boolean, default=true): controls whether to use TF32 for DotGeneral operations that are using float32
+    (it can be faster in modern GPUs). It's enabled by default.
+  - "shared_buffer" (boolean, default=true): controls whether to use shared buffers for the device buffer
+    (where device=CPU). It's enabled by default if the plugin is called "cpu".
+  - "preallocate" (boolean, default=true): whether the CUDA PJRT preallocates a large portion of the memory.
+  - "memory_fraction" (float, default=0.75): how much memory to preallocate.
+  - "allocator" (string, default="default"): which allocator to use. For CUDA the available ones are "default"
+    (== "bfc"), "bfc" ("best-fit for coalescing", avoids framementation), "cuda_async" (dynamic, no preallocation),
+    "platform" (slow, good for debugging), "vmm"
+  - "visible_devices" (list of integers, e.g., "0;1;2"): list IDs of the devices made visible to the backend.
+  - "use_tfrt_gpu_client" (boolean, default=false): uses the "TFRT" dispatcher for GPU.`
+
 // NewWithOptions creates a StableHLO backend with the given client options.
 // It allows more control, not available with the default New constructor.
 //
@@ -142,6 +158,13 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 				backendOptions[key] = val
 			}
 		}
+	}
+
+	_, helpOptionSet := backendOptions["help"]
+	if pluginName == "help" || helpOptionSet {
+		klog.Infof("Available plugins: %q", GetAvailablePlugins())
+		klog.Info(optionsDocumentation)
+		return nil, errors.New("Help requested")
 	}
 
 	// FInd plugin.
@@ -186,55 +209,57 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 
 	// Support "shared buffers":
-	const shareBuffersName = "shared_buffers"
-	if val := backendOptions[sharedBuffersName]; val != "" {
-		b, err := strconv.ParseBool(val)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", sharedBuffersName, val)
-		}
+	if b, found, err := parseOptions[bool]("shared_buffers", backendOptions); err != nil {
+		return nil, err
+	} else if found {
 		backend.hasSharedBuffers = b
-		delete(backendOptions, shareBuffersName)
-	} else if _, ok := backendOptions["noshared_buffers"]; ok {
-		backend.hasSharedBuffers = false
-		delete(backendOptions, "noshared_buffers")
 	}
 
 	// Support for tf32 DotGeneral.
-	const tf32Name = "tf32"
-	if val := backendOptions[tf32Name]; val != "" {
-		backend.DotGeneralUseTF32 = true
-		delete(backendOptions, "tf32")
-	} else if _, ok := backendOptions["notf32"]; ok {
-		// Deprecated, but still supported.
-		backend.DotGeneralUseTF32 = false
-		delete(backendOptions, "notf32")
+	if b, found, err := parseOptions[bool]("tf32", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		backend.DotGeneralUseTF32 = b
 	}
 
 	// Support "preallocate":
-	const preallocateName = "preallocate"
-	if val := backendOptions[preallocateName]; val != "" {
-		b, err := strconv.ParseBool(val)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", preallocateName, val)
-		}
-		pluginOptions[preallocateName] = b
-		delete(backendOptions, preallocateName)
+	if b, found, err := parseOptions[bool]("preallocate", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		pluginOptions["preallocate"] = b
 	}
 
 	// Control memory fraction of preallocated memory:
-	const memoryFractionName = "memory_fraction"
-	if val := backendOptions[memoryFractionName]; val != "" {
-		f, err := strconv.ParseFloat(val, 32)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed to parse option %q=%q", memoryFractionName, val)
-		}
-		pluginOptions[memoryFractionName] = float32(f)
-		delete(backendOptions, memoryFractionName)
+	if f, found, err := parseOptions[float32]("memory_fraction", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		pluginOptions["memory_fraction"] = f
+	}
+
+	// Allocator to use for CUDA:
+	if s, found, err := parseOptions[string]("allocator", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		pluginOptions["allocator"] = s
+	}
+
+	// Visible devices for the client:
+	if visibleDevices, found, err := parseOptions[[]int64]("visible_devices", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		pluginOptions["visible_devices"] = visibleDevices
+	}
+
+	// Use TFRT GPU client:
+	if useTFRT, found, err := parseOptions[bool]("use_tfrt_gpu_client", backendOptions); err != nil {
+		return nil, err
+	} else if found {
+		pluginOptions["use_tfrt_gpu_client"] = useTFRT
 	}
 
 	// Any leftover plugin options are unknown.
 	if len(backendOptions) != 0 {
-		klog.Errorf("backend %q: unknown plugin options %v", BackendName, backendOptions)
+		klog.Errorf("backend %q: unknown plugin options %v", BackendName, xslices.SortedKeys(backendOptions))
 	}
 
 	// Create plugin.
@@ -257,19 +282,66 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	return backend, nil
 }
 
-// parseOption parses the optionName from backendOptions (string).
+// parseOptions parses the optionName from backendOptions (string).
 // If optionName is found, it's removed from backendOptions.
-// It returns the parsed value and whether it was found.
-func parseOption[T interface{ string | bool | float32 }](
-	optionName string, backendOptions map[string]string) (T, bool) {
+// For bool options, it also searches for "no"+optionName, and if found, removes it and returns false.
+// It returns the parsed value, whether it was found, and any parsing error.
+func parseOptions[T interface {
+	string | bool | float32 | []int64
+}](
+	optionName string, backendOptions map[string]string) (T, bool, error) {
 	var val T
-	valStr := backendOptions[optionName]
-	if valStr == "" {
-		return val, false
+
+	if _, ok := any(val).(bool); ok {
+		noKey := "no" + optionName
+		if _, foundNo := backendOptions[noKey]; foundNo {
+			delete(backendOptions, noKey)
+			return any(false).(T), true, nil
+		}
+	}
+
+	valStr, found := backendOptions[optionName]
+	if !found {
+		return val, false, nil
 	}
 	delete(backendOptions, optionName)
-	switch any(val).type {
-		
+
+	switch any(val).(type) {
+	case string:
+		return any(valStr).(T), true, nil
+	case bool:
+		if valStr == "" {
+			return any(true).(T), true, nil
+		}
+		b, err := strconv.ParseBool(valStr)
+		if err != nil {
+			return val, true, errors.Wrapf(err, "Failed to parse option %q=%q", optionName, valStr)
+		}
+		return any(b).(T), true, nil
+	case float32:
+		f, err := strconv.ParseFloat(valStr, 32)
+		if err != nil {
+			return val, true, errors.Wrapf(err, "Failed to parse option %q=%q", optionName, valStr)
+		}
+		return any(float32(f)).(T), true, nil
+	case []int64:
+		if valStr == "" {
+			return val, true, nil
+		}
+		parts := strings.FieldsFunc(valStr, func(r rune) bool {
+			return r == ';' || r == ':' || r == ' '
+		})
+		res := make([]int64, 0, len(parts))
+		for _, part := range parts {
+			valInt, err := strconv.ParseInt(part, 10, 64)
+			if err != nil {
+				return val, true, errors.Wrapf(err, "Failed to parse option %q=%q", optionName, valStr)
+			}
+			res = append(res, valInt)
+		}
+		return any(res).(T), true, nil
+	default:
+		panic("unreachable")
 	}
 }
 
