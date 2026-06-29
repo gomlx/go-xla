@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSelectFMHAVariant_StandardCausal(t *testing.T) {
@@ -39,6 +40,15 @@ func TestSelectFMHAVariant_RejectsF32(t *testing.T) {
 	if !errors.Is(err, compute.ErrNotImplemented) {
 		t.Errorf("err = %v, want ErrNotImplemented", err)
 	}
+}
+
+// TestSelectFMHAVariant_FP8NotImplemented pins the fp8-paused seam: fp8 dtypes must return
+// ErrNotImplemented so the caller falls back to the decomposed path. CPU, Mac-runnable.
+func TestSelectFMHAVariant_FP8NotImplemented(t *testing.T) {
+	_, err := selectFMHAVariant("fmha", dtypes.F8E4M3FN, true, nil)
+	require.True(t, compute.IsNotImplemented(err), "fp8 must be NotImplemented (paused), got %v", err)
+	_, err = selectFMHAVariant("fmha", dtypes.F8E5M2, true, nil)
+	require.True(t, compute.IsNotImplemented(err), "fp8 e5m2 must be NotImplemented (paused), got %v", err)
 }
 
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {

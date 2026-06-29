@@ -150,14 +150,8 @@ func (f *Function) bf16(v compute.Value) (compute.Value, error) {
 	return f.ConvertDType(v, dtypes.BFloat16)
 }
 
-// fwdOperandLayouts: q,k,v BSHD [3,2,1,0].
-var fwdOperandLayouts = [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
-
 // fwdResultLayouts: output BHSD [3,1,2,0], stats [2,1,0], scratch u8 [0].
 var fwdResultLayouts = [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
-
-// bwdOperandLayouts: q,k,v BSHD, stats [2,1,0], dOutput BSHD, output BSHD.
-var bwdOperandLayouts = [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 
 // bwdResultLayouts: dQ, dK, dV BHSD, scratch u8.
 var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
@@ -195,11 +189,19 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
+	// Operand order cuDNN expects: q, k, v, [seqQ, seqKV]. [S2] inserts [bias] before seqlens
+	// and appends [dropout seed, offset] after.
+	operands := []compute.Value{q, k, v}
+	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	if variant.hasSeqLens {
+		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
+		operandLayouts = append(operandLayouts, nil, nil) // int32 [B], row-major
+	}
 	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
 	stats := shapes.Make(dtypes.Float32, b, h, s)
 	scratch := shapes.Make(dtypes.Uint8, 0)
 	outs, err := f.customCall(variant.fwdTarget, flashFwdBackendConfig(b, h, s, scale, variant),
-		fwdOperandLayouts, []shapes.Shape{bhsd, stats, scratch}, fwdResultLayouts, q, k, v)
+		operandLayouts, []shapes.Shape{bhsd, stats, scratch}, fwdResultLayouts, operands...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,11 +254,16 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
+	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	if variant.hasSeqLens {
+		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
+		operandLayouts = append(operandLayouts, nil, nil)
+	}
 	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
 	scratch := shapes.Make(dtypes.Uint8, 0)
 	grads, err := f.customCall(variant.bwdTarget, flashBwdBackendConfig(b, h, s, scale, variant),
-		bwdOperandLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResultLayouts,
-		q, k, v, softmaxStats, dOut, out)
+		operandLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResultLayouts, operands...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
