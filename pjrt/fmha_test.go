@@ -25,29 +25,29 @@ func destroyAll(bufs ...*Buffer) {
 const fmhaFwdBackendConfig = `{"operation_queue_id": "0", "cudnn_fmha_backend_config": {"algorithm": {"algo_id": "0", "math_type": "TENSOR_OP_MATH", "tuning_knobs": {"17": "1", "24": "0"}, "is_cudnn_frontend": true, "workspace_size": "0"}, "fmha_scale": 0.125, "intermediate_tensor_shape": {"element_type": "BF16", "dimensions": ["2", "12", "2048", "2048"], "tuple_shapes": [], "layout": {"dim_level_types": [], "dim_unique": [], "dim_ordered": [], "minor_to_major": ["3", "2", "1", "0"], "tiles": [], "element_size_in_bits": "0", "memory_space": "0", "index_primitive_type": "PRIMITIVE_TYPE_INVALID", "pointer_primitive_type": "PRIMITIVE_TYPE_INVALID", "dynamic_shape_metadata_prefix_bytes": "0"}, "is_dynamic_dimension": [false, false, false, false]}, "is_flash_attention": true, "mask_type": "CAUSAL", "bmm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["3"], "lhs_batch_dimensions": ["0", "2"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "dropout_rate": 0.0, "seed": 42, "sliding_window_length": 0, "max_seg_per_batch": 1, "is_paged_attention": false}}`
 
 // TestFMHAForwardExecute compiles and runs the cuDNN flash-attention forward
-// custom_call emitted by stablehlo.CustomCall, end to end on the GPU. With
+// custom_call via stablehlo.CustomCallV2, end to end on the GPU. With
 // q=k=v=ones every score is equal so the softmax is uniform and the output is all
 // 1.0 (the weighted sum of all-ones values), independent of the causal mask. Needs
 // the cuda plugin (cuDNN); skipped otherwise.
 func TestFMHAForwardExecute(t *testing.T) {
-	if *FlagPluginName != "cuda" {
+	client := getPJRTClient(t)
+	if !client.Plugin().IsCUDA() {
 		t.Skipf("fmha is cuDNN-only; run with -plugin cuda (have %q)", *FlagPluginName)
 	}
-	client := getPJRTClient(t)
 	const B, S, H, D = 2, 2048, 12, 64
 	qkv := shapes.Make(dtypes.BFloat16, B, S, H, D)      // [B,S,H,D]
 	out := shapes.Make(dtypes.BFloat16, B, H, S, D)      // [B,H,S,D]
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	const layIn = "[dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>]"
-	const layOut = "[dense<[3, 1, 2, 0]> : tensor<4xindex>, dense<0> : tensor<1xindex>]"
+	layIn := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	layOut := [][]int{{3, 1, 2, 0}, {0}}
 
 	b := stablehlo.New("fmha_fwd")
 	fn := b.Main()
 	q := must1(fn.NamedInput("q", qkv))
 	k := must1(fn.NamedInput("k", qkv))
 	v := must1(fn.NamedInput("v", qkv))
-	res := must1(stablehlo.CustomCall("__cudnn$fmhaSoftmax", stablehlo.CustomCallAPIVersionStatusReturning,
-		fmhaFwdBackendConfig, layIn, layOut, []shapes.Shape{out, scratch}, q, k, v))
+	res := must1(stablehlo.CustomCallV2("__cudnn$fmhaSoftmax", fmhaFwdBackendConfig,
+		[]*stablehlo.Value{q, k, v}, layIn, []shapes.Shape{out, scratch}, layOut))
 	must(fn.Return(res[0]))
 
 	exec := must1(client.Compile().WithStableHLO(must1(b.Build())).Done())
@@ -98,19 +98,19 @@ const fmhaBwdBackendConfig = `{"operation_queue_id": "0", "cudnn_fmha_backend_co
 // on the GPU. Confirms the backward custom_call lowers and executes and produces
 // finite dQ/dK/dV. Needs the cuda plugin (cuDNN); skipped otherwise.
 func TestFMHABackwardExecute(t *testing.T) {
-	if *FlagPluginName != "cuda" {
+	client := getPJRTClient(t)
+	if !client.Plugin().IsCUDA() {
 		t.Skipf("fmha is cuDNN-only; run with -plugin cuda (have %q)", *FlagPluginName)
 	}
-	client := getPJRTClient(t)
 	const B, S, H, D = 2, 2048, 12, 64
 	bshd := shapes.Make(dtypes.BFloat16, B, S, H, D)
 	bhsd := shapes.Make(dtypes.BFloat16, B, H, S, D)
 	stats := shapes.Make(dtypes.Float32, B, H, S)
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	const lay3bshd = "[dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>]"
-	const fwdResLay = "[dense<[3, 1, 2, 0]> : tensor<4xindex>, dense<[2, 1, 0]> : tensor<3xindex>, dense<0> : tensor<1xindex>]"
-	const bwdOpLay = "[dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[2, 1, 0]> : tensor<3xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>, dense<[3, 2, 1, 0]> : tensor<4xindex>]"
-	const bwdResLay = "[dense<[3, 1, 2, 0]> : tensor<4xindex>, dense<[3, 1, 2, 0]> : tensor<4xindex>, dense<[3, 1, 2, 0]> : tensor<4xindex>, dense<0> : tensor<1xindex>]"
+	lay3bshd := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	fwdResLay := [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
+	bwdOpLay := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	bwdResLay := [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 
 	b := stablehlo.New("fmha_bwd")
 	fn := b.Main()
@@ -119,11 +119,11 @@ func TestFMHABackwardExecute(t *testing.T) {
 	v := must1(fn.NamedInput("v", bshd))
 	dO := must1(fn.NamedInput("dO", bshd))
 
-	fwd := must1(stablehlo.CustomCall("__cudnn$fmhaSoftmax", stablehlo.CustomCallAPIVersionStatusReturning,
-		fmhaFwdBackendConfig, lay3bshd, fwdResLay, []shapes.Shape{bhsd, stats, scratch}, q, k, v))
+	fwd := must1(stablehlo.CustomCallV2("__cudnn$fmhaSoftmax", fmhaFwdBackendConfig,
+		[]*stablehlo.Value{q, k, v}, lay3bshd, []shapes.Shape{bhsd, stats, scratch}, fwdResLay))
 	outBSHD := must1(stablehlo.Transpose(fwd[0], 0, 2, 1, 3)) // [B,H,S,D] -> [B,S,H,D]
-	grads := must1(stablehlo.CustomCall("__cudnn$fmhaSoftmaxBackward", stablehlo.CustomCallAPIVersionStatusReturning,
-		fmhaBwdBackendConfig, bwdOpLay, bwdResLay, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, q, k, v, fwd[1], dO, outBSHD))
+	grads := must1(stablehlo.CustomCallV2("__cudnn$fmhaSoftmaxBackward", fmhaBwdBackendConfig,
+		[]*stablehlo.Value{q, k, v, fwd[1], dO, outBSHD}, bwdOpLay, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResLay))
 	must(fn.Return(grads[0], grads[1], grads[2]))
 
 	exec := must1(client.Compile().WithStableHLO(must1(b.Build())).Done())
