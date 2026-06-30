@@ -227,8 +227,11 @@ func validateBias(name string, v compute.Value, b, h, s, skv int) error {
 // fwdResultLayouts: output BHSD [3,1,2,0], stats [2,1,0], scratch u8 [0].
 var fwdResultLayouts = [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
 
-// bwdResultLayouts: dQ, dK, dV BHSD, scratch u8.
+// bwdResultLayouts: dQ, dK, dV BHSD, scratch u8 (no-bias path; 4 results).
 var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
+
+// bwdResultLayoutsBias: dQ, dK, dV BHSD, dBias [B,H,Sq,Sk] bf16, scratch u8 (bias path; 5 results).
+var bwdResultLayoutsBias = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {3, 2, 1, 0}, {0}}
 
 // FusedScaledDotProductAttention runs the cuDNN flash forward. query/key/value are [B,S,H,D]
 // (BSHD), bf16. It returns the [B,S,H,D] bf16 output and the [B,H,S] f32 softmax statistics
@@ -340,8 +343,11 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
-	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	// Operand order cuDNN expects for the backward:
+	//   no-bias: [Q, K, V, softmax_sum, dO, O]
+	//   bias:    [Q, K, V, softmax_sum, dO, BIAS, O]  (bias at index 5, before O)
+	operands := []compute.Value{q, k, v, softmaxStats, dOut}
+	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasBias {
 		if err = validateBias("Bias", options.Bias, b, h, s, s); err != nil {
 			return nil, nil, nil, err
@@ -349,6 +355,8 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 		operands = append(operands, options.Bias)
 		operandLayouts = append(operandLayouts, []int{3, 2, 1, 0})
 	}
+	operands = append(operands, out)
+	operandLayouts = append(operandLayouts, []int{3, 2, 1, 0})
 	if variant.hasSeqLens {
 		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
 			return nil, nil, nil, err
@@ -361,8 +369,21 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	}
 	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
 	scratch := shapes.Make(dtypes.Uint8, 0)
+	// Result list: no-bias -> [dQ, dK, dV, scratch] (4); bias -> [dQ, dK, dV, dBias, scratch] (5).
+	// dBias shape matches the bias operand [B,H,S,S]; we don't propagate it (bias is not a
+	// trained param here), but the result slot must be declared for the cuDNN graph to match.
+	var resultShapes []shapes.Shape
+	var resultLayouts [][]int
+	if variant.hasBias {
+		biasShape := shapes.Make(dtypes.BFloat16, b, h, s, s)
+		resultShapes = []shapes.Shape{bhsd, bhsd, bhsd, biasShape, scratch}
+		resultLayouts = bwdResultLayoutsBias
+	} else {
+		resultShapes = []shapes.Shape{bhsd, bhsd, bhsd, scratch}
+		resultLayouts = bwdResultLayouts
+	}
 	grads, err := f.customCall(variant.bwdTarget, flashBwdBackendConfig(b, h, s, scale, variant),
-		operandLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResultLayouts, operands...)
+		operandLayouts, resultShapes, resultLayouts, operands...)
 	if err != nil {
 		return nil, nil, nil, err
 	}

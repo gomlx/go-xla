@@ -59,12 +59,29 @@ func TestFMHA_Bias_cuda(t *testing.T) {
 		t.Skipf("[cuda] compile failed (cuDNN ScaleBias may be unsupported): %v", err)
 	}
 
-	// --- inputs: q=k=v=ones, bias strongly favors key index 0 ---
+	// --- inputs ---
+	// q=k=ones: all dot-product scores equal, so without bias every key gets equal weight.
+	// V is non-uniform: V[b, key_i, h, d] = float(key_i+1), so attending to different keys
+	// yields different outputs. With the bias strongly favoring key 0, biased output ≈ V[key 0]
+	// and unbiased output ≈ mean(V) -- the two differ, proving the bias is live.
 	nElemsQKV := B * S * H * D
-	ones := make([]bfloat16.BFloat16, nElemsQKV)
+	ones := make([]bfloat16.BFloat16, nElemsQKV) // q and k
 	one := bfloat16.FromFloat32(1)
 	for i := range ones {
 		ones[i] = one
+	}
+
+	// V[b, s, h, d] = float32(s+1): value grows with key position (BSHD layout).
+	vData := make([]bfloat16.BFloat16, nElemsQKV)
+	for b := 0; b < B; b++ {
+		for s := 0; s < S; s++ {
+			for h := 0; h < H; h++ {
+				for d := 0; d < D; d++ {
+					idx := ((b*S+s)*H+h)*D + d
+					vData[idx] = bfloat16.FromFloat32(float32(s + 1))
+				}
+			}
+		}
 	}
 
 	// bias[b, h, s, 0] = +10, everything else = -10 => softmax sharply picks key 0
@@ -85,18 +102,25 @@ func TestFMHA_Bias_cuda(t *testing.T) {
 		}
 	}
 
-	mkQKV := func() compute.Buffer {
+	mkQ := func() compute.Buffer {
 		buf, e := be.BufferFromFlatData(0, ones, qkvShape)
-		require.NoError(t, e, "BufferFromFlatData qkv")
+		require.NoError(t, e, "BufferFromFlatData q")
 		return buf
 	}
+	mkV := func() compute.Buffer {
+		buf, e := be.BufferFromFlatData(0, vData, qkvShape)
+		require.NoError(t, e, "BufferFromFlatData v")
+		return buf
+	}
+	// Keep mkQKV for k (same as q).
+	mkQKV := mkQ
 	mkBias := func() compute.Buffer {
 		buf, e := be.BufferFromFlatData(0, biasData, biasShape)
 		require.NoError(t, e, "BufferFromFlatData bias")
 		return buf
 	}
 
-	qb, kb, vb, bb := mkQKV(), mkQKV(), mkQKV(), mkBias()
+	qb, kb, vb, bb := mkQKV(), mkQKV(), mkV(), mkBias()
 	defer func() {
 		_ = qb.Finalize()
 		_ = kb.Finalize()
