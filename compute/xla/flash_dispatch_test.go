@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,6 +90,49 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 	if v.maskType != "CAUSAL" {
 		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
 	}
+}
+
+// nodeWithShape builds a minimal *Node with the given shape. value/builder are nil because
+// validateSeqLen only reads n.shape -- no backend call is made.
+func nodeWithShape(sh shapes.Shape) *Node { return &Node{shape: sh} }
+
+// TestValidateSeqLen covers the CPU-runnable validation logic: wrong dtype, wrong rank,
+// wrong length, and the happy path. No cuda or backend required.
+func TestValidateSeqLen(t *testing.T) {
+	const batch = 4
+
+	t.Run("wrong dtype (bf16)", func(t *testing.T) {
+		v := nodeWithShape(shapes.Make(dtypes.BFloat16, batch))
+		err := validateSeqLen("QuerySeqLen", v, batch)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must be int32")
+	})
+
+	t.Run("wrong rank (rank-2)", func(t *testing.T) {
+		v := nodeWithShape(shapes.Make(dtypes.Int32, batch, 1))
+		err := validateSeqLen("KeyValueSeqLen", v, batch)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "rank-1")
+	})
+
+	t.Run("wrong length", func(t *testing.T) {
+		v := nodeWithShape(shapes.Make(dtypes.Int32, batch+1))
+		err := validateSeqLen("QuerySeqLen", v, batch)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "!= batch size")
+	})
+
+	t.Run("not a *Node", func(t *testing.T) {
+		var v compute.Value = struct{}{}
+		err := validateSeqLen("QuerySeqLen", v, batch)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "*Node")
+	})
+
+	t.Run("valid int32 [B]", func(t *testing.T) {
+		v := nodeWithShape(shapes.Make(dtypes.Int32, batch))
+		require.NoError(t, validateSeqLen("QuerySeqLen", v, batch))
+	})
 }
 
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {

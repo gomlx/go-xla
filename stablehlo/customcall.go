@@ -63,8 +63,10 @@ func renderLayouts(layouts [][]int, ranks []int) string {
 //
 //   - backendConfig: the raw backend_config string (serialized proto / JSON); "" omits it.
 //   - operandLayouts/outputLayouts: minor-to-major dim orders, paired by index with
-//     operands/outputShapes. A nil entry (or nil slice) defaults to row-major. Passing a nil
-//     slice omits the layout attribute entirely.
+//     operands/outputShapes.
+//     Nil/empty TOP-LEVEL slice: the layout attribute is OMITTED entirely from the op.
+//     Nil/empty ENTRY within a non-nil slice: that operand/result defaults to row-major
+//     (decreasing order over its rank, e.g. rank 4 -> [3, 2, 1, 0]).
 //   - outputShapes: one shape per result (multi-output: e.g. attention output + scratch).
 //
 // Returns one output Value per outputShape, in order.

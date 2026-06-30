@@ -160,6 +160,27 @@ func (f *Function) bf16(v compute.Value) (compute.Value, error) {
 	return f.ConvertDType(v, dtypes.BFloat16)
 }
 
+// validateSeqLen checks that v is a rank-1 int32 vector of length == batch.
+// name is used in the error message (e.g. "QuerySeqLen"). Returns a wrapped
+// error on mismatch so callers can distinguish validation failures.
+func validateSeqLen(name string, v compute.Value, batch int) error {
+	n, ok := v.(*Node)
+	if !ok {
+		return errors.Errorf("seqlen %s: expected *Node, got %T", name, v)
+	}
+	sh := n.shape
+	if sh.DType != dtypes.Int32 {
+		return errors.Errorf("seqlen %s: must be int32, got %s", name, sh.DType)
+	}
+	if sh.Rank() != 1 {
+		return errors.Errorf("seqlen %s: must be rank-1 [B], got rank %d (shape %v)", name, sh.Rank(), sh.Dimensions)
+	}
+	if sh.Dimensions[0] != batch {
+		return errors.Errorf("seqlen %s: length %d != batch size %d", name, sh.Dimensions[0], batch)
+	}
+	return nil
+}
+
 // fwdResultLayouts: output BHSD [3,1,2,0], stats [2,1,0], scratch u8 [0].
 var fwdResultLayouts = [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
 
@@ -204,6 +225,12 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	operands := []compute.Value{q, k, v}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
+		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
+			return nil, nil, err
+		}
+		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, b); err != nil {
+			return nil, nil, err
+		}
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil) // int32 [B], row-major
 	}
@@ -267,6 +294,12 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
+		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
+			return nil, nil, nil, err
+		}
+		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, b); err != nil {
+			return nil, nil, nil, err
+		}
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil)
 	}
