@@ -81,6 +81,54 @@ func assertFiniteBSHD(t *testing.T, buf compute.Buffer) {
 	}
 }
 
+// readFlatBF16 extracts the flat bf16 slice from buf, failing the test on error.
+func readFlatBF16(t *testing.T, buf compute.Buffer) ([]bfloat16.BFloat16, shapes.Shape) {
+	t.Helper()
+	sh, err := buf.Shape()
+	if err != nil {
+		t.Fatalf("readFlatBF16 Shape: %v", err)
+	}
+	flat := make([]bfloat16.BFloat16, sh.Size())
+	if err = buf.ToFlatData(flat); err != nil {
+		t.Fatalf("readFlatBF16 ToFlatData: %v", err)
+	}
+	return flat, sh
+}
+
+// assertSeqLenMasksOutput verifies that seqlen masking actually changed the output. It compares
+// the padding positions (seqIdx >= shortLen) of batch element 1 (masked to shortLen) against the
+// same positions of batch element 0 (full seqLen). With q=k=v=ones and PADDING_CAUSAL, cuDNN
+// zeros/masks the padding-query outputs for the short batch element, producing values that differ
+// from the active (non-zero) outputs of the full batch element. If seqlens were ignored, all
+// positions across both elements would be identical and the assertion would fail.
+//
+// Layout: flat [B, S, H, D] row-major. shortLen < seqLen required.
+func assertSeqLenMasksOutput(t *testing.T, flat []bfloat16.BFloat16, b, seqLen, h, d, shortLen int) {
+	t.Helper()
+	if shortLen >= seqLen {
+		t.Fatalf("assertSeqLenMasksOutput: shortLen %d must be < seqLen %d", shortLen, seqLen)
+	}
+	stride := func(batch, seq int) int { return (batch*seqLen+seq)*h*d }
+	// Count positions in [batch=1, s=shortLen..seqLen-1] that differ from the corresponding
+	// position in [batch=0] (which has full seqlen and should be active/non-zero).
+	diffCount := 0
+	totalPad := (seqLen - shortLen) * h * d
+	for s := shortLen; s < seqLen; s++ {
+		base0 := stride(0, s)
+		base1 := stride(1, s)
+		for i := 0; i < h*d; i++ {
+			if flat[base0+i] != flat[base1+i] {
+				diffCount++
+			}
+		}
+	}
+	if diffCount == 0 {
+		t.Errorf("assertSeqLenMasksOutput: padding positions (s>=%d) in batch 1 are identical to batch 0 (%d elements) -- seqlen masking had no effect", shortLen, totalPad)
+	} else {
+		t.Logf("assertSeqLenMasksOutput: %d/%d padding-position elements differ (masking active)", diffCount, totalPad)
+	}
+}
+
 // [cuda] PADDING_CAUSAL: per-batch lengths shorter than S must mask the padding rows. With
 // q=k=v=ones, masking changes which keys contribute, so the masked output differs from the
 // unmasked all-ones output for the shortened batch element. Runs under xla:cuda.
@@ -160,5 +208,16 @@ func TestFMHA_SeqLenPaddingCausal_cuda(t *testing.T) {
 			_ = o.Finalize()
 		}
 	}()
+
+	// Original finiteness check: no NaN/Inf anywhere in the output.
 	assertFiniteBSHD(t, outs[0])
+
+	// Masking-effect check: seqlen masking must change the output for the short batch element.
+	// Batch 0 has qSeqLen=S (all active); batch 1 has qSeqLen=S/2 (padding at s>=S/2).
+	// cuDNN PADDING_CAUSAL zeros/masks query positions >= qSeqLen, so batch 1's padding
+	// positions must differ from batch 0's (which are fully active and non-zero). If cuDNN
+	// ignored the seqlens, both elements would produce identical all-ones outputs and this
+	// assertion would fail.
+	flat, _ := readFlatBF16(t, outs[0])
+	assertSeqLenMasksOutput(t, flat, B, S, H, D, S/2)
 }
