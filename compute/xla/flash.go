@@ -111,9 +111,13 @@ func formatScale(scale float64) string {
 // f16/bf16 (fp8 paused), BSHD-layout, equal-head, on a cuda plugin. Causality and
 // per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
 // an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
-func (f *Function) flashSupported(op string, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
+func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
+	}
+	if !qkvDType.IsHalfPrecision() {
+		return errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN flash needs half-precision (float16/bfloat16), got %s", op, qkvDType)
 	}
 	if mask != nil {
 		return errors.Wrapf(compute.ErrNotImplemented,
@@ -193,11 +197,11 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // plugins or unsupported option combinations it returns ErrNotImplemented.
 func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output, softmaxStats compute.Value, err error) {
 	const op = "FusedScaledDotProductAttention"
-	if err = f.flashSupported(op, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
-		return nil, nil, err
-	}
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
 		return nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
@@ -256,11 +260,11 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
 func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output, softmaxStats, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
 	const op = "FusedScaledDotProductAttentionVJP"
-	if err = f.flashSupported(op, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
-		return nil, nil, nil, err
-	}
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
 		return nil, nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
