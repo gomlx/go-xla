@@ -30,40 +30,56 @@ import (
 //     https://openxla.org/xla/custom_call
 //   - cuDNN fMHA performance context: https://github.com/jax-ml/jax/issues/24934
 const (
-	fmhaSoftmaxFwd = "__cudnn$fmhaSoftmax"
-	fmhaSoftmaxBwd = "__cudnn$fmhaSoftmaxBackward"
+	fmhaSoftmaxFwd          = "__cudnn$fmhaSoftmax"
+	fmhaSoftmaxBwd          = "__cudnn$fmhaSoftmaxBackward"
+	fmhaScaleBiasSoftmaxFwd = "__cudnn$fmhaScaleBiasSoftmax"
+	fmhaScaleBiasSoftmaxBwd = "__cudnn$fmhaScaleBiasSoftmaxBackward"
 )
 
 // fmhaVariant captures the config-derived custom-call selection: the fwd/bwd targets, the
 // backend_config mask_type, and the operand-set flags. Built by selectFMHAVariant.
-// S1 fields only; [S2] (Task 2b) adds `dropoutRate float64` and `hasBias bool`.
 type fmhaVariant struct {
 	fwdTarget, bwdTarget string
 	maskType             string // "CAUSAL" | "PADDING" | "PADDING_CAUSAL" | "NO_MASK"
 	hasSeqLens           bool
+	hasBias              bool
 }
 
-// selectFMHAVariant maps the q/k/v dtype and (causal, seqlens) to a cuDNN variant. S1 routes the
-// standard softmax target only. Dtype gate: f16/bf16 only; anything else (incl. fp8 e4m3fn/e5m2 --
-// paused, no local hardware) -> ErrNotImplemented, and the caller falls back to the decomposed path.
+// selectFMHAVariant maps the q/k/v dtype and (causal, seqlens, bias) to a cuDNN variant.
+// Dtype gate: f16/bf16 only; anything else (incl. fp8 -- paused, no local hardware) ->
+// ErrNotImplemented, and the caller falls back to the decomposed path.
 // mask_type derives from causal + seqlens: PADDING_CAUSAL (both), PADDING (seqlens only),
 // CAUSAL (causal only), NO_MASK (neither).
 //
-// S1 reads ONLY cfg.QuerySeqLen/cfg.KeyValueSeqLen (the compute Stage-1 fields). It must not touch
-// cfg.Bias/cfg.DropoutRate/cfg.DropoutSeed/cfg.DropoutOffset -- those land in compute Stage 2 and
-// are wired here by Task 2b [S2], which extends this function with the bias/dropout precedence.
+// Bias routing: cfg.Bias non-nil selects fmhaScaleBias targets. Bias+seqlens is not supported
+// by the cuDNN ScaleBias kernel; that combination returns ErrNotImplemented so the caller
+// falls back to the decomposed path.
 func selectFMHAVariant(op string, qkvDType dtypes.DType, causal bool,
 	cfg *compute.ScaledDotProductAttentionConfig) (fmhaVariant, error) {
 	var v fmhaVariant
 	hasSeqLens := cfg != nil && cfg.QuerySeqLen != nil && cfg.KeyValueSeqLen != nil
+	hasBias := cfg != nil && cfg.Bias != nil
 
 	switch qkvDType {
 	case dtypes.Float16, dtypes.BFloat16:
-		v.fwdTarget, v.bwdTarget = fmhaSoftmaxFwd, fmhaSoftmaxBwd
+		// target selected below based on bias presence
 	default:
 		// fp8 (e4m3fn/e5m2) lands here too: paused, not wired. NotImplemented -> decomposed.
 		return v, errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN fmha needs f16/bf16, got %s", op, qkvDType)
+	}
+
+	if hasBias && hasSeqLens {
+		// cuDNN ScaleBias kernel does not accept seqlen operands; fall back to decomposed.
+		return v, errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN fmha bias+seqlens not supported; use decomposed path", op)
+	}
+
+	if hasBias {
+		v.fwdTarget, v.bwdTarget = fmhaScaleBiasSoftmaxFwd, fmhaScaleBiasSoftmaxBwd
+		v.hasBias = true
+	} else {
+		v.fwdTarget, v.bwdTarget = fmhaSoftmaxFwd, fmhaSoftmaxBwd
 	}
 
 	switch {
@@ -185,6 +201,27 @@ func validateSeqLen(name string, v compute.Value, batch int) error {
 	return nil
 }
 
+// validateBias checks that v is a rank-4 half-precision (or float32) tensor broadcastable
+// to [B,H,S,Skv]. name is used in error messages. Returns a wrapped error on mismatch.
+func validateBias(name string, v compute.Value, b, h, s, skv int) error {
+	n, ok := v.(*Node)
+	if !ok {
+		return errors.Errorf("bias %s: expected *Node, got %T", name, v)
+	}
+	sh := n.shape
+	if !sh.DType.IsHalfPrecision() && sh.DType != dtypes.Float32 {
+		return errors.Errorf("bias %s: must be half-precision or float32, got %s", name, sh.DType)
+	}
+	if sh.Rank() != 4 {
+		return errors.Errorf("bias %s: must be rank-4 [B,H,S,Skv], got rank %d (shape %v)", name, sh.Rank(), sh.Dimensions)
+	}
+	dims := sh.Dimensions
+	if dims[0] != b || dims[1] != h || dims[2] != s || dims[3] != skv {
+		return errors.Errorf("bias %s: shape %v not broadcastable to [%d,%d,%d,%d]", name, dims, b, h, s, skv)
+	}
+	return nil
+}
+
 // fwdResultLayouts: output BHSD [3,1,2,0], stats [2,1,0], scratch u8 [0].
 var fwdResultLayouts = [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
 
@@ -224,10 +261,16 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
-	// Operand order cuDNN expects: q, k, v, [seqQ, seqKV]. [S2] inserts [bias] before seqlens
-	// and appends [dropout seed, offset] after.
+	// Operand order cuDNN expects: q, k, v, [bias], [seqQ, seqKV].
 	operands := []compute.Value{q, k, v}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	if variant.hasBias {
+		if err = validateBias("Bias", options.Bias, b, h, s, s); err != nil {
+			return nil, nil, err
+		}
+		operands = append(operands, options.Bias)
+		operandLayouts = append(operandLayouts, []int{3, 2, 1, 0}) // [B,H,S,Skv] row-major
+	}
 	if variant.hasSeqLens {
 		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
 			return nil, nil, err
@@ -297,6 +340,13 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	}
 	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
+	if variant.hasBias {
+		if err = validateBias("Bias", options.Bias, b, h, s, s); err != nil {
+			return nil, nil, nil, err
+		}
+		operands = append(operands, options.Bias)
+		operandLayouts = append(operandLayouts, []int{3, 2, 1, 0})
+	}
 	if variant.hasSeqLens {
 		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
 			return nil, nil, nil, err
