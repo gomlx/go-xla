@@ -216,8 +216,10 @@ func validateBias(name string, v compute.Value, b, h, s, skv int) error {
 		return errors.Errorf("bias %s: must be rank-4 [B,H,S,Skv], got rank %d (shape %v)", name, sh.Rank(), sh.Dimensions)
 	}
 	dims := sh.Dimensions
+	// Exact match: the cuDNN ScaleBias kernel takes a full [B,H,S,Skv] bias (here S==Skv,
+	// self-attention). Per-axis broadcast (e.g. [1,H,S,Skv]) is not accepted by this path.
 	if dims[0] != b || dims[1] != h || dims[2] != s || dims[3] != skv {
-		return errors.Errorf("bias %s: shape %v not broadcastable to [%d,%d,%d,%d]", name, dims, b, h, s, skv)
+		return errors.Errorf("bias %s: shape %v must equal [%d,%d,%d,%d]", name, dims, b, h, s, skv)
 	}
 	return nil
 }

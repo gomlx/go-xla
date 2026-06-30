@@ -228,7 +228,7 @@ func TestValidateBias(t *testing.T) {
 		v := nodeWithShape(shapes.Make(dtypes.BFloat16, b, h, s+1, skv))
 		err := validateBias("Bias", v, b, h, s, skv)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not broadcastable")
+		require.Contains(t, err.Error(), "must equal")
 	})
 
 	t.Run("valid bf16 [B,H,S,Skv]", func(t *testing.T) {
