@@ -3,7 +3,6 @@
 package xla
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -13,87 +12,156 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectFMHAVariant_StandardCausal(t *testing.T) {
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, nil)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if v.fwdTarget != "__cudnn$fmhaSoftmax" || v.bwdTarget != "__cudnn$fmhaSoftmaxBackward" {
-		t.Errorf("targets = %q / %q", v.fwdTarget, v.bwdTarget)
-	}
-	if v.maskType != "CAUSAL" {
-		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
-	}
-}
+// sent is a non-nil compute.Value sentinel. selectFMHAVariant only checks != nil.
+var sent compute.Value = struct{}{}
 
-func TestSelectFMHAVariant_NoMaskWhenNotCausal(t *testing.T) {
-	v, err := selectFMHAVariant("op", dtypes.Float16, false, nil)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+// TestSelectFMHAVariant exercises the full dispatch table: dtype gate, causal/seqlens
+// mask_type routing, bias target selection, and unsupported combinations. CPU-runnable.
+func TestSelectFMHAVariant(t *testing.T) {
+	cfgBias := &compute.ScaledDotProductAttentionConfig{Bias: sent}
+	cfgSeqlens := &compute.ScaledDotProductAttentionConfig{
+		QuerySeqLen:    sent,
+		KeyValueSeqLen: sent,
 	}
-	if v.maskType != "NO_MASK" {
-		t.Errorf("maskType = %q, want NO_MASK", v.maskType)
-	}
-}
-
-func TestSelectFMHAVariant_RejectsF32(t *testing.T) {
-	_, err := selectFMHAVariant("op", dtypes.Float32, true, nil)
-	if !errors.Is(err, compute.ErrNotImplemented) {
-		t.Errorf("err = %v, want ErrNotImplemented", err)
-	}
-}
-
-// TestSelectFMHAVariant_FP8NotImplemented pins the fp8-paused seam: fp8 dtypes must return
-// ErrNotImplemented so the caller falls back to the decomposed path. CPU, Mac-runnable.
-func TestSelectFMHAVariant_FP8NotImplemented(t *testing.T) {
-	_, err := selectFMHAVariant("fmha", dtypes.F8E4M3FN, true, nil)
-	require.True(t, compute.IsNotImplemented(err), "fp8 must be NotImplemented (paused), got %v", err)
-	_, err = selectFMHAVariant("fmha", dtypes.F8E5M2, true, nil)
-	require.True(t, compute.IsNotImplemented(err), "fp8 e5m2 must be NotImplemented (paused), got %v", err)
-}
-
-// TestSelectFMHAVariant_SeqLenPadding confirms that both-seqlens routes to PADDING (non-causal)
-// or PADDING_CAUSAL (causal), and nil cfg still routes to CAUSAL. CPU-runnable.
-func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
-	// sentinel is a non-nil compute.Value (any). selectFMHAVariant only checks != nil.
-	var sent compute.Value = struct{}{}
-
-	cfgBoth := &compute.ScaledDotProductAttentionConfig{
+	cfgBiasSeqlens := &compute.ScaledDotProductAttentionConfig{
+		Bias:           sent,
 		QuerySeqLen:    sent,
 		KeyValueSeqLen: sent,
 	}
 
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfgBoth)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if v.maskType != "PADDING" {
-		t.Errorf("maskType = %q, want PADDING", v.maskType)
-	}
-	if !v.hasSeqLens {
-		t.Errorf("hasSeqLens = false, want true")
+	cases := []struct {
+		name        string
+		dtype       dtypes.DType
+		causal      bool
+		cfg         *compute.ScaledDotProductAttentionConfig
+		wantErr     bool
+		wantNotImpl bool // error must be ErrNotImplemented
+		wantFwd     string
+		wantBwd     string
+		wantMask    string
+		wantBias    bool
+		wantSeqlens bool
+	}{
+		{
+			name:     "standard causal bf16",
+			dtype:    dtypes.BFloat16,
+			causal:   true,
+			cfg:      nil,
+			wantFwd:  fmhaSoftmaxFwd,
+			wantBwd:  fmhaSoftmaxBwd,
+			wantMask: "CAUSAL",
+		},
+		{
+			name:     "no-mask non-causal f16",
+			dtype:    dtypes.Float16,
+			causal:   false,
+			cfg:      nil,
+			wantFwd:  fmhaSoftmaxFwd,
+			wantBwd:  fmhaSoftmaxBwd,
+			wantMask: "NO_MASK",
+		},
+		{
+			name:        "rejects float32",
+			dtype:       dtypes.Float32,
+			causal:      true,
+			cfg:         nil,
+			wantErr:     true,
+			wantNotImpl: true,
+		},
+		{
+			name:        "rejects fp8 e4m3fn",
+			dtype:       dtypes.F8E4M3FN,
+			causal:      true,
+			cfg:         nil,
+			wantErr:     true,
+			wantNotImpl: true,
+		},
+		{
+			name:        "rejects fp8 e5m2",
+			dtype:       dtypes.F8E5M2,
+			causal:      true,
+			cfg:         nil,
+			wantErr:     true,
+			wantNotImpl: true,
+		},
+		{
+			name:        "seqlens non-causal -> PADDING",
+			dtype:       dtypes.BFloat16,
+			causal:      false,
+			cfg:         cfgSeqlens,
+			wantMask:    "PADDING",
+			wantSeqlens: true,
+			wantFwd:     fmhaSoftmaxFwd,
+			wantBwd:     fmhaSoftmaxBwd,
+		},
+		{
+			name:        "seqlens causal -> PADDING_CAUSAL",
+			dtype:       dtypes.BFloat16,
+			causal:      true,
+			cfg:         cfgSeqlens,
+			wantMask:    "PADDING_CAUSAL",
+			wantSeqlens: true,
+			wantFwd:     fmhaSoftmaxFwd,
+			wantBwd:     fmhaSoftmaxBwd,
+		},
+		{
+			name:     "bias routes to ScaleBias non-causal",
+			dtype:    dtypes.BFloat16,
+			causal:   false,
+			cfg:      cfgBias,
+			wantFwd:  fmhaScaleBiasSoftmaxFwd,
+			wantBwd:  fmhaScaleBiasSoftmaxBwd,
+			wantMask: "NO_MASK",
+			wantBias: true,
+		},
+		{
+			name:     "bias+causal routes to ScaleBias CAUSAL",
+			dtype:    dtypes.BFloat16,
+			causal:   true,
+			cfg:      cfgBias,
+			wantFwd:  fmhaScaleBiasSoftmaxFwd,
+			wantBwd:  fmhaScaleBiasSoftmaxBwd,
+			wantMask: "CAUSAL",
+			wantBias: true,
+		},
+		{
+			name:        "bias+seqlens not implemented",
+			dtype:       dtypes.BFloat16,
+			causal:      false,
+			cfg:         cfgBiasSeqlens,
+			wantErr:     true,
+			wantNotImpl: true,
+		},
 	}
 
-	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, cfgBoth)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if v.maskType != "PADDING_CAUSAL" {
-		t.Errorf("maskType = %q, want PADDING_CAUSAL", v.maskType)
-	}
-
-	// nil cfg still routes causal -> CAUSAL (no regression).
-	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, nil)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if v.maskType != "CAUSAL" {
-		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := selectFMHAVariant("op", tc.dtype, tc.causal, tc.cfg)
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.wantNotImpl {
+					require.True(t, compute.IsNotImplemented(err), "want ErrNotImplemented, got %v", err)
+				}
+				return
+			}
+			require.NoError(t, err)
+			if tc.wantFwd != "" {
+				require.Equal(t, tc.wantFwd, v.fwdTarget, "fwdTarget")
+			}
+			if tc.wantBwd != "" {
+				require.Equal(t, tc.wantBwd, v.bwdTarget, "bwdTarget")
+			}
+			if tc.wantMask != "" {
+				require.Equal(t, tc.wantMask, v.maskType, "maskType")
+			}
+			require.Equal(t, tc.wantBias, v.hasBias, "hasBias")
+			require.Equal(t, tc.wantSeqlens, v.hasSeqLens, "hasSeqLens")
+		})
 	}
 }
 
 // nodeWithShape builds a minimal *Node with the given shape. value/builder are nil because
-// validateSeqLen only reads n.shape -- no backend call is made.
+// validateSeqLen and validateBias only read n.shape -- no backend call is made.
 func nodeWithShape(sh shapes.Shape) *Node { return &Node{shape: sh} }
 
 // TestValidateSeqLen covers the CPU-runnable validation logic: wrong dtype, wrong rank,
@@ -101,37 +169,56 @@ func nodeWithShape(sh shapes.Shape) *Node { return &Node{shape: sh} }
 func TestValidateSeqLen(t *testing.T) {
 	const batch = 4
 
-	t.Run("wrong dtype (bf16)", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.BFloat16, batch))
-		err := validateSeqLen("QuerySeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must be int32")
-	})
+	cases := []struct {
+		name        string
+		node        *Node
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "wrong dtype (bf16)",
+			node:        nodeWithShape(shapes.Make(dtypes.BFloat16, batch)),
+			wantErr:     true,
+			errContains: "must be int32",
+		},
+		{
+			name:        "wrong rank (rank-2)",
+			node:        nodeWithShape(shapes.Make(dtypes.Int32, batch, 1)),
+			wantErr:     true,
+			errContains: "rank-1",
+		},
+		{
+			name:        "wrong length",
+			node:        nodeWithShape(shapes.Make(dtypes.Int32, batch+1)),
+			wantErr:     true,
+			errContains: "!= batch size",
+		},
+		{
+			name:        "valid int32 [B]",
+			node:        nodeWithShape(shapes.Make(dtypes.Int32, batch)),
+			wantErr:     false,
+		},
+	}
 
-	t.Run("wrong rank (rank-2)", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.Int32, batch, 1))
-		err := validateSeqLen("KeyValueSeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "rank-1")
-	})
-
-	t.Run("wrong length", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.Int32, batch+1))
-		err := validateSeqLen("QuerySeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "!= batch size")
-	})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSeqLen("QuerySeqLen", tc.node, batch)
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.errContains != "" {
+					require.Contains(t, err.Error(), tc.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 
 	t.Run("not a *Node", func(t *testing.T) {
 		var v compute.Value = struct{}{}
 		err := validateSeqLen("QuerySeqLen", v, batch)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "*Node")
-	})
-
-	t.Run("valid int32 [B]", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.Int32, batch))
-		require.NoError(t, validateSeqLen("QuerySeqLen", v, batch))
 	})
 }
 
@@ -146,98 +233,70 @@ func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
 	}
 }
 
-// TestSelectFMHAVariant_BiasRoutes checks that a non-nil cfg.Bias selects the ScaleBias targets
-// and sets hasBias. CPU-runnable.
-func TestSelectFMHAVariant_BiasRoutes(t *testing.T) {
-	var sent compute.Value = struct{}{}
-	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent}
-
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfg)
-	require.NoError(t, err)
-	if v.fwdTarget != fmhaScaleBiasSoftmaxFwd {
-		t.Errorf("fwdTarget = %q, want %q", v.fwdTarget, fmhaScaleBiasSoftmaxFwd)
-	}
-	if v.bwdTarget != fmhaScaleBiasSoftmaxBwd {
-		t.Errorf("bwdTarget = %q, want %q", v.bwdTarget, fmhaScaleBiasSoftmaxBwd)
-	}
-	if !v.hasBias {
-		t.Errorf("hasBias = false, want true")
-	}
-	if v.maskType != "NO_MASK" {
-		t.Errorf("maskType = %q, want NO_MASK", v.maskType)
-	}
-}
-
-// TestSelectFMHAVariant_BiasAndSeqlensNotImplemented checks that bias+seqlens returns
-// ErrNotImplemented (cuDNN ScaleBias kernel does not accept seqlen operands). CPU-runnable.
-func TestSelectFMHAVariant_BiasAndSeqlensNotImplemented(t *testing.T) {
-	var sent compute.Value = struct{}{}
-	cfg := &compute.ScaledDotProductAttentionConfig{
-		Bias:           sent,
-		QuerySeqLen:    sent,
-		KeyValueSeqLen: sent,
-	}
-	_, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfg)
-	require.True(t, compute.IsNotImplemented(err), "bias+seqlens must be NotImplemented, got %v", err)
-}
-
-// TestSelectFMHAVariant_BiasCausal checks that bias+causal routes to ScaleBias with CAUSAL mask_type.
-func TestSelectFMHAVariant_BiasCausal(t *testing.T) {
-	var sent compute.Value = struct{}{}
-	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent}
-
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, cfg)
-	require.NoError(t, err)
-	if v.fwdTarget != fmhaScaleBiasSoftmaxFwd {
-		t.Errorf("fwdTarget = %q, want %q", v.fwdTarget, fmhaScaleBiasSoftmaxFwd)
-	}
-	if !v.hasBias {
-		t.Errorf("hasBias = false, want true")
-	}
-	if v.maskType != "CAUSAL" {
-		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
-	}
-}
-
 // TestValidateBias covers the CPU-runnable bias validation: wrong type, wrong rank, wrong shape, happy path.
 func TestValidateBias(t *testing.T) {
 	const b, h, s, skv = 2, 4, 8, 8
+
+	cases := []struct {
+		name        string
+		shape       shapes.Shape
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "wrong dtype (int32)",
+			shape:       shapes.Make(dtypes.Int32, b, h, s, skv),
+			wantErr:     true,
+			errContains: "half-precision or float32",
+		},
+		{
+			name:        "wrong rank (rank-2)",
+			shape:       shapes.Make(dtypes.BFloat16, b, h),
+			wantErr:     true,
+			errContains: "rank-4",
+		},
+		{
+			name:        "wrong shape",
+			shape:       shapes.Make(dtypes.BFloat16, b, h, s+1, skv),
+			wantErr:     true,
+			errContains: "must equal",
+		},
+		{
+			name:    "valid bf16 [B,H,S,Skv]",
+			shape:   shapes.Make(dtypes.BFloat16, b, h, s, skv),
+			wantErr: false,
+		},
+		{
+			name:    "valid float16 [B,H,S,Skv]",
+			shape:   shapes.Make(dtypes.Float16, b, h, s, skv),
+			wantErr: false,
+		},
+		{
+			name:    "valid float32 [B,H,S,Skv]",
+			shape:   shapes.Make(dtypes.Float32, b, h, s, skv),
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := nodeWithShape(tc.shape)
+			err := validateBias("Bias", v, b, h, s, skv)
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.errContains != "" {
+					require.Contains(t, err.Error(), tc.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 
 	t.Run("not a *Node", func(t *testing.T) {
 		var v compute.Value = struct{}{}
 		err := validateBias("Bias", v, b, h, s, skv)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "*Node")
-	})
-
-	t.Run("wrong dtype (int32)", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.Int32, b, h, s, skv))
-		err := validateBias("Bias", v, b, h, s, skv)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "half-precision or float32")
-	})
-
-	t.Run("wrong rank (rank-2)", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.BFloat16, b, h))
-		err := validateBias("Bias", v, b, h, s, skv)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "rank-4")
-	})
-
-	t.Run("wrong shape", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.BFloat16, b, h, s+1, skv))
-		err := validateBias("Bias", v, b, h, s, skv)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must equal")
-	})
-
-	t.Run("valid bf16 [B,H,S,Skv]", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.BFloat16, b, h, s, skv))
-		require.NoError(t, validateBias("Bias", v, b, h, s, skv))
-	})
-
-	t.Run("valid float32 [B,H,S,Skv]", func(t *testing.T) {
-		v := nodeWithShape(shapes.Make(dtypes.Float32, b, h, s, skv))
-		require.NoError(t, validateBias("Bias", v, b, h, s, skv))
 	})
 }
