@@ -819,6 +819,37 @@ func (f *Function) OptimizationBarrier(operands ...compute.Value) ([]compute.Val
 	return outputNodes, nil
 }
 
+// customCall emits a StableHLO custom_call (API version 2, status-returning). It is private:
+// the only callers are the cuDNN flash fused ops in flash.go, so the cuDNN
+// target/backend_config/layout mapping never leaves this package. Multi-output: one result
+// Value per outputShapes entry. operandLayouts/outputLayouts are minor-to-major dim orders
+// (nil entry/slice -> row-major); see stablehlo.CustomCallV2.
+func (f *Function) customCall(target string, backendConfig string,
+	operandLayouts [][]int, outputShapes []shapes.Shape, outputLayouts [][]int,
+	operands ...compute.Value) ([]compute.Value, error) {
+	if len(operands) == 0 {
+		return nil, errors.New("customCall requires at least one operand")
+	}
+	if len(outputShapes) == 0 {
+		return nil, errors.New("customCall requires at least one output shape")
+	}
+	nodes, err := f.verifyAndCastValues("customCall", operands...)
+	if err != nil {
+		return nil, err
+	}
+	operandValues := xslices.Map(nodes, func(n *Node) *stablehlo.Value { return n.value })
+	outShapes := xslices.Map(outputShapes, func(s shapes.Shape) stablehloshapes.Shape {
+		return stablehloshapes.Make(s.DType, s.Dimensions...)
+	})
+	values, err := stablehlo.CustomCallV2(target, backendConfig, operandValues,
+		operandLayouts, outShapes, outputLayouts)
+	if err != nil {
+		return nil, err
+	}
+	outputNodes := xslices.Map(values, func(v *stablehlo.Value) compute.Value { return f.newNode(v) })
+	return outputNodes, nil
+}
+
 // SchedulingBarrier introduces a scheduling barrier.
 // Returned value is identity to the operand, but it is guaranteed to depend on all the dependencies.
 //
