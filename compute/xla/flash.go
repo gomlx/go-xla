@@ -195,7 +195,7 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // (BSHD), bf16. It returns the [B,S,H,D] bf16 output and the [B,H,S] f32 softmax statistics
 // (log-sum-exp) the flash backward needs. The [B,H,S,S] scores never materialize. On non-cuda
 // plugins or unsupported option combinations it returns ErrNotImplemented.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output, softmaxStats compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
 	const op = "FusedScaledDotProductAttention"
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
@@ -251,15 +251,20 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
-	return output, outs[1], nil
+	// statesForVJP carries only the f32 softmax stats; outs[2] (fwd-only scratch) is not passed to the backward.
+	return output, []compute.Value{outs[1]}, nil
 }
 
-// FusedScaledDotProductAttentionVJP runs the cuDNN flash backward. It threads the softmaxStats
-// from the forward (plus the forward output and the output gradient dOutput) into the cuDNN
-// backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
+// FusedScaledDotProductAttentionVJP runs the cuDNN flash backward. It threads the softmax stats
+// (statesForVJP[0], from the forward) plus the forward output and the output gradient dOutput into
+// the cuDNN backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
-func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output, softmaxStats, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
 	const op = "FusedScaledDotProductAttentionVJP"
+	if len(statesForVJP) == 0 {
+		return nil, nil, nil, errors.Wrapf(compute.ErrNotImplemented, "%s: statesForVJP is empty (forward produced no fused backward state)", op)
+	}
+	softmaxStats := statesForVJP[0]
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
 		return nil, nil, nil, err
