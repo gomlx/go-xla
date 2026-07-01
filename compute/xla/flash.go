@@ -46,7 +46,7 @@ type fmhaVariant struct {
 }
 
 // selectFMHAVariant maps the q/k/v dtype and (causal, seqlens, bias) to a cuDNN variant.
-// Dtype gate: f16/bf16 only; anything else (incl. fp8 -- paused, no local hardware) ->
+// Dtype gate: f16/bf16 only; anything else (incl. fp8) ->
 // ErrNotImplemented, and the caller falls back to the decomposed path.
 // mask_type derives from causal + seqlens: PADDING_CAUSAL (both), PADDING (seqlens only),
 // CAUSAL (causal only), NO_MASK (neither).
@@ -201,8 +201,10 @@ func validateSeqLen(name string, v compute.Value, batch int) error {
 	return nil
 }
 
-// validateBias checks that v is a rank-4 half-precision (or float32) tensor broadcastable
-// to [B,H,S,Skv]. name is used in error messages. Returns a wrapped error on mismatch.
+// validateBias checks that v is a rank-4 half-precision (or float32) tensor with exact
+// shape [B,H,S,S] (self-attention; S==Skv). Per-axis broadcast (e.g. [1,H,S,S]) is not
+// accepted by the cuDNN ScaleBias kernel. name is used in error messages. Returns a
+// wrapped error on mismatch.
 func validateBias(name string, v compute.Value, b, h, s, skv int) error {
 	n, ok := v.(*Node)
 	if !ok {
@@ -273,7 +275,11 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 		if err = validateBias("Bias", options.Bias, b, h, s, s); err != nil {
 			return nil, nil, err
 		}
-		operands = append(operands, options.Bias)
+		biasBF16, castErr := f.bf16(options.Bias)
+		if castErr != nil {
+			return nil, nil, castErr
+		}
+		operands = append(operands, biasBF16)
 		operandLayouts = append(operandLayouts, []int{3, 2, 1, 0}) // [B,H,S,Skv] row-major
 	}
 	if variant.hasSeqLens {
@@ -352,7 +358,11 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 		if err = validateBias("Bias", options.Bias, b, h, s, s); err != nil {
 			return nil, nil, nil, err
 		}
-		operands = append(operands, options.Bias)
+		biasBF16, castErr := f.bf16(options.Bias)
+		if castErr != nil {
+			return nil, nil, nil, castErr
+		}
+		operands = append(operands, biasBF16)
 		operandLayouts = append(operandLayouts, []int{3, 2, 1, 0})
 	}
 	operands = append(operands, out)
