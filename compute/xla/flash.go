@@ -111,7 +111,7 @@ func formatScale(scale float64) string {
 // f16/bf16 (fp8 paused), BSHD-layout, equal-head, on a cuda plugin. Causality and
 // per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
 // an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
-func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
+func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
 	}
@@ -122,6 +122,10 @@ func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute
 	if mask != nil {
 		return errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN flash path takes seqlens, not a materialized mask", op)
+	}
+	if featureDim%8 != 0 {
+		return errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN flash path requires query/key/value last (feature) dim to be multiple of 8, got %d", op, featureDim)
 	}
 	if axesLayout != compute.AxesLayoutBSHD || numKVHeads != numHeads {
 		return errors.Wrapf(compute.ErrNotImplemented,
@@ -196,12 +200,21 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // (log-sum-exp) the flash backward needs. The [B,H,S,S] scores never materialize. On non-cuda
 // plugins or unsupported option combinations it returns ErrNotImplemented.
 func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
-	const op = "FusedScaledDotProductAttention"
+	op := compute.OpTypeFusedScaledDotProductAttention.String()
+	queryShape, err := f.Shape(query)
+	if err != nil {
+		return nil, nil, err
+	}
+	if queryShape.Rank() != 4 {
+		return nil, nil, errors.Errorf("%s requires query/key/value rank-4, got %s", op, queryShape)
+	}
+	featureDim := queryShape.Dimensions[3]
+
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
 		return nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
@@ -260,7 +273,15 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 // the cuDNN backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
 func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
-	const op = "FusedScaledDotProductAttentionVJP"
+	op := compute.OpTypeFusedScaledDotProductAttentionVJP.String()
+	queryShape, err := f.Shape(query)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if queryShape.Rank() != 4 {
+		return nil, nil, nil, errors.Errorf("%s requires query/key/value rank-4, got %s", op, queryShape)
+	}
+	featureDim := queryShape.Dimensions[3]
 	if len(statesForVJP) == 0 {
 		return nil, nil, nil, errors.Wrapf(compute.ErrNotImplemented, "%s: statesForVJP is empty (forward produced no fused backward state)", op)
 	}
@@ -269,7 +290,7 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
 		return nil, nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
