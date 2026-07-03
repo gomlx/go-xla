@@ -200,30 +200,23 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		pluginName:   pluginName,
 		config:       config,
 		capabilities: Capabilities.Clone(),
-
-		// Enable TF32 by default for CUDA.
-		DotGeneralUseTF32: isPluginType(pluginName, "cuda"),
-
-		// SharedBuffers is true for CPU by default
-		hasSharedBuffers: isPluginType(pluginName, "cpu"),
 	}
 
-	// The cuDNN flash fused attention (forward + VJP) only lowers on the cuda plugin; advertise
-	// the capability accordingly. The implementation also returns ErrNotImplemented on non-cuda
-	// (and for unsupported option combinations) so callers fall back to decomposed attention.
-	backend.capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention] = isPluginType(pluginName, "cuda")
-
 	// Support "shared buffers":
+	var setSharedBuffers bool
 	if b, found, err := parseOptions[bool]("shared_buffers", backendOptions); err != nil {
 		return nil, err
 	} else if found {
+		setSharedBuffers = true
 		backend.hasSharedBuffers = b
 	}
 
 	// Support for tf32 DotGeneral.
+	var setTF32 bool
 	if b, found, err := parseOptions[bool]("tf32", backendOptions); err != nil {
 		return nil, err
 	} else if found {
+		setTF32 = true
 		backend.DotGeneralUseTF32 = b
 	}
 
@@ -264,7 +257,15 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 
 	// Any leftover plugin options are unknown.
 	if len(backendOptions) != 0 {
-		klog.Errorf("backend %q: unknown plugin options %v", BackendName, xslices.SortedKeys(backendOptions))
+		// Get keys
+		keys := make([]string, 0, len(backendOptions))
+		for k := range backendOptions {
+			keys = append(keys, k)
+		}
+		// Sort them
+		slices.Sort(keys)
+		klog.Errorf("backend %q: unknown plugin options %v", BackendName, keys)
+		return nil, errors.Errorf("backend %q: unknown plugin options %v", BackendName, keys)
 	}
 
 	// Create plugin.
@@ -277,12 +278,28 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while creating plugin %s for backend %q", pluginName, BackendName)
 	}
-	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
-
-	// Set backend.
 	backend.plugin = plugin
 	backend.client = client
 	backend.numDevices = len(client.AddressableDevices())
+	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
+
+	// Enable TF32 by default for CUDA.
+	if !setTF32 {
+		backend.DotGeneralUseTF32 = backend.IsCUDA()
+	}
+
+	// SharedBuffers is true for CPU by default
+	if !setSharedBuffers {
+		backend.hasSharedBuffers = backend.IsCPU()
+	}
+
+	// The cuDNN flash attention (forward + VJP) only lowers on the cuda plugin; advertise
+	// the capability accordingly. The implementation also returns ErrNotImplemented on non-cuda
+	// (and for unsupported option combinations) so callers fall back to decomposed attention.
+	if backend.IsCUDA() {
+		backend.capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention] = true
+		backend.capabilities.Operations[compute.OpTypeFusedScaledDotProductAttentionVJP] = true
+	}
 
 	return backend, nil
 }
@@ -455,10 +472,15 @@ func findVersionedPlugin(baseName string, plugins []string) string {
 	return ""
 }
 
-// isPluginType checks if pluginName matches the given base type.
-// For example, isPluginType("cpu_v0.83.1", "cpu") returns true.
-func isPluginType(pluginName, baseType string) bool {
-	return pluginName == baseType || strings.HasPrefix(pluginName, baseType+"_v")
+// IsCUDA returns whether it's a CUDA PJRT plugin: it has an exclusive set of custome calls (cuDNN)
+// that we want to specialize.
+func (b *Backend) IsCUDA() bool {
+	return b.plugin.IsCUDA()
+}
+
+// IsCPU returns whether it's a CPU PJRT.
+func (b *Backend) IsCPU() bool {
+	return b.plugin.IsCPU()
 }
 
 // ShapeToXLA converts a GoMLX shape to a go-xla shape.
