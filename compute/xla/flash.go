@@ -303,11 +303,6 @@ func (f *Function) bshdDims(op string, v compute.Value, layout compute.AxesLayou
 	return dims[0], dims[2], dims[1], dims[3], nil
 }
 
-// bf16 casts a value to bfloat16 (the cuDNN kernel's precision). No-op if already bf16.
-func (f *Function) bf16(v compute.Value) (compute.Value, error) {
-	return f.ConvertDType(v, dtypes.BFloat16)
-}
-
 // validateSeqLen checks that v is a rank-1 int32 vector of length == batch.
 // name is used in the error message (e.g. "QuerySeqLen"). Returns a wrapped
 // error on mismatch so callers can distinguish validation failures.
@@ -360,21 +355,9 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
-	q, err := f.bf16(query)
-	if err != nil {
-		return nil, nil, err
-	}
-	k, err := f.bf16(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	v, err := f.bf16(value)
-	if err != nil {
-		return nil, nil, err
-	}
 	// Operand order cuDNN expects: q, k, v, [seqQ, seqKV]. [S2] inserts [bias] before seqlens
 	// and appends [dropout seed, offset] after.
-	operands := []compute.Value{q, k, v}
+	operands := []compute.Value{query, key, value}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
 		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, batchSize); err != nil {
@@ -386,7 +369,7 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil) // int32 [B], row-major
 	}
-	bhsd := shapes.Make(dtypes.BFloat16, batchSize, numHeads, seqLen, featureDim)
+	bhsd := shapes.Make(qDType, batchSize, numHeads, seqLen, featureDim)
 	stats := shapes.Make(dtypes.Float32, batchSize, numHeads, seqLen)
 	scratch := shapes.Make(dtypes.Uint8, 0)
 	fwdResultLayouts := [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
@@ -441,27 +424,7 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	q, err := f.bf16(query)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	k, err := f.bf16(key)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	v, err := f.bf16(value)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	out, err := f.bf16(output)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	dOut, err := f.bf16(dOutput)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
+	operands := []compute.Value{query, key, value, softmaxStats, dOutput, output}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
 		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, batchSize); err != nil {
@@ -473,7 +436,7 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil)
 	}
-	bhsd := shapes.Make(dtypes.BFloat16, batchSize, numHeads, seqLen, featureDim)
+	bhsd := shapes.Make(qDType, batchSize, numHeads, seqLen, featureDim)
 	scratch := shapes.Make(dtypes.Uint8, 0)
 	bwdResultLayouts := [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 	if axesLayout == compute.AxesLayoutBHSD {
