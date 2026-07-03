@@ -135,53 +135,103 @@ func flashBackendConfigV(b, h, s int, scale float64, dotDimNumbers map[string]an
 	return string(bytes)
 }
 
-// flashFwdBackendConfig builds the forward cudnn_fmha_backend_config for q,k,v [B,S,H,D]
+// flashFwdBackendConfig builds the forward cudnn_fmha_backend_config for q,k,v [B,S,H,D] or [B,H,S,D]
 // (score matrix [B,H,S,S]). Only the scale and score-matrix dims vary with shape.
-func flashFwdBackendConfig(b, h, s int, scale float64, v fmhaVariant) string {
-	return flashBackendConfigV(b, h, s, scale, map[string]any{
-		"bmm1_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"3"},
-			"rhs_contracting_dimensions": []string{"3"},
-			"lhs_batch_dimensions":       []string{"0", "2"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-		"bmm2_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"3"},
-			"rhs_contracting_dimensions": []string{"1"},
-			"lhs_batch_dimensions":       []string{"0", "1"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-	}, v)
+func flashFwdBackendConfig(b, h, s int, scale float64, layout compute.AxesLayout, v fmhaVariant) string {
+	var dotDimNumbers map[string]any
+	if layout == compute.AxesLayoutBHSD {
+		dotDimNumbers = map[string]any{
+			"bmm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"3"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+			"bmm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"2"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+		}
+	} else { // compute.AxesLayoutBSHD
+		dotDimNumbers = map[string]any{
+			"bmm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"3"},
+				"lhs_batch_dimensions":       []string{"0", "2"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+			"bmm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"1"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+		}
+	}
+	return flashBackendConfigV(b, h, s, scale, dotDimNumbers, v)
 }
 
 // flashBwdBackendConfig is the backward counterpart: the four backward-gemm dot_dimension_numbers.
-func flashBwdBackendConfig(b, h, s int, scale float64, v fmhaVariant) string {
-	return flashBackendConfigV(b, h, s, scale, map[string]any{
-		"bmm1_grad_gemm1_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"2"},
-			"rhs_contracting_dimensions": []string{"1"},
-			"lhs_batch_dimensions":       []string{"0", "1"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-		"bmm1_grad_gemm2_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"3"},
-			"rhs_contracting_dimensions": []string{"1"},
-			"lhs_batch_dimensions":       []string{"0", "1"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-		"bmm2_grad_gemm1_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"2"},
-			"rhs_contracting_dimensions": []string{"1"},
-			"lhs_batch_dimensions":       []string{"0", "1"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-		"bmm2_grad_gemm2_dot_dimension_numbers": map[string]any{
-			"lhs_contracting_dimensions": []string{"3"},
-			"rhs_contracting_dimensions": []string{"3"},
-			"lhs_batch_dimensions":       []string{"0", "2"},
-			"rhs_batch_dimensions":       []string{"0", "2"},
-		},
-	}, v)
+func flashBwdBackendConfig(b, h, s int, scale float64, layout compute.AxesLayout, v fmhaVariant) string {
+	var dotDimNumbers map[string]any
+	if layout == compute.AxesLayoutBHSD {
+		dotDimNumbers = map[string]any{
+			"bmm1_grad_gemm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"2"},
+				"rhs_contracting_dimensions": []string{"2"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+			"bmm1_grad_gemm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"2"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+			"bmm2_grad_gemm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"2"},
+				"rhs_contracting_dimensions": []string{"2"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+			"bmm2_grad_gemm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"3"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "1"},
+			},
+		}
+	} else { // compute.AxesLayoutBSHD
+		dotDimNumbers = map[string]any{
+			"bmm1_grad_gemm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"2"},
+				"rhs_contracting_dimensions": []string{"1"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+			"bmm1_grad_gemm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"1"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+			"bmm2_grad_gemm1_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"2"},
+				"rhs_contracting_dimensions": []string{"1"},
+				"lhs_batch_dimensions":       []string{"0", "1"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+			"bmm2_grad_gemm2_dot_dimension_numbers": map[string]any{
+				"lhs_contracting_dimensions": []string{"3"},
+				"rhs_contracting_dimensions": []string{"3"},
+				"lhs_batch_dimensions":       []string{"0", "2"},
+				"rhs_batch_dimensions":       []string{"0", "2"},
+			},
+		}
+	}
+	return flashBackendConfigV(b, h, s, scale, dotDimNumbers, v)
 }
 
 // formatScale renders a float as a JSON number (no quotes, shortest round-trip form).
@@ -194,6 +244,7 @@ func formatScale(scale float64) string {
 // per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
 // an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
 func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
+	_ = causal
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
 	}
@@ -209,9 +260,9 @@ func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute
 		return errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN flash path requires query/key/value last (feature) dim to be multiple of 8, got %d", op, featureDim)
 	}
-	if axesLayout != compute.AxesLayoutBSHD {
+	if axesLayout != compute.AxesLayoutBSHD && axesLayout != compute.AxesLayoutBHSD {
 		return errors.Wrapf(compute.ErrNotImplemented,
-			"%s: cuDNN flash path supports only BSHD layout (got layout %v)", op, axesLayout)
+			"%s: cuDNN flash path supports only BSHD or BHSD layouts (got layout %v)", op, axesLayout)
 	}
 	if numKVHeads != numHeads {
 		return errors.Wrapf(compute.ErrNotImplemented,
@@ -236,17 +287,20 @@ func (f *Function) dtypeOf(op string, v compute.Value) (dtypes.DType, error) {
 	return nodes[0].shape.DType, nil
 }
 
-// bshdDims returns the [B,S,H,D] dimensions of a rank-4 BSHD value.
-func (f *Function) bshdDims(op string, v compute.Value) (b, s, h, d int, err error) {
+// bshdDims returns the [B,S,H,D] (or [B,H,S,D]) dimensions of a rank-4 value depending on layout.
+func (f *Function) bshdDims(op string, v compute.Value, layout compute.AxesLayout) (b, s, h, d int, err error) {
 	nodes, err := f.verifyAndCastValues(op, v)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
 	dims := nodes[0].shape.Dimensions
 	if len(dims) != 4 {
-		return 0, 0, 0, 0, errors.Errorf("%s: expected rank-4 BSHD tensor, got shape %v", op, dims)
+		return 0, 0, 0, 0, errors.Errorf("%s: expected rank-4 tensor, got shape %v", op, dims)
 	}
-	return dims[0], dims[1], dims[2], dims[3], nil
+	if layout == compute.AxesLayoutBSHD {
+		return dims[0], dims[1], dims[2], dims[3], nil
+	}
+	return dims[0], dims[2], dims[1], dims[3], nil
 }
 
 // bf16 casts a value to bfloat16 (the cuDNN kernel's precision). No-op if already bf16.
@@ -285,17 +339,16 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // (BSHD), bf16. It returns the [B,S,H,D] bf16 output and the [B,H,S] f32 softmax statistics
 // (log-sum-exp) the flash backward needs. The [B,H,S,S] scores never materialize. On non-cuda
 // plugins or unsupported option combinations it returns ErrNotImplemented.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttention.String()
-	queryShape, err := f.Shape(query)
+	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, err
 	}
-	if queryShape.Rank() != 4 {
-		return nil, nil, errors.Errorf("%s requires query/key/value rank-4, got %s", op, queryShape)
+	_, _, numKVHeads, _, err := f.bshdDims(op, key, axesLayout)
+	if err != nil {
+		return nil, nil, err
 	}
-	featureDim := queryShape.Dimensions[3]
-
 	qDType, err := f.dtypeOf(op, query)
 	if err != nil {
 		return nil, nil, err
@@ -304,10 +357,6 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 		return nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
-	if err != nil {
-		return nil, nil, err
-	}
-	b, s, h, d, err := f.bshdDims(op, query)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -328,27 +377,36 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	operands := []compute.Value{q, k, v}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
-		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
+		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, batchSize); err != nil {
 			return nil, nil, err
 		}
-		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, b); err != nil {
+		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, batchSize); err != nil {
 			return nil, nil, err
 		}
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil) // int32 [B], row-major
 	}
-	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
-	stats := shapes.Make(dtypes.Float32, b, h, s)
+	bhsd := shapes.Make(dtypes.BFloat16, batchSize, numHeads, seqLen, featureDim)
+	stats := shapes.Make(dtypes.Float32, batchSize, numHeads, seqLen)
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	outs, err := f.customCall(variant.fwdTarget, flashFwdBackendConfig(b, h, s, scale, variant),
+	fwdResultLayouts := [][]int{{3, 1, 2, 0}, {2, 1, 0}, {0}}
+	if axesLayout == compute.AxesLayoutBHSD {
+		fwdResultLayouts[0] = []int{3, 2, 1, 0}
+	}
+	outs, err := f.customCall(variant.fwdTarget, flashFwdBackendConfig(batchSize, numHeads, seqLen, scale, axesLayout, variant),
 		operandLayouts, []shapes.Shape{bhsd, stats, scratch}, fwdResultLayouts, operands...)
 	if err != nil {
 		return nil, nil, err
 	}
-	// outs[0] is BHSD; transpose to BSHD to match the query layout. outs[1] is the f32 stats.
-	output, err = f.Transpose(outs[0], 0, 2, 1, 3)
-	if err != nil {
-		return nil, nil, err
+	// If axesLayout == BSHD: outs[0] is BHSD; transpose to BSHD to match the query layout.
+	// If axesLayout == BHSD: outs[0] is already BHSD; no transpose needed.
+	if axesLayout == compute.AxesLayoutBSHD {
+		output, err = f.Transpose(outs[0], 0, 2, 1, 3)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		output = outs[0]
 	}
 	// statesForVJP carries only the f32 softmax stats; outs[2] (fwd-only scratch) is not passed to the backward.
 	return output, []compute.Value{outs[1]}, nil
@@ -358,16 +416,16 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 // (statesForVJP[0], from the forward) plus the forward output and the output gradient dOutput into
 // the cuDNN backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
-func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttentionVJP.String()
-	queryShape, err := f.Shape(query)
+	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if queryShape.Rank() != 4 {
-		return nil, nil, nil, errors.Errorf("%s requires query/key/value rank-4, got %s", op, queryShape)
+	_, _, numKVHeads, _, err := f.bshdDims(op, key, axesLayout)
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	featureDim := queryShape.Dimensions[3]
 	if len(statesForVJP) == 0 {
 		return nil, nil, nil, errors.Wrapf(compute.ErrNotImplemented, "%s: statesForVJP is empty (forward produced no fused backward state)", op)
 	}
@@ -380,10 +438,6 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 		return nil, nil, nil, err
 	}
 	variant, err := selectFMHAVariant(op, qDType, causal, options)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	b, s, h, d, err := f.bshdDims(op, query)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -410,31 +464,44 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	operands := []compute.Value{q, k, v, softmaxStats, dOut, out}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasSeqLens {
-		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, b); err != nil {
+		if err = validateSeqLen("QuerySeqLen", options.QuerySeqLen, batchSize); err != nil {
 			return nil, nil, nil, err
 		}
-		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, b); err != nil {
+		if err = validateSeqLen("KeyValueSeqLen", options.KeyValueSeqLen, batchSize); err != nil {
 			return nil, nil, nil, err
 		}
 		operands = append(operands, options.QuerySeqLen, options.KeyValueSeqLen)
 		operandLayouts = append(operandLayouts, nil, nil)
 	}
-	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
+	bhsd := shapes.Make(dtypes.BFloat16, batchSize, numHeads, seqLen, featureDim)
 	scratch := shapes.Make(dtypes.Uint8, 0)
-	grads, err := f.customCall(variant.bwdTarget, flashBwdBackendConfig(b, h, s, scale, variant),
+	bwdResultLayouts := [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
+	if axesLayout == compute.AxesLayoutBHSD {
+		bwdResultLayouts[0] = []int{3, 2, 1, 0}
+		bwdResultLayouts[1] = []int{3, 2, 1, 0}
+		bwdResultLayouts[2] = []int{3, 2, 1, 0}
+	}
+	grads, err := f.customCall(variant.bwdTarget, flashBwdBackendConfig(batchSize, numHeads, seqLen, scale, axesLayout, variant),
 		operandLayouts, []shapes.Shape{bhsd, bhsd, bhsd, scratch}, bwdResultLayouts, operands...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	// grads[0..2] = dQ, dK, dV (BHSD); transpose to BSHD to match q,k,v.
-	if dQuery, err = f.Transpose(grads[0], 0, 2, 1, 3); err != nil {
-		return nil, nil, nil, err
-	}
-	if dKey, err = f.Transpose(grads[1], 0, 2, 1, 3); err != nil {
-		return nil, nil, nil, err
-	}
-	if dValue, err = f.Transpose(grads[2], 0, 2, 1, 3); err != nil {
-		return nil, nil, nil, err
+	// If axesLayout == BSHD: grads[0..2] = dQ, dK, dV (BHSD); transpose to BSHD to match q,k,v.
+	// If axesLayout == BHSD: grads[0..2] are already BHSD; no transpose needed.
+	if axesLayout == compute.AxesLayoutBSHD {
+		if dQuery, err = f.Transpose(grads[0], 0, 2, 1, 3); err != nil {
+			return nil, nil, nil, err
+		}
+		if dKey, err = f.Transpose(grads[1], 0, 2, 1, 3); err != nil {
+			return nil, nil, nil, err
+		}
+		if dValue, err = f.Transpose(grads[2], 0, 2, 1, 3); err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		dQuery = grads[0]
+		dKey = grads[1]
+		dValue = grads[2]
 	}
 	return dQuery, dKey, dValue, nil
 }
