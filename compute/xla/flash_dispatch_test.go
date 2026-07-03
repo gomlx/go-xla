@@ -137,11 +137,12 @@ func TestValidateSeqLen(t *testing.T) {
 
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
 	v := fmhaVariant{maskType: "NO_MASK"}
-	cfg := flashBackendConfigV(2, 12, 2048, 0.125, `"x": 1`, v)
-	if !strings.Contains(cfg, `"mask_type": "NO_MASK"`) {
+	cfg := flashBackendConfigV(2, 12, 2048, 0.125, map[string]any{"x": 1}, v)
+	cfg = strings.ReplaceAll(cfg, " ", "") // Remove spaces, to normalize.
+	if !strings.Contains(cfg, `"mask_type":"NO_MASK"`) {
 		t.Errorf("backend_config missing NO_MASK mask_type:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, `"dropout_rate": 0`) {
+	if !strings.Contains(cfg, `"dropout_rate":0`) {
 		t.Errorf("backend_config missing dropout_rate:\n%s", cfg)
 	}
 }

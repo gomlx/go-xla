@@ -3,7 +3,8 @@
 package xla
 
 import (
-	"fmt"
+	"encoding/json"
+	"maps"
 	"strconv"
 
 	"github.com/gomlx/compute"
@@ -84,22 +85,103 @@ func selectFMHAVariant(op string, qkvDType dtypes.DType, causal bool,
 // from v, the score-matrix dims [B,H,S,S] and fmha_scale from the shape, dotDimNumbers carries the
 // bmm dot_dimension_numbers JSON (the fwd/bwd-specific part). S1 has no dropout, so dropout_rate is
 // the literal 0; Task 2b [S2] switches it to formatScale(v.dropoutRate).
-func flashBackendConfigV(b, h, s int, scale float64, dotDimNumbers string, v fmhaVariant) string {
-	return fmt.Sprintf(`{"operation_queue_id": "0", "cudnn_fmha_backend_config": {"algorithm": {"algo_id": "0", "math_type": "TENSOR_OP_MATH", "tuning_knobs": {"17": "1", "24": "0"}, "is_cudnn_frontend": true, "workspace_size": "0"}, "fmha_scale": %s, "intermediate_tensor_shape": {"element_type": "BF16", "dimensions": ["%d", "%d", "%d", "%d"], "tuple_shapes": [], "layout": {"dim_level_types": [], "dim_unique": [], "dim_ordered": [], "minor_to_major": ["3", "2", "1", "0"], "tiles": [], "element_size_in_bits": "0", "memory_space": "0", "index_primitive_type": "PRIMITIVE_TYPE_INVALID", "pointer_primitive_type": "PRIMITIVE_TYPE_INVALID", "dynamic_shape_metadata_prefix_bytes": "0"}, "is_dynamic_dimension": [false, false, false, false]}, "is_flash_attention": true, "mask_type": "%s", %s, "dropout_rate": 0, "seed": 42, "sliding_window_length": 0, "max_seg_per_batch": 1, "is_paged_attention": false}}`,
-		formatScale(scale), b, h, s, s, v.maskType, dotDimNumbers)
+func flashBackendConfigV(b, h, s int, scale float64, dotDimNumbers map[string]any, v fmhaVariant) string {
+	config := map[string]any{
+		"operation_queue_id": "0",
+		"cudnn_fmha_backend_config": map[string]any{
+			"algorithm": map[string]any{
+				"algo_id":           "0",
+				"math_type":         "TENSOR_OP_MATH",
+				"tuning_knobs":      map[string]string{"17": "1", "24": "0"},
+				"is_cudnn_frontend": true,
+				"workspace_size":    "0",
+			},
+			"fmha_scale": scale,
+			"intermediate_tensor_shape": map[string]any{
+				"element_type": "BF16",
+				"dimensions":   []string{strconv.Itoa(b), strconv.Itoa(h), strconv.Itoa(s), strconv.Itoa(s)},
+				"tuple_shapes": []any{},
+				"layout": map[string]any{
+					"dim_level_types":                     []any{},
+					"dim_unique":                          []any{},
+					"dim_ordered":                         []any{},
+					"minor_to_major":                      []string{"3", "2", "1", "0"},
+					"tiles":                               []any{},
+					"element_size_in_bits":                "0",
+					"memory_space":                        "0",
+					"index_primitive_type":                "PRIMITIVE_TYPE_INVALID",
+					"pointer_primitive_type":              "PRIMITIVE_TYPE_INVALID",
+					"dynamic_shape_metadata_prefix_bytes": "0",
+				},
+				"is_dynamic_dimension": []bool{false, false, false, false},
+			},
+			"is_flash_attention":    true,
+			"mask_type":             v.maskType,
+			"dropout_rate":          0,
+			"seed":                  42,
+			"sliding_window_length": 0,
+			"max_seg_per_batch":     1,
+			"is_paged_attention":    false,
+		},
+	}
+
+	fmhaConfig := config["cudnn_fmha_backend_config"].(map[string]any)
+	maps.Copy(fmhaConfig, dotDimNumbers)
+
+	bytes, err := json.Marshal(config)
+	if err != nil {
+		panic(err)
+	}
+	return string(bytes)
 }
 
 // flashFwdBackendConfig builds the forward cudnn_fmha_backend_config for q,k,v [B,S,H,D]
 // (score matrix [B,H,S,S]). Only the scale and score-matrix dims vary with shape.
 func flashFwdBackendConfig(b, h, s int, scale float64, v fmhaVariant) string {
-	return flashBackendConfigV(b, h, s, scale,
-		`"bmm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["3"], "lhs_batch_dimensions": ["0", "2"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}`, v)
+	return flashBackendConfigV(b, h, s, scale, map[string]any{
+		"bmm1_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"3"},
+			"rhs_contracting_dimensions": []string{"3"},
+			"lhs_batch_dimensions":       []string{"0", "2"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+		"bmm2_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"3"},
+			"rhs_contracting_dimensions": []string{"1"},
+			"lhs_batch_dimensions":       []string{"0", "1"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+	}, v)
 }
 
 // flashBwdBackendConfig is the backward counterpart: the four backward-gemm dot_dimension_numbers.
 func flashBwdBackendConfig(b, h, s int, scale float64, v fmhaVariant) string {
-	return flashBackendConfigV(b, h, s, scale,
-		`"bmm1_grad_gemm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["2"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm1_grad_gemm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_grad_gemm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["2"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_grad_gemm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["3"], "lhs_batch_dimensions": ["0", "2"], "rhs_batch_dimensions": ["0", "2"]}`, v)
+	return flashBackendConfigV(b, h, s, scale, map[string]any{
+		"bmm1_grad_gemm1_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"2"},
+			"rhs_contracting_dimensions": []string{"1"},
+			"lhs_batch_dimensions":       []string{"0", "1"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+		"bmm1_grad_gemm2_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"3"},
+			"rhs_contracting_dimensions": []string{"1"},
+			"lhs_batch_dimensions":       []string{"0", "1"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+		"bmm2_grad_gemm1_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"2"},
+			"rhs_contracting_dimensions": []string{"1"},
+			"lhs_batch_dimensions":       []string{"0", "1"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+		"bmm2_grad_gemm2_dot_dimension_numbers": map[string]any{
+			"lhs_contracting_dimensions": []string{"3"},
+			"rhs_contracting_dimensions": []string{"3"},
+			"lhs_batch_dimensions":       []string{"0", "2"},
+			"rhs_batch_dimensions":       []string{"0", "2"},
+		},
+	}, v)
 }
 
 // formatScale renders a float as a JSON number (no quotes, shortest round-trip form).
@@ -127,9 +209,13 @@ func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute
 		return errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN flash path requires query/key/value last (feature) dim to be multiple of 8, got %d", op, featureDim)
 	}
-	if axesLayout != compute.AxesLayoutBSHD || numKVHeads != numHeads {
+	if axesLayout != compute.AxesLayoutBSHD {
 		return errors.Wrapf(compute.ErrNotImplemented,
-			"%s: cuDNN flash path supports BSHD layout, equal q/kv heads only (got layout=%v heads=%d/%d)",
+			"%s: cuDNN flash path supports only BSHD layout (got layout %v)", op, axesLayout)
+	}
+	if numKVHeads != numHeads {
+		return errors.Wrapf(compute.ErrNotImplemented,
+			"%s: cuDNN flash path requires equal number of q/kv heads (got layout=%v heads=%d/%d)",
 			op, axesLayout, numHeads, numKVHeads)
 	}
 	// One of QuerySeqLen/KeyValueSeqLen set without the other is ambiguous.
