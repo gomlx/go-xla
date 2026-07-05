@@ -92,6 +92,39 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 	}
 }
 
+// TestSelectFMHAVariant_Bias confirms cfg.Bias non-nil selects the fmhaScaleBias targets and sets
+// hasBias, while mask_type still derives from causal. CPU-runnable.
+func TestSelectFMHAVariant_Bias(t *testing.T) {
+	var sent compute.Value = struct{}{}
+	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent}
+
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, cfg)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v.fwdTarget != fmhaScaleBiasSoftmaxFwd || v.bwdTarget != fmhaScaleBiasSoftmaxBwd {
+		t.Errorf("targets = %q/%q, want ScaleBias", v.fwdTarget, v.bwdTarget)
+	}
+	if !v.hasBias {
+		t.Errorf("hasBias = false, want true")
+	}
+	if v.maskType != "CAUSAL" {
+		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
+	}
+}
+
+// TestSelectFMHAVariant_BiasSeqLensNotImplemented confirms bias+seqlens returns ErrNotImplemented
+// (the cuDNN ScaleBias kernel takes no seqlen operands), so the caller falls back to decomposed.
+func TestSelectFMHAVariant_BiasSeqLensNotImplemented(t *testing.T) {
+	var sent compute.Value = struct{}{}
+	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent, QuerySeqLen: sent, KeyValueSeqLen: sent}
+
+	_, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfg)
+	if !compute.IsNotImplemented(err) {
+		t.Errorf("err = %v, want ErrNotImplemented", err)
+	}
+}
+
 // nodeWithShape builds a minimal *Node with the given shape. value/builder are nil because
 // validateSeqLen only reads n.shape -- no backend call is made.
 func nodeWithShape(sh shapes.Shape) *Node { return &Node{shape: sh} }
