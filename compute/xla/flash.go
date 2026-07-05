@@ -42,8 +42,10 @@ const (
 type fmhaVariant struct {
 	fwdTarget, bwdTarget string
 	maskType             string // "CAUSAL" | "PADDING" | "PADDING_CAUSAL" | "NO_MASK"
-	hasSeqLens           bool
-	hasBias              bool
+	elementType          string // XLA element type of q/k/v: "BF16" | "F16". Drives the intermediate
+	// tensor's element_type in the backend_config; a mismatch fails the backward custom-call.
+	hasSeqLens bool
+	hasBias    bool
 }
 
 // selectFMHAVariant maps the q/k/v dtype and (causal, seqlens, bias) to a cuDNN variant.
@@ -62,8 +64,10 @@ func selectFMHAVariant(op string, qkvDType dtypes.DType, causal bool,
 	hasBias := cfg != nil && cfg.Bias != nil
 
 	switch qkvDType {
-	case dtypes.Float16, dtypes.BFloat16:
-		// target selected below based on bias presence.
+	case dtypes.BFloat16:
+		v.elementType = "BF16"
+	case dtypes.Float16:
+		v.elementType = "F16"
 	default:
 		// fp8 (e4m3fn/e5m2) lands here too: paused, not wired. NotImplemented -> decomposed.
 		return v, errors.Wrapf(compute.ErrNotImplemented,
@@ -113,7 +117,7 @@ func flashBackendConfigV(b, h, s int, scale float64, dotDimNumbers map[string]an
 			},
 			"fmha_scale": scale,
 			"intermediate_tensor_shape": map[string]any{
-				"element_type": "BF16",
+				"element_type": v.elementType,
 				"dimensions":   []string{strconv.Itoa(b), strconv.Itoa(h), strconv.Itoa(s), strconv.Itoa(s)},
 				"tuple_shapes": []any{},
 				"layout": map[string]any{
