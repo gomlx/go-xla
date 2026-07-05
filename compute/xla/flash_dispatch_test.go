@@ -169,7 +169,7 @@ func TestValidateSeqLen(t *testing.T) {
 }
 
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
-	v := fmhaVariant{maskType: "NO_MASK"}
+	v := fmhaVariant{maskType: "NO_MASK", elementType: "BF16"}
 	cfg := flashBackendConfigV(2, 12, 2048, 0.125, map[string]any{"x": 1}, v)
 	cfg = strings.ReplaceAll(cfg, " ", "") // Remove spaces, to normalize.
 	if !strings.Contains(cfg, `"mask_type":"NO_MASK"`) {
@@ -177,5 +177,27 @@ func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
 	}
 	if !strings.Contains(cfg, `"dropout_rate":0`) {
 		t.Errorf("backend_config missing dropout_rate:\n%s", cfg)
+	}
+	// The intermediate element_type must reflect the variant's dtype (drives f16 vs bf16 backward).
+	if !strings.Contains(cfg, `"element_type":"BF16"`) {
+		t.Errorf("backend_config intermediate element_type != BF16:\n%s", cfg)
+	}
+}
+
+// TestFlashBackendConfigV_ElementTypeFromDtype confirms selectFMHAVariant sets elementType so the
+// backend_config intermediate tensor matches the q/k/v dtype (a mismatch fails the f16 backward).
+func TestFlashBackendConfigV_ElementTypeFromDtype(t *testing.T) {
+	for _, tc := range []struct {
+		dtype dtypes.DType
+		want  string
+	}{
+		{dtypes.BFloat16, "BF16"},
+		{dtypes.Float16, "F16"},
+	} {
+		v, err := selectFMHAVariant("op", tc.dtype, true, nil)
+		require.NoError(t, err)
+		require.Equal(t, tc.want, v.elementType, "elementType for %s", tc.dtype)
+		cfg := strings.ReplaceAll(flashBackendConfigV(1, 1, 8, 1.0, map[string]any{"x": 1}, v), " ", "")
+		require.Contains(t, cfg, `"element_type":"`+tc.want+`"`, "config element_type for %s", tc.dtype)
 	}
 }
