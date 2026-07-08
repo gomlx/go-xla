@@ -92,6 +92,39 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 	}
 }
 
+// TestSelectFMHAVariant_Bias confirms cfg.Bias non-nil selects the fmhaScaleBias targets and sets
+// hasBias, while mask_type still derives from causal. CPU-runnable.
+func TestSelectFMHAVariant_Bias(t *testing.T) {
+	var sent compute.Value = struct{}{}
+	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent}
+
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, cfg)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if v.fwdTarget != fmhaScaleBiasSoftmaxFwd || v.bwdTarget != fmhaScaleBiasSoftmaxBwd {
+		t.Errorf("targets = %q/%q, want ScaleBias", v.fwdTarget, v.bwdTarget)
+	}
+	if !v.hasBias {
+		t.Errorf("hasBias = false, want true")
+	}
+	if v.maskType != "CAUSAL" {
+		t.Errorf("maskType = %q, want CAUSAL", v.maskType)
+	}
+}
+
+// TestSelectFMHAVariant_BiasSeqLensNotImplemented confirms bias+seqlens returns ErrNotImplemented
+// (the cuDNN ScaleBias kernel takes no seqlen operands), so the caller falls back to decomposed.
+func TestSelectFMHAVariant_BiasSeqLensNotImplemented(t *testing.T) {
+	var sent compute.Value = struct{}{}
+	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent, QuerySeqLen: sent, KeyValueSeqLen: sent}
+
+	_, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfg)
+	if !compute.IsNotImplemented(err) {
+		t.Errorf("err = %v, want ErrNotImplemented", err)
+	}
+}
+
 // nodeWithShape builds a minimal *Node with the given shape. value/builder are nil because
 // validateSeqLen only reads n.shape -- no backend call is made.
 func nodeWithShape(sh shapes.Shape) *Node { return &Node{shape: sh} }
@@ -136,7 +169,7 @@ func TestValidateSeqLen(t *testing.T) {
 }
 
 func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
-	v := fmhaVariant{maskType: "NO_MASK"}
+	v := fmhaVariant{maskType: "NO_MASK", elementType: "BF16"}
 	cfg := flashBackendConfigV(2, 12, 2048, 0.125, map[string]any{"x": 1}, v)
 	cfg = strings.ReplaceAll(cfg, " ", "") // Remove spaces, to normalize.
 	if !strings.Contains(cfg, `"mask_type":"NO_MASK"`) {
@@ -144,5 +177,27 @@ func TestFlashBackendConfigV_MaskTypeFromVariant(t *testing.T) {
 	}
 	if !strings.Contains(cfg, `"dropout_rate":0`) {
 		t.Errorf("backend_config missing dropout_rate:\n%s", cfg)
+	}
+	// The intermediate element_type must reflect the variant's dtype (drives f16 vs bf16 backward).
+	if !strings.Contains(cfg, `"element_type":"BF16"`) {
+		t.Errorf("backend_config intermediate element_type != BF16:\n%s", cfg)
+	}
+}
+
+// TestFlashBackendConfigV_ElementTypeFromDtype confirms selectFMHAVariant sets elementType so the
+// backend_config intermediate tensor matches the q/k/v dtype (a mismatch fails the f16 backward).
+func TestFlashBackendConfigV_ElementTypeFromDtype(t *testing.T) {
+	for _, tc := range []struct {
+		dtype dtypes.DType
+		want  string
+	}{
+		{dtypes.BFloat16, "BF16"},
+		{dtypes.Float16, "F16"},
+	} {
+		v, err := selectFMHAVariant("op", tc.dtype, true, nil)
+		require.NoError(t, err)
+		require.Equal(t, tc.want, v.elementType, "elementType for %s", tc.dtype)
+		cfg := strings.ReplaceAll(flashBackendConfigV(1, 1, 8, 1.0, map[string]any{"x": 1}, v), " ", "")
+		require.Contains(t, cfg, `"element_type":"`+tc.want+`"`, "config element_type for %s", tc.dtype)
 	}
 }
