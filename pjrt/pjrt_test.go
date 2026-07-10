@@ -10,7 +10,7 @@ import (
 
 	"testing"
 
-	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -88,7 +88,7 @@ func compile(t *testing.T, client *Client, comp XlaComputation) (exec *LoadedExe
 // execWithScalars executes the program on the input value given, and return the output.
 // Both input and output expected to be a scalar.
 // Any errors fail the test.
-func execWithScalars[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input T) T {
+func execWithScalars[T gotype.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input T) T {
 	inputBuffer, err := ScalarToBuffer(client, input)
 	requireNoError(t, err, "Failed to create on-device buffer for input %v", input)
 	defer func() { requireNoError(t, inputBuffer.Destroy()) }()
@@ -105,7 +105,7 @@ func execWithScalars[T dtypes.Supported](t *testing.T, client *Client, exec *Loa
 	return output
 }
 
-func execWithSlices[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input []T) (flat []T, dims []int) {
+func execWithSlices[T gotype.Supported](t *testing.T, client *Client, exec *LoadedExecutable, input []T) (flat []T, dims []int) {
 	inputBuffer, err := ArrayToBuffer(client, input, len(input))
 	requireNoError(t, err, "Failed to create on-device buffer for input %v", input)
 	defer func() { requireNoError(t, inputBuffer.Destroy()) }()
@@ -122,7 +122,7 @@ func execWithSlices[T dtypes.Supported](t *testing.T, client *Client, exec *Load
 	return
 }
 
-func execArrayOutput[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (flat []T, dims []int) {
+func execArrayOutput[T gotype.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (flat []T, dims []int) {
 	outputBuffers := capture(exec.Execute().Done()).Test(t)
 	assertLen(t, outputBuffers, 1, "Expected only one output")
 	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()
@@ -137,7 +137,7 @@ func execArrayOutput[T dtypes.Supported](t *testing.T, client *Client, exec *Loa
 }
 
 // execScalarOutput executes the LoadedExecutable with no inputs, and a scalar output of the given type.
-func execScalarOutput[T dtypes.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (value T) {
+func execScalarOutput[T gotype.Supported](t *testing.T, client *Client, exec *LoadedExecutable) (value T) {
 	outputBuffers := capture(exec.Execute().Done()).Test(t)
 	assertLen(t, outputBuffers, 1, "Expected only one output")
 	defer func() { requireNoError(t, outputBuffers[0].Destroy()) }()

@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +33,7 @@ import (
 // It doesn't work for if T (the output type) is a complex number.
 // If value is a complex number, it converts by taking the real part of the number and
 // discarding the imaginary part.
-func ConvertTo[T dtypes.NumberNotComplex](value any) T {
+func ConvertTo[T gotype.NumericNotComplex](value any) T {
 	t, ok := value.(T)
 	if ok {
 		return t
