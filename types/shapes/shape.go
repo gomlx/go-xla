@@ -82,6 +82,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/pkg/errors"
 )
 
@@ -147,7 +148,7 @@ func Make(dtype dtypes.DType, dimensions ...int) Shape {
 }
 
 // Scalar returns a scalar Shape for the given type.
-func Scalar[T dtypes.Number]() Shape {
+func Scalar[T gotype.Numeric]() Shape {
 	return Shape{DType: dtypes.FromGenericsType[T]()}
 }
 

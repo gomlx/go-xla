@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/go-xla/internal/shapeinference"
 	"github.com/gomlx/go-xla/types/shapes"
 	"github.com/pkg/errors"
@@ -222,7 +223,7 @@ func (b *Buffer) Client() *Client {
 }
 
 // ScalarToRaw generates the raw values needed by BufferFromHostConfig.FromRawData to feed a simple scalar value.
-func ScalarToRaw[T dtypes.Supported](value T) ([]byte, dtypes.DType, []int) {
+func ScalarToRaw[T gotype.Supported](value T) ([]byte, dtypes.DType, []int) {
 	dtype := dtypes.FromGenericsType[T]()
 	rawSlice := unsafe.Slice((*byte)(unsafe.Pointer(&value)), int(unsafe.Sizeof(value)))
 	return rawSlice, dtype, nil // empty dimensions for scalar
@@ -252,7 +253,7 @@ func (b *Buffer) Size() (int, error) {
 }
 
 // BufferToScalar is a generic function that transfer a Buffer back to host as a scalar of the given type.
-func BufferToScalar[T dtypes.Supported](b *Buffer) (value T, err error) {
+func BufferToScalar[T gotype.Supported](b *Buffer) (value T, err error) {
 	dst := unsafe.Slice((*byte)(unsafe.Pointer(&value)), unsafe.Sizeof(value))
 	err = b.ToHost(dst)
 	return
@@ -262,7 +263,7 @@ func BufferToScalar[T dtypes.Supported](b *Buffer) (value T, err error) {
 //
 // It is a shortcut to Client.BufferFromHost call with default parameters.
 // If you need more control where the value will be used you'll have to use Client.BufferFromHost instead.
-func ScalarToBuffer[T dtypes.Supported](client *Client, value T) (b *Buffer, err error) {
+func ScalarToBuffer[T gotype.Supported](client *Client, value T) (b *Buffer, err error) {
 	dtype := dtypes.FromGenericsType[T]()
 	src := unsafe.Slice((*byte)(unsafe.Pointer(&value)), unsafe.Sizeof(value))
 	return client.BufferFromHost().FromRawData(src, dtype, nil).Done()
@@ -272,7 +273,7 @@ func ScalarToBuffer[T dtypes.Supported](client *Client, value T) (b *Buffer, err
 //
 // It is a shortcut to Client.BufferFromHost call with default parameters.
 // If you need more control where the value will be used you'll have to use Client.BufferFromHost instead.
-func ScalarToBufferOnDeviceNum[T dtypes.Supported](client *Client, deviceNum int, value T) (b *Buffer, err error) {
+func ScalarToBufferOnDeviceNum[T gotype.Supported](client *Client, deviceNum int, value T) (b *Buffer, err error) {
 	dtype := dtypes.FromGenericsType[T]()
 	src := unsafe.Slice((*byte)(unsafe.Pointer(&value)), unsafe.Sizeof(value))
 	return client.BufferFromHost().FromRawData(src, dtype, nil).ToDeviceNum(deviceNum).Done()
@@ -283,7 +284,7 @@ func ScalarToBufferOnDeviceNum[T dtypes.Supported](client *Client, deviceNum int
 //
 // It is a shortcut to Client.BufferFromHost call with default parameters.
 // If you need more control where the value will be used you'll have to use Client.BufferFromHost instead.
-func ArrayToBuffer[T dtypes.Supported](client *Client, flatValues []T, dimensions ...int) (b *Buffer, err error) {
+func ArrayToBuffer[T gotype.Supported](client *Client, flatValues []T, dimensions ...int) (b *Buffer, err error) {
 	if len(dimensions) == 0 && len(flatValues) != 1 {
 		return nil, errors.Errorf("ArrayToBuffer not given any dimensions (indicating a scalar), but len(flatValues) == %d", len(flatValues))
 	}
@@ -291,7 +292,7 @@ func ArrayToBuffer[T dtypes.Supported](client *Client, flatValues []T, dimension
 }
 
 // BufferToArray transfers the buffer to an array defined by a slice with its flat values, and returns also its underlying dimensions.
-func BufferToArray[T dtypes.Supported](buffer *Buffer) (flatValues []T, dimensions []int, err error) {
+func BufferToArray[T gotype.Supported](buffer *Buffer) (flatValues []T, dimensions []int, err error) {
 	if err = buffer.Check(); err != nil {
 		return
 	}
