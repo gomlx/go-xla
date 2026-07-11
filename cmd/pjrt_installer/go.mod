@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/huh/spinner v0.0.0-20260223110133-9dc45e34a40b
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/gomlx/go-xla v0.2.3-0.20260711051333-10a8d9ca145b
+	github.com/gomlx/go-xla v0.2.3-0.20260711051345-329d99517ae2
 	github.com/pkg/errors v0.9.1
 	k8s.io/klog/v2 v2.140.0
 )
