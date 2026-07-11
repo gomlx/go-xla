@@ -284,10 +284,10 @@ func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute
 		return errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN flash path supports only BSHD or BHSD layouts (got layout %v)", op, axesLayout)
 	}
-	if numKVHeads != numHeads {
+	if numHeads%numKVHeads != 0 {
 		return errors.Wrapf(compute.ErrNotImplemented,
-			"%s: cuDNN flash path requires equal number of q/kv heads (got layout=%v heads=%d/%d)",
-			op, axesLayout, numHeads, numKVHeads)
+			"%s: cuDNN flash path requires query heads (%d) to be a multiple of kv heads (%d)",
+			op, numHeads, numKVHeads)
 	}
 	// One of QuerySeqLen/KeyValueSeqLen set without the other is ambiguous.
 	if options != nil && (options.QuerySeqLen != nil) != (options.KeyValueSeqLen != nil) {
@@ -407,9 +407,21 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value compute.Valu
 	if scale == 0 {
 		scale = 1.0 / math.Sqrt(float64(featureDim))
 	}
+	broadcastedKey := key
+	broadcastedValue := value
+	if numHeads != numKVHeads {
+		broadcastedKey, err = f.broadcastGQA(key, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, err
+		}
+		broadcastedValue, err = f.broadcastGQA(value, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	// Operand order cuDNN expects: q, k, v, [bias], [seqQ, seqKV]. Bias goes before seqlens
 	// (bias and seqlens are mutually exclusive here; see selectFMHAVariant).
-	operands := []compute.Value{query, key, value}
+	operands := []compute.Value{query, broadcastedKey, broadcastedValue}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasBias {
 		if err = validateBias("Bias", options.Bias, qDType, batchSize, numHeads, seqLen, seqLen); err != nil {
@@ -494,9 +506,21 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value compute.V
 	if scale == 0 {
 		scale = 1.0 / math.Sqrt(float64(featureDim))
 	}
+	broadcastedKey := key
+	broadcastedValue := value
+	if numHeads != numKVHeads {
+		broadcastedKey, err = f.broadcastGQA(key, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		broadcastedValue, err = f.broadcastGQA(value, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	// Operand order cuDNN expects: q, k, v, softmax_sum, dO, [bias], O. Bias goes at index 5,
 	// before O (bias and seqlens are mutually exclusive; see selectFMHAVariant).
-	operands := []compute.Value{query, key, value, softmaxStats, dOutput}
+	operands := []compute.Value{query, broadcastedKey, broadcastedValue, softmaxStats, dOutput}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasBias {
 		if err = validateBias("Bias", options.Bias, qDType, batchSize, numHeads, seqLen, seqLen); err != nil {
@@ -555,5 +579,88 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value compute.V
 		dKey = grads[1]
 		dValue = grads[2]
 	}
+	if numHeads != numKVHeads {
+		dKey, err = f.reduceSumGQA(dKey, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		dValue, err = f.reduceSumGQA(dValue, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	return dQuery, dKey, dValue, nil
+}
+
+func (f *Function) broadcastGQA(x compute.Value, numQueryHeads, numKVHeads int, layout compute.AxesLayout) (compute.Value, error) {
+	groupSize := numQueryHeads / numKVHeads
+	if groupSize == 1 {
+		return x, nil
+	}
+	shape, err := f.Shape(x)
+	if err != nil {
+		return nil, err
+	}
+	dtype := shape.DType
+	dims := shape.Dimensions
+	if len(dims) != 4 {
+		return nil, errors.Errorf("broadcastGQA: expected rank-4 tensor, got rank-%d (shape %v)", len(dims), dims)
+	}
+
+	if layout == compute.AxesLayoutBSHD {
+		b, s, _, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(x, b, s, numKVHeads, 1, d)
+		if err != nil {
+			return nil, err
+		}
+		broadcastShape := shapes.Make(dtype, b, s, numKVHeads, groupSize, d)
+		broadcasted, err := f.BroadcastInDim(reshaped, broadcastShape, []int{0, 1, 2, 3, 4})
+		if err != nil {
+			return nil, err
+		}
+		return f.Reshape(broadcasted, b, s, numQueryHeads, d)
+	} else {
+		b, _, s, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(x, b, numKVHeads, 1, s, d)
+		if err != nil {
+			return nil, err
+		}
+		broadcastShape := shapes.Make(dtype, b, numKVHeads, groupSize, s, d)
+		broadcasted, err := f.BroadcastInDim(reshaped, broadcastShape, []int{0, 1, 2, 3, 4})
+		if err != nil {
+			return nil, err
+		}
+		return f.Reshape(broadcasted, b, numQueryHeads, s, d)
+	}
+}
+
+func (f *Function) reduceSumGQA(dx compute.Value, numQueryHeads, numKVHeads int, layout compute.AxesLayout) (compute.Value, error) {
+	groupSize := numQueryHeads / numKVHeads
+	if groupSize == 1 {
+		return dx, nil
+	}
+	shape, err := f.Shape(dx)
+	if err != nil {
+		return nil, err
+	}
+	dims := shape.Dimensions
+	if len(dims) != 4 {
+		return nil, errors.Errorf("reduceSumGQA: expected rank-4 tensor, got rank-%d (shape %v)", len(dims), dims)
+	}
+
+	if layout == compute.AxesLayoutBSHD {
+		b, s, _, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(dx, b, s, numKVHeads, groupSize, d)
+		if err != nil {
+			return nil, err
+		}
+		return f.ReduceSum(reshaped, 3)
+	} else {
+		b, _, s, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(dx, b, numKVHeads, groupSize, s, d)
+		if err != nil {
+			return nil, err
+		}
+		return f.ReduceSum(reshaped, 2)
+	}
 }
