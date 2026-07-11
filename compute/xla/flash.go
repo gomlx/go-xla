@@ -5,6 +5,7 @@ package xla
 import (
 	"encoding/json"
 	"maps"
+	"math"
 	"strconv"
 
 	"github.com/gomlx/compute"
@@ -57,11 +58,12 @@ type fmhaVariant struct {
 // Bias routing: cfg.Bias non-nil selects the fmhaScaleBias targets. cuDNN's ScaleBias kernel does
 // not accept seqlen operands, so bias+seqlens returns ErrNotImplemented and the caller falls back
 // to the decomposed path.
-func selectFMHAVariant(op string, qkvDType dtypes.DType, causal bool,
+func selectFMHAVariant(op string, qkvDType dtypes.DType,
 	cfg *compute.ScaledDotProductAttentionConfig) (fmhaVariant, error) {
 	var v fmhaVariant
 	hasSeqLens := cfg != nil && cfg.QuerySeqLen != nil && cfg.KeyValueSeqLen != nil
 	hasBias := cfg != nil && cfg.Bias != nil
+	causal := cfg != nil && cfg.Causal
 
 	switch qkvDType {
 	case dtypes.BFloat16:
@@ -262,8 +264,7 @@ func formatScale(scale float64) string {
 // f16/bf16 (fp8 paused), BSHD-layout, equal-head, on a cuda plugin. Causality and
 // per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
 // an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
-func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
-	_ = causal
+func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) error {
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
 	}
@@ -374,8 +375,12 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // (BSHD), bf16. It returns the [B,S,H,D] bf16 output and the [B,H,S] f32 softmax statistics
 // (log-sum-exp) the flash backward needs. The [B,H,S,S] scores never materialize. On non-cuda
 // plugins or unsupported option combinations it returns ErrNotImplemented.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value compute.Value, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttention.String()
+	var mask compute.Value
+	if options != nil {
+		mask = options.Mask
+	}
 	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, err
@@ -388,12 +393,19 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, options); err != nil {
 		return nil, nil, err
 	}
-	variant, err := selectFMHAVariant(op, qDType, causal, options)
+	variant, err := selectFMHAVariant(op, qDType, options)
 	if err != nil {
 		return nil, nil, err
+	}
+	var scale float64
+	if options != nil {
+		scale = options.Scale
+	}
+	if scale == 0 {
+		scale = 1.0 / math.Sqrt(float64(featureDim))
 	}
 	// Operand order cuDNN expects: q, k, v, [bias], [seqQ, seqKV]. Bias goes before seqlens
 	// (bias and seqlens are mutually exclusive here; see selectFMHAVariant).
@@ -446,8 +458,12 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 // (statesForVJP[0], from the forward) plus the forward output and the output gradient dOutput into
 // the cuDNN backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
-func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value compute.Value, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttentionVJP.String()
+	var mask compute.Value
+	if options != nil {
+		mask = options.Mask
+	}
 	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, nil, err
@@ -464,12 +480,19 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, options); err != nil {
 		return nil, nil, nil, err
 	}
-	variant, err := selectFMHAVariant(op, qDType, causal, options)
+	variant, err := selectFMHAVariant(op, qDType, options)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	var scale float64
+	if options != nil {
+		scale = options.Scale
+	}
+	if scale == 0 {
+		scale = 1.0 / math.Sqrt(float64(featureDim))
 	}
 	// Operand order cuDNN expects: q, k, v, softmax_sum, dO, [bias], O. Bias goes at index 5,
 	// before O (bias and seqlens are mutually exclusive; see selectFMHAVariant).

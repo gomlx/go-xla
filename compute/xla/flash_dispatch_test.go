@@ -14,7 +14,7 @@ import (
 )
 
 func TestSelectFMHAVariant_StandardCausal(t *testing.T) {
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, nil)
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, &compute.ScaledDotProductAttentionConfig{Causal: true})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestSelectFMHAVariant_StandardCausal(t *testing.T) {
 }
 
 func TestSelectFMHAVariant_NoMaskWhenNotCausal(t *testing.T) {
-	v, err := selectFMHAVariant("op", dtypes.Float16, false, nil)
+	v, err := selectFMHAVariant("op", dtypes.Float16, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestSelectFMHAVariant_NoMaskWhenNotCausal(t *testing.T) {
 }
 
 func TestSelectFMHAVariant_RejectsF32(t *testing.T) {
-	_, err := selectFMHAVariant("op", dtypes.Float32, true, nil)
+	_, err := selectFMHAVariant("op", dtypes.Float32, &compute.ScaledDotProductAttentionConfig{Causal: true})
 	if !errors.Is(err, compute.ErrNotImplemented) {
 		t.Errorf("err = %v, want ErrNotImplemented", err)
 	}
@@ -46,9 +46,9 @@ func TestSelectFMHAVariant_RejectsF32(t *testing.T) {
 // TestSelectFMHAVariant_FP8NotImplemented pins the fp8-paused seam: fp8 dtypes must return
 // ErrNotImplemented so the caller falls back to the decomposed path. CPU, Mac-runnable.
 func TestSelectFMHAVariant_FP8NotImplemented(t *testing.T) {
-	_, err := selectFMHAVariant("fmha", dtypes.F8E4M3FN, true, nil)
+	_, err := selectFMHAVariant("fmha", dtypes.F8E4M3FN, &compute.ScaledDotProductAttentionConfig{Causal: true})
 	require.True(t, compute.IsNotImplemented(err), "fp8 must be NotImplemented (paused), got %v", err)
-	_, err = selectFMHAVariant("fmha", dtypes.F8E5M2, true, nil)
+	_, err = selectFMHAVariant("fmha", dtypes.F8E5M2, &compute.ScaledDotProductAttentionConfig{Causal: true})
 	require.True(t, compute.IsNotImplemented(err), "fp8 e5m2 must be NotImplemented (paused), got %v", err)
 }
 
@@ -63,7 +63,7 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 		KeyValueSeqLen: sent,
 	}
 
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfgBoth)
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, cfgBoth)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -74,7 +74,8 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 		t.Errorf("hasSeqLens = false, want true")
 	}
 
-	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, cfgBoth)
+	cfgBoth.Causal = true
+	v, err = selectFMHAVariant("op", dtypes.BFloat16, cfgBoth)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestSelectFMHAVariant_SeqLenPadding(t *testing.T) {
 	}
 
 	// nil cfg still routes causal -> CAUSAL (no regression).
-	v, err = selectFMHAVariant("op", dtypes.BFloat16, true, nil)
+	v, err = selectFMHAVariant("op", dtypes.BFloat16, &compute.ScaledDotProductAttentionConfig{Causal: true})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -98,7 +99,8 @@ func TestSelectFMHAVariant_Bias(t *testing.T) {
 	var sent compute.Value = struct{}{}
 	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent}
 
-	v, err := selectFMHAVariant("op", dtypes.BFloat16, true, cfg)
+	cfg.Causal = true
+	v, err := selectFMHAVariant("op", dtypes.BFloat16, cfg)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -119,7 +121,7 @@ func TestSelectFMHAVariant_BiasSeqLensNotImplemented(t *testing.T) {
 	var sent compute.Value = struct{}{}
 	cfg := &compute.ScaledDotProductAttentionConfig{Bias: sent, QuerySeqLen: sent, KeyValueSeqLen: sent}
 
-	_, err := selectFMHAVariant("op", dtypes.BFloat16, false, cfg)
+	_, err := selectFMHAVariant("op", dtypes.BFloat16, cfg)
 	if !compute.IsNotImplemented(err) {
 		t.Errorf("err = %v, want ErrNotImplemented", err)
 	}
@@ -194,7 +196,7 @@ func TestFlashBackendConfigV_ElementTypeFromDtype(t *testing.T) {
 		{dtypes.BFloat16, "BF16"},
 		{dtypes.Float16, "F16"},
 	} {
-		v, err := selectFMHAVariant("op", tc.dtype, true, nil)
+		v, err := selectFMHAVariant("op", tc.dtype, &compute.ScaledDotProductAttentionConfig{Causal: true})
 		require.NoError(t, err)
 		require.Equal(t, tc.want, v.elementType, "elementType for %s", tc.dtype)
 		cfg := strings.ReplaceAll(flashBackendConfigV(1, 1, 8, 1.0, map[string]any{"x": 1}, v), " ", "")
