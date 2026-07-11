@@ -5,6 +5,7 @@ package xla
 import (
 	"encoding/json"
 	"maps"
+	"math"
 	"strconv"
 
 	"github.com/gomlx/compute"
@@ -57,11 +58,12 @@ type fmhaVariant struct {
 // Bias routing: cfg.Bias non-nil selects the fmhaScaleBias targets. cuDNN's ScaleBias kernel does
 // not accept seqlen operands, so bias+seqlens returns ErrNotImplemented and the caller falls back
 // to the decomposed path.
-func selectFMHAVariant(op string, qkvDType dtypes.DType, causal bool,
+func selectFMHAVariant(op string, qkvDType dtypes.DType,
 	cfg *compute.ScaledDotProductAttentionConfig) (fmhaVariant, error) {
 	var v fmhaVariant
 	hasSeqLens := cfg != nil && cfg.QuerySeqLen != nil && cfg.KeyValueSeqLen != nil
 	hasBias := cfg != nil && cfg.Bias != nil
+	causal := cfg != nil && cfg.Causal
 
 	switch qkvDType {
 	case dtypes.BFloat16:
@@ -262,8 +264,7 @@ func formatScale(scale float64) string {
 // f16/bf16 (fp8 paused), BSHD-layout, equal-head, on a cuda plugin. Causality and
 // per-batch seqlen padding are supported (mask_type derives from them in selectFMHAVariant);
 // an explicit materialized mask is not (use seqlens instead). Anything else -> ErrNotImplemented.
-func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, causal bool, options *compute.ScaledDotProductAttentionConfig) error {
-	_ = causal
+func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute.Value, numHeads, numKVHeads, featureDim int, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) error {
 	if !f.builder.backend.plugin.IsCUDA() {
 		return errors.Wrapf(compute.ErrNotImplemented, "%s: cuDNN flash needs the cuda plugin, have %q", op, f.builder.backend.pluginName)
 	}
@@ -283,10 +284,10 @@ func (f *Function) flashSupported(op string, qkvDType dtypes.DType, mask compute
 		return errors.Wrapf(compute.ErrNotImplemented,
 			"%s: cuDNN flash path supports only BSHD or BHSD layouts (got layout %v)", op, axesLayout)
 	}
-	if numKVHeads != numHeads {
+	if numHeads%numKVHeads != 0 {
 		return errors.Wrapf(compute.ErrNotImplemented,
-			"%s: cuDNN flash path requires equal number of q/kv heads (got layout=%v heads=%d/%d)",
-			op, axesLayout, numHeads, numKVHeads)
+			"%s: cuDNN flash path requires query heads (%d) to be a multiple of kv heads (%d)",
+			op, numHeads, numKVHeads)
 	}
 	// One of QuerySeqLen/KeyValueSeqLen set without the other is ambiguous.
 	if options != nil && (options.QuerySeqLen != nil) != (options.KeyValueSeqLen != nil) {
@@ -374,8 +375,12 @@ var bwdResultLayouts = [][]int{{3, 1, 2, 0}, {3, 1, 2, 0}, {3, 1, 2, 0}, {0}}
 // (BSHD), bf16. It returns the [B,S,H,D] bf16 output and the [B,H,S] f32 softmax statistics
 // (log-sum-exp) the flash backward needs. The [B,H,S,S] scores never materialize. On non-cuda
 // plugins or unsupported option combinations it returns ErrNotImplemented.
-func (f *Function) FusedScaledDotProductAttention(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttention(query, key, value compute.Value, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) (output compute.Value, statesForVJP []compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttention.String()
+	var mask compute.Value
+	if options != nil {
+		mask = options.Mask
+	}
 	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, err
@@ -388,16 +393,35 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, options); err != nil {
 		return nil, nil, err
 	}
-	variant, err := selectFMHAVariant(op, qDType, causal, options)
+	variant, err := selectFMHAVariant(op, qDType, options)
 	if err != nil {
 		return nil, nil, err
 	}
+	var scale float64
+	if options != nil {
+		scale = options.Scale
+	}
+	if scale == 0 {
+		scale = 1.0 / math.Sqrt(float64(featureDim))
+	}
+	broadcastedKey := key
+	broadcastedValue := value
+	if numHeads != numKVHeads {
+		broadcastedKey, err = f.broadcastGQA(key, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, err
+		}
+		broadcastedValue, err = f.broadcastGQA(value, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	// Operand order cuDNN expects: q, k, v, [bias], [seqQ, seqKV]. Bias goes before seqlens
 	// (bias and seqlens are mutually exclusive here; see selectFMHAVariant).
-	operands := []compute.Value{query, key, value}
+	operands := []compute.Value{query, broadcastedKey, broadcastedValue}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasBias {
 		if err = validateBias("Bias", options.Bias, qDType, batchSize, numHeads, seqLen, seqLen); err != nil {
@@ -446,8 +470,12 @@ func (f *Function) FusedScaledDotProductAttention(query, key, value, mask comput
 // (statesForVJP[0], from the forward) plus the forward output and the output gradient dOutput into
 // the cuDNN backward custom-call, so the [B,H,S,S] scores never materialize in the backward either.
 // Returns dQuery, dKey, dValue as [B,S,H,D] bf16.
-func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask compute.Value, _, _ int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
+func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value compute.Value, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig, output compute.Value, statesForVJP []compute.Value, dOutput compute.Value) (dQuery, dKey, dValue compute.Value, err error) {
 	op := compute.OpTypeFusedScaledDotProductAttentionVJP.String()
+	var mask compute.Value
+	if options != nil {
+		mask = options.Mask
+	}
 	batchSize, seqLen, numHeads, featureDim, err := f.bshdDims(op, query, axesLayout)
 	if err != nil {
 		return nil, nil, nil, err
@@ -464,16 +492,35 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, causal, options); err != nil {
+	if err = f.flashSupported(op, qDType, mask, numHeads, numKVHeads, featureDim, axesLayout, options); err != nil {
 		return nil, nil, nil, err
 	}
-	variant, err := selectFMHAVariant(op, qDType, causal, options)
+	variant, err := selectFMHAVariant(op, qDType, options)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	var scale float64
+	if options != nil {
+		scale = options.Scale
+	}
+	if scale == 0 {
+		scale = 1.0 / math.Sqrt(float64(featureDim))
+	}
+	broadcastedKey := key
+	broadcastedValue := value
+	if numHeads != numKVHeads {
+		broadcastedKey, err = f.broadcastGQA(key, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		broadcastedValue, err = f.broadcastGQA(value, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	// Operand order cuDNN expects: q, k, v, softmax_sum, dO, [bias], O. Bias goes at index 5,
 	// before O (bias and seqlens are mutually exclusive; see selectFMHAVariant).
-	operands := []compute.Value{query, key, value, softmaxStats, dOutput}
+	operands := []compute.Value{query, broadcastedKey, broadcastedValue, softmaxStats, dOutput}
 	operandLayouts := [][]int{{3, 2, 1, 0}, {3, 2, 1, 0}, {3, 2, 1, 0}, {2, 1, 0}, {3, 2, 1, 0}}
 	if variant.hasBias {
 		if err = validateBias("Bias", options.Bias, qDType, batchSize, numHeads, seqLen, seqLen); err != nil {
@@ -532,5 +579,88 @@ func (f *Function) FusedScaledDotProductAttentionVJP(query, key, value, mask com
 		dKey = grads[1]
 		dValue = grads[2]
 	}
+	if numHeads != numKVHeads {
+		dKey, err = f.reduceSumGQA(dKey, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		dValue, err = f.reduceSumGQA(dValue, numHeads, numKVHeads, axesLayout)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	return dQuery, dKey, dValue, nil
+}
+
+func (f *Function) broadcastGQA(x compute.Value, numQueryHeads, numKVHeads int, layout compute.AxesLayout) (compute.Value, error) {
+	groupSize := numQueryHeads / numKVHeads
+	if groupSize == 1 {
+		return x, nil
+	}
+	shape, err := f.Shape(x)
+	if err != nil {
+		return nil, err
+	}
+	dtype := shape.DType
+	dims := shape.Dimensions
+	if len(dims) != 4 {
+		return nil, errors.Errorf("broadcastGQA: expected rank-4 tensor, got rank-%d (shape %v)", len(dims), dims)
+	}
+
+	if layout == compute.AxesLayoutBSHD {
+		b, s, _, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(x, b, s, numKVHeads, 1, d)
+		if err != nil {
+			return nil, err
+		}
+		broadcastShape := shapes.Make(dtype, b, s, numKVHeads, groupSize, d)
+		broadcasted, err := f.BroadcastInDim(reshaped, broadcastShape, []int{0, 1, 2, 3, 4})
+		if err != nil {
+			return nil, err
+		}
+		return f.Reshape(broadcasted, b, s, numQueryHeads, d)
+	} else {
+		b, _, s, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(x, b, numKVHeads, 1, s, d)
+		if err != nil {
+			return nil, err
+		}
+		broadcastShape := shapes.Make(dtype, b, numKVHeads, groupSize, s, d)
+		broadcasted, err := f.BroadcastInDim(reshaped, broadcastShape, []int{0, 1, 2, 3, 4})
+		if err != nil {
+			return nil, err
+		}
+		return f.Reshape(broadcasted, b, numQueryHeads, s, d)
+	}
+}
+
+func (f *Function) reduceSumGQA(dx compute.Value, numQueryHeads, numKVHeads int, layout compute.AxesLayout) (compute.Value, error) {
+	groupSize := numQueryHeads / numKVHeads
+	if groupSize == 1 {
+		return dx, nil
+	}
+	shape, err := f.Shape(dx)
+	if err != nil {
+		return nil, err
+	}
+	dims := shape.Dimensions
+	if len(dims) != 4 {
+		return nil, errors.Errorf("reduceSumGQA: expected rank-4 tensor, got rank-%d (shape %v)", len(dims), dims)
+	}
+
+	if layout == compute.AxesLayoutBSHD {
+		b, s, _, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(dx, b, s, numKVHeads, groupSize, d)
+		if err != nil {
+			return nil, err
+		}
+		return f.ReduceSum(reshaped, 3)
+	} else {
+		b, _, s, d := dims[0], dims[1], dims[2], dims[3]
+		reshaped, err := f.Reshape(dx, b, numKVHeads, groupSize, s, d)
+		if err != nil {
+			return nil, err
+		}
+		return f.ReduceSum(reshaped, 2)
+	}
 }
