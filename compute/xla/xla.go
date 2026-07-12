@@ -121,8 +121,8 @@ const optionsDocumentation = `"xla" backend extra options:
     (it can be faster in modern GPUs). It's enabled by default.
   - "shared_buffer" (boolean, default=true): controls whether to use shared buffers for the device buffer
     (where device=CPU). It's enabled by default if the plugin is called "cpu".
-  - "preallocate" (boolean, default=true): whether the CUDA PJRT preallocates a large portion of the memory.
-  - "memory_fraction" (float, default=0.75): how much memory to preallocate.
+  - "preallocate" (boolean, default=false): whether the CUDA PJRT preallocates a large portion of the memory.
+  - "memory_fraction" (float, default=0.75): how much memory to preallocate, if preallocate=true.
   - "allocator" (string, default="default"): which allocator to use. For CUDA the available ones are "default"
     (== "bfc"), "bfc" ("best-fit for coalescing", avoids framementation), "cuda_async" (dynamic, no preallocation),
     "platform" (slow, good for debugging), "vmm"
@@ -221,6 +221,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	}
 
 	// Support "preallocate":
+	pluginOptions["preallocate"] = false
 	if b, found, err := parseOptions[bool]("preallocate", backendOptions); err != nil {
 		return nil, err
 	} else if found {
