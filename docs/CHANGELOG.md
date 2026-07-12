@@ -7,6 +7,7 @@
   - Improved options handler, and added the `help` option/pluginName (prints out documentation),
     and among others the `preallocate=false` and `memory_fraction=<float>` options to control pre-allocation
     of memory (for CUDA) and the memory fraction to preallocate.
+  - Preallocation disabled by default.
 - Package `shapes` for go-xla diverged enough (having quantization, dimension bounds, etc.) that it 
   stays a fork local to `go-xla`.
 - Updated to XLA/PJRT v0.104
