@@ -1,4 +1,4 @@
-# Next: API changes for GoMLX v0.28.0 and gomlx/compute v0.1.0
+# v0.3.0: API changes for GoMLX v0.28.0 and gomlx/compute v0.1.0
 
 - Moved packages out of `pkg/` (that was only used before `/internal` had a special meaning).
 - New `github.com/gomlx/compute/dtypes` repo will host `dtypes`.
@@ -14,7 +14,7 @@
 - Added `github.com/gomlx/compile/support/backendtest` compliance tests to `compute/xla` backend.
 - Fixed `ReduceWindow` window and base dilation attributes: it was previously using window dilation for base 
   dilation as well.
-- 
+- Implemented `FusedScaledDotProductAttention` for CUDA using cuDNN flash-attention custom call.
 
 # v0.2.2: New `OptimizationBarrier` op, `pjrt.IsCPU()`
 
