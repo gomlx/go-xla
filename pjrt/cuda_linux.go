@@ -32,28 +32,34 @@ var hasNvidiaGPU = sync.OnceValue[bool](func() bool {
 	} else if len(matches) > 0 {
 		return true
 	}
-	klog.Infof("No Nvidia devices found matching \"/dev/nvidia*\", checking nvidia-smi command instead.")
+	klog.V(1).Infof("No Nvidia devices found matching \"/dev/nvidia*\", checking nvidia-smi command instead.")
 
 	// Execute the nvidia-smi command if present
 	_, lookErr := exec.LookPath("nvidia-smi")
 	if lookErr != nil {
-		klog.Infof("nvidia-smi command not found: %v", lookErr)
-		klog.Infof("Assuming there are no GPU cards installed in the system. " +
-			"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		if klog.V(1).Enabled() {
+			klog.Infof("nvidia-smi command not found: %v", lookErr)
+			klog.Infof("Assuming there are no GPU cards installed in the system. " +
+				"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		}
 		return false
 	}
 	cmd := exec.Command("nvidia-smi")
 	output, cmdErr := cmd.CombinedOutput()
 	if cmdErr != nil {
-		klog.Infof("nvidia-smi failed to execute: %v", cmdErr)
-		klog.Infof("Assuming there are no GPU cards installed in the system. " +
-			"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		if klog.V(1).Enabled() {
+			klog.Infof("nvidia-smi failed to execute: %v", cmdErr)
+			klog.Infof("Assuming there are no GPU cards installed in the system. " +
+				"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		}
 		return false
 	}
 	if !strings.Contains(string(output), "NVIDIA-SMI") {
-		klog.Infof("nvidia-smi seems to not have found a GPU device: \n%s\n", string(output))
-		klog.Infof("Assuming there are no GPU cards installed in the system. " +
-			"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		if klog.V(1).Enabled() {
+			klog.Infof("nvidia-smi seems to not have found a GPU device: \n%s\n", string(output))
+			klog.Infof("Assuming there are no GPU cards installed in the system. " +
+				"To force the attempt to use the \"cuda\" PJRT, use its absolute path.")
+		}
 		return false
 	}
 	return true
