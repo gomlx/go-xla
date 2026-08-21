@@ -233,6 +233,9 @@ func checkPlugin(name, pluginPath string) (err error) {
 	if IsCUDAName(name) && !hasNvidiaGPU() {
 		return errors.Errorf("plugin %q (%q): no GPU card found, skipping", name, pluginPath)
 	}
+	if IsROCMName(name) && !hasAMDGPU() {
+		return errors.Errorf("plugin %q (%q): no discrete AMD GPU found, skipping", name, pluginPath)
+	}
 
 	var handle dllHandleWrapper
 	if err != nil {

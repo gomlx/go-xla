@@ -30,7 +30,8 @@ var (
 			"For the CUDA PJRT this is based on the Jax version in https://pypi.org/project/jax/ (e.g.: 0.7.2), "+
 			"which is where it downloads the plugin and Nvidia libraries from. "+
 			"For the TPU PJRT this is the version of the \"libtpu\" version in https://pypi.org/project/libtpu/ "+
-			"(e.g.: 0.0.27). ")
+			"(e.g.: 0.0.27). "+
+			"For the ROCm PJRT this is the ROCm version (e.g.: 7.2.4), from https://repo.radeon.com/rocm/manylinux/.")
 	flagCache       = flag.Bool("cache", true, "Use cache to store downloaded files. It defaults to true")
 	flagVerbosity   = flag.Int("verbosity", int(installer.Verbose), "Verbosity level: 0=quiet, 1=normal, 2=verbose")
 	flagAutoInstall = flag.Bool("autoinstall", false, "Auto installs all PJRTs to the current machine in the "+
