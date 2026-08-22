@@ -384,7 +384,7 @@ func init() {
 
 var (
 	// DefaultPlugins is the list of plugins to use in preference order, if not otherwise specified.
-	DefaultPlugins = []string{"cuda", "cpu"}
+	DefaultPlugins = []string{"cuda", "rocm", "cpu"}
 
 	// availablePluginsList are the keys to the available plugins sorted by DefaultPlugins.
 	availablePluginsList []string
