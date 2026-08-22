@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -43,17 +44,44 @@ var HasAMDGPU = sync.OnceValue[bool](func() bool {
 	return rocminfoHasDiscreteGPU(output)
 })
 
+// rocmInstallDir returns the ROCm installation directory. It is used to locate
+// `rocminfo` and the ROCm version file when ROCm is not installed in the
+// default /opt/rocm location.
+//
+// It checks, in order:
+//  1. The ROCM_PATH environment variable, if set to an existing directory.
+//  2. The install root inferred from the `rocminfo` binary found in PATH
+//     (its parent directory's parent, e.g. <root>/bin/rocminfo -> <root>).
+//  3. The default /opt/rocm.
+func rocmInstallDir() string {
+	if dir := os.Getenv("ROCM_PATH"); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	if p, err := exec.LookPath("rocminfo"); err == nil {
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+		return filepath.Dir(filepath.Dir(p))
+	}
+	return "/opt/rocm"
+}
+
 // runRocminfo executes `rocminfo` and returns its output, or "" if it is not
 // available.
 func runRocminfo() string {
 	var cmdPath string
 	if p, err := exec.LookPath("rocminfo"); err == nil {
 		cmdPath = p
-	} else if _, err := os.Stat("/opt/rocm/bin/rocminfo"); err == nil {
-		cmdPath = "/opt/rocm/bin/rocminfo"
 	} else {
-		klog.V(1).Infof("rocminfo not found; assuming any AMD GPU is a discrete GPU")
-		return ""
+		candidate := filepath.Join(rocmInstallDir(), "bin", "rocminfo")
+		if _, err := os.Stat(candidate); err == nil {
+			cmdPath = candidate
+		} else {
+			klog.V(1).Infof("rocminfo not found; assuming any AMD GPU is a discrete GPU")
+			return ""
+		}
 	}
 	cmd := exec.Command(cmdPath)
 	output, err := cmd.CombinedOutput()
@@ -209,11 +237,12 @@ func RocmInstall(version, installPath string, useCache bool, verbosity Verbosity
 }
 
 // RocmDetectedVersion returns the installed ROCm version (e.g. "7.2.4"), read
-// from the standard ROCm version file.
+// from the ROCm version file, located using rocmInstallDir.
 func RocmDetectedVersion() (string, error) {
+	root := rocmInstallDir()
 	for _, p := range []string{
-		"/opt/rocm/.info/version",
-		"/opt/rocm/lib/.info/version",
+		filepath.Join(root, ".info", "version"),
+		filepath.Join(root, "lib", ".info", "version"),
 	} {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -224,8 +253,8 @@ func RocmDetectedVersion() (string, error) {
 			return version, nil
 		}
 	}
-	return "", errors.New("could not detect the installed ROCm version: " +
-		"no version file found at /opt/rocm/.info/version or /opt/rocm/lib/.info/version")
+	return "", errors.Errorf("could not detect the installed ROCm version: "+
+		"no version file found under %q", root)
 }
 
 // RocmGetWheelURL returns the download URL of the ROCm PJRT wheel for the given

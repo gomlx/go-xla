@@ -5,6 +5,7 @@ package pjrt
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -29,17 +30,43 @@ var hasAMDGPU = sync.OnceValue[bool](func() bool {
 	return rocminfoHasDiscreteGPU(output)
 })
 
+// rocmInstallDir returns the ROCm installation directory. It is used to locate
+// `rocminfo` when ROCm is not installed in the default /opt/rocm location.
+//
+// It checks, in order:
+//  1. The ROCM_PATH environment variable, if set to an existing directory.
+//  2. The install root inferred from the `rocminfo` binary found in PATH
+//     (its parent directory's parent, e.g. <root>/bin/rocminfo -> <root>).
+//  3. The default /opt/rocm.
+func rocmInstallDir() string {
+	if dir := os.Getenv("ROCM_PATH"); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	if p, err := exec.LookPath("rocminfo"); err == nil {
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+		return filepath.Dir(filepath.Dir(p))
+	}
+	return "/opt/rocm"
+}
+
 // runRocminfo executes `rocminfo` and returns its output, or "" if it is not
 // available.
 func runRocminfo() string {
 	var path string
 	if p, err := exec.LookPath("rocminfo"); err == nil {
 		path = p
-	} else if _, err := os.Stat("/opt/rocm/bin/rocminfo"); err == nil {
-		path = "/opt/rocm/bin/rocminfo"
 	} else {
-		klog.V(1).Infof("rocminfo not found; assuming any AMD GPU is a discrete GPU")
-		return ""
+		candidate := filepath.Join(rocmInstallDir(), "bin", "rocminfo")
+		if _, err := os.Stat(candidate); err == nil {
+			path = candidate
+		} else {
+			klog.V(1).Infof("rocminfo not found; assuming any AMD GPU is a discrete GPU")
+			return ""
+		}
 	}
 	cmd := exec.Command(path)
 	output, err := cmd.CombinedOutput()

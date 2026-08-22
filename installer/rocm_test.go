@@ -5,6 +5,8 @@ package installer
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -142,5 +144,63 @@ func TestRocminfoField(t *testing.T) {
 	}
 	if got := rocminfoField(block, "Memory Properties:"); got != "" {
 		t.Errorf("rocminfoField(Memory Properties:) = %q, want empty", got)
+	}
+}
+
+func TestRocmInstallDirROCM_PATH(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ROCM_PATH", dir)
+	t.Setenv("PATH", "") // Ensure rocminfo is not found in PATH.
+	if got := rocmInstallDir(); got != dir {
+		t.Fatalf("rocmInstallDir() = %q, want %q", got, dir)
+	}
+}
+
+func TestRocmInstallDirFromPath(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0755); err != nil {
+		t.Fatalf("failed to create %q: %v", bin, err)
+	}
+	rocminfo := filepath.Join(bin, "rocminfo")
+	if err := os.WriteFile(rocminfo, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("failed to write %q: %v", rocminfo, err)
+	}
+	t.Setenv("ROCM_PATH", "")
+	t.Setenv("PATH", bin)
+	if got := rocmInstallDir(); got != root {
+		t.Fatalf("rocmInstallDir() = %q, want %q", got, root)
+	}
+}
+
+func TestRocmInstallDirDefault(t *testing.T) {
+	t.Setenv("ROCM_PATH", "")
+	t.Setenv("PATH", "")
+	if got := rocmInstallDir(); got != "/opt/rocm" {
+		t.Fatalf("rocmInstallDir() = %q, want /opt/rocm", got)
+	}
+}
+
+func TestRocmDetectedVersion(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".info"), 0755); err != nil {
+		t.Fatalf("failed to create .info dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".info", "version"), []byte("7.2.4\n"), 0644); err != nil {
+		t.Fatalf("failed to write version file: %v", err)
+	}
+	t.Setenv("ROCM_PATH", root)
+	t.Setenv("PATH", "")
+	if got, err := RocmDetectedVersion(); err != nil || got != "7.2.4" {
+		t.Fatalf("RocmDetectedVersion() = %q, %v; want %q, nil", got, err, "7.2.4")
+	}
+}
+
+func TestRocmDetectedVersionNotFound(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ROCM_PATH", root)
+	t.Setenv("PATH", "")
+	if got, err := RocmDetectedVersion(); err == nil || got != "" {
+		t.Fatalf("RocmDetectedVersion() = %q, %v; want empty and error", got, err)
 	}
 }
