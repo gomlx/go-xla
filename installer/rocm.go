@@ -112,15 +112,14 @@ func rocminfoHasDiscreteGPU(output string) bool {
 // rocminfoField returns the value of the given field (e.g. "Name:") within a
 // rocminfo agent block, or "" if not found.
 func rocminfoField(block, field string) string {
-	idx := strings.Index(block, field)
-	if idx < 0 {
-		return ""
+	for _, line := range strings.Split(block, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, field) {
+			continue
+		}
+		return strings.TrimSpace(line[len(field):])
 	}
-	rest := block[idx+len(field):]
-	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-		rest = rest[:nl]
-	}
-	return strings.TrimSpace(rest)
+	return ""
 }
 
 func init() {
