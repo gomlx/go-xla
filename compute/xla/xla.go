@@ -170,7 +170,12 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	// FInd plugin.
 	if !filepath.IsAbs(pluginName) {
 		if autoInstall {
-			err := AutoInstall()
+			var err error
+			if pluginName == "" {
+				err = AutoInstall()
+			} else {
+				err = AutoInstallPlugin(pluginName)
+			}
 			if err != nil {
 				return nil, errors.WithMessagef(err, "backend %q failed to auto-install default plugins", BackendName)
 			}
@@ -409,6 +414,12 @@ const NoAutoInstallEnv = "GOMLX_NO_AUTO_INSTALL"
 // you can use the AutoInstall function from go-xla's installer package directly.
 func AutoInstall() error {
 	return installer.AutoInstall("", true, installer.Normal)
+}
+
+// AutoInstallPlugin automatically installs only the specified PJRT plugin (e.g. "cpu", "cuda", "rocm", "tpu")
+// for the current platform.
+func AutoInstallPlugin(pluginName string) error {
+	return installer.AutoInstallPlugin(pluginName, "", true, installer.Normal)
 }
 
 // EnableAutoInstall sets whether AutoInstall should be triggered automatically for GetAvailablePlugins or New.
