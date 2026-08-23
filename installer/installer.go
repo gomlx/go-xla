@@ -69,6 +69,29 @@ func AutoInstall(installPath string, useCache bool, verbosity VerbosityLevel) er
 	return firstErr
 }
 
+// AutoInstallPlugin automatically installs only the specified PJRT plugin (e.g. "cpu", "cuda", "rocm", "tpu")
+// for the current platform.
+//
+// If no auto-installer exists for pluginName, it returns nil without error.
+func AutoInstallPlugin(pluginName, installPath string, useCache bool, verbosity VerbosityLevel) error {
+	installer, found := autoInstallers[pluginName]
+	if !found {
+		return nil
+	}
+	if installPath == "" {
+		var err error
+		installPath, err = DefaultHomeLibPath()
+		if err != nil {
+			return err
+		}
+	}
+	goxlaInstallPath := filepath.Join(installPath, "go-xla")
+	if err := installer(goxlaInstallPath, useCache, verbosity); err != nil {
+		return errors.WithMessagef(err, "failed to auto-install %q", pluginName)
+	}
+	return nil
+}
+
 // DefaultHomeLibPath returns the default user-local library directory ("~/.local/lib" in Linux)
 //
 // This is the directory used by AutoInstall if the installPath is empty.

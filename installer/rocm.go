@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,18 +32,73 @@ const ROCmBaseURL = "https://repo.radeon.com/rocm/manylinux"
 // for ML workloads, so they are ignored.
 //
 // It checks for the presence of the /dev/kfd device file (the AMD ROCm compute
-// device) and then parses `rocminfo` to tell a discrete GPU apart from an APU.
+// device), verifies if there is a discrete GPU (via KFD topology sysfs properties
+// or rocminfo), and checks that ROCm is actually installed on the machine.
 var HasAMDGPU = sync.OnceValue[bool](func() bool {
 	if _, err := os.Stat("/dev/kfd"); err != nil {
 		return false
 	}
-	output := runRocminfo()
-	if output == "" {
-		// Can't run rocminfo; assume the AMD GPU is usable.
-		return true
+	// Check if a discrete GPU is found via KFD sysfs topology.
+	hasDiscrete, ok := kfdTopologyHasDiscreteGPU()
+	if ok {
+		if !hasDiscrete {
+			return false
+		}
+	} else {
+		// Fallback to rocminfo if sysfs topology is not accessible.
+		output := runRocminfo()
+		if output != "" && !rocminfoHasDiscreteGPU(output) {
+			return false
+		}
 	}
-	return rocminfoHasDiscreteGPU(output)
+	// Verify that ROCm is actually installed (version file is present).
+	if _, err := RocmDetectedVersion(); err != nil {
+		return false
+	}
+	return true
 })
+
+// kfdTopologyHasDiscreteGPU inspects /sys/class/kfd/kfd/topology/nodes/*/properties
+// to determine if there is a discrete AMD GPU.
+// Returns (hasDiscrete, ok) where ok is true if the topology nodes could be read.
+// A node represents a discrete GPU if simd_count > 0 and local_mem_size > 0 (VRAM).
+// APUs share system memory and have local_mem_size = 0.
+func kfdTopologyHasDiscreteGPU() (bool, bool) {
+	nodes, err := filepath.Glob("/sys/class/kfd/kfd/topology/nodes/*/properties")
+	if err != nil || len(nodes) == 0 {
+		return false, false
+	}
+	hasGPU := false
+	for _, propFile := range nodes {
+		data, err := os.ReadFile(propFile)
+		if err != nil {
+			continue
+		}
+		simdCount, hasSimd := parseKFDProperty(string(data), "simd_count")
+		localMemSize, hasMem := parseKFDProperty(string(data), "local_mem_size")
+		if hasSimd && hasMem && simdCount > 0 {
+			hasGPU = true
+			if localMemSize > 0 {
+				return true, true
+			}
+		}
+	}
+	return false, hasGPU
+}
+
+// parseKFDProperty parses a key-value property from KFD node properties content.
+func parseKFDProperty(content, key string) (uint64, bool) {
+	for _, line := range strings.Split(content, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == key {
+			val, err := strconv.ParseUint(fields[1], 10, 64)
+			if err == nil {
+				return val, true
+			}
+		}
+	}
+	return 0, false
+}
 
 // rocmInstallDir returns the ROCm installation directory. It is used to locate
 // `rocminfo` and the ROCm version file when ROCm is not installed in the
