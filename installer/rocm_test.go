@@ -204,3 +204,22 @@ func TestRocmDetectedVersionNotFound(t *testing.T) {
 		t.Fatalf("RocmDetectedVersion() = %q, %v; want empty and error", got, err)
 	}
 }
+
+func TestParseKFDProperty(t *testing.T) {
+	content := `cpu_cores_count 0
+simd_count 4
+lds_size_in_kb 64
+local_mem_size 0
+max_engine_clk_ccompute 5756
+`
+	if val, ok := parseKFDProperty(content, "simd_count"); !ok || val != 4 {
+		t.Errorf("parseKFDProperty(simd_count) = (%d, %v), want (4, true)", val, ok)
+	}
+	if val, ok := parseKFDProperty(content, "local_mem_size"); !ok || val != 0 {
+		t.Errorf("parseKFDProperty(local_mem_size) = (%d, %v), want (0, true)", val, ok)
+	}
+	if val, ok := parseKFDProperty(content, "non_existent"); ok || val != 0 {
+		t.Errorf("parseKFDProperty(non_existent) = (%d, %v), want (0, false)", val, ok)
+	}
+}
+
