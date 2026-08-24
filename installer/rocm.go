@@ -8,15 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
-	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
-	"sync"
 
+	"github.com/gomlx/go-xla/internal/rocm"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -32,151 +29,14 @@ const ROCmBaseURL = "https://repo.radeon.com/rocm/manylinux"
 // for ML workloads, so they are ignored.
 //
 // It checks for the presence of the /dev/kfd device file (the AMD ROCm compute
-// device), verifies if there is a discrete GPU (via KFD topology sysfs properties
-// or rocminfo), and checks that ROCm is actually installed on the machine.
-var HasAMDGPU = sync.OnceValue[bool](func() bool {
-	if _, err := os.Stat("/dev/kfd"); err != nil {
-		return false
-	}
-	// Check if a discrete GPU is found via KFD sysfs topology.
-	hasDiscrete, ok := kfdTopologyHasDiscreteGPU()
-	if ok {
-		if !hasDiscrete {
-			return false
-		}
-	} else {
-		// Fallback to rocminfo if sysfs topology is not accessible.
-		output := runRocminfo()
-		if output != "" && !rocminfoHasDiscreteGPU(output) {
-			return false
-		}
-	}
-	// Verify that ROCm is actually installed (version file is present).
-	if _, err := RocmDetectedVersion(); err != nil {
-		return false
-	}
-	return true
-})
+// device), verifies that ROCm drivers are properly installed (`rocminfo` is installed
+// and the drivers with a proper version is found), and then uses `rocminfo` to
+// determine if there is a discrete ROCm GPU.
+var HasAMDGPU = rocm.HasAMDGPU
 
-// kfdTopologyHasDiscreteGPU inspects /sys/class/kfd/kfd/topology/nodes/*/properties
-// to determine if there is a discrete AMD GPU.
-// Returns (hasDiscrete, ok) where ok is true if the topology nodes could be read.
-// A node represents a discrete GPU if simd_count > 0 and local_mem_size > 0 (VRAM).
-// APUs share system memory and have local_mem_size = 0.
-func kfdTopologyHasDiscreteGPU() (bool, bool) {
-	nodes, err := filepath.Glob("/sys/class/kfd/kfd/topology/nodes/*/properties")
-	if err != nil || len(nodes) == 0 {
-		return false, false
-	}
-	hasGPU := false
-	for _, propFile := range nodes {
-		data, err := os.ReadFile(propFile)
-		if err != nil {
-			continue
-		}
-		simdCount, hasSimd := parseKFDProperty(string(data), "simd_count")
-		localMemSize, hasMem := parseKFDProperty(string(data), "local_mem_size")
-		if hasSimd && hasMem && simdCount > 0 {
-			hasGPU = true
-			if localMemSize > 0 {
-				return true, true
-			}
-		}
-	}
-	return false, hasGPU
-}
-
-// parseKFDProperty parses a key-value property from KFD node properties content.
-func parseKFDProperty(content, key string) (uint64, bool) {
-	for _, line := range strings.Split(content, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == key {
-			val, err := strconv.ParseUint(fields[1], 10, 64)
-			if err == nil {
-				return val, true
-			}
-		}
-	}
-	return 0, false
-}
-
-// rocmInstallDir returns the ROCm installation directory. It is used to locate
-// `rocminfo` and the ROCm version file when ROCm is not installed in the
-// default /opt/rocm location.
-//
-// It checks, in order:
-//  1. The ROCM_PATH environment variable, if set to an existing directory.
-//  2. The install root inferred from the `rocminfo` binary found in PATH
-//     (its parent directory's parent, e.g. <root>/bin/rocminfo -> <root>).
-//  3. The default /opt/rocm.
-func rocmInstallDir() string {
-	if dir := os.Getenv("ROCM_PATH"); dir != "" {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			return dir
-		}
-	}
-	if p, err := exec.LookPath("rocminfo"); err == nil {
-		if real, err := filepath.EvalSymlinks(p); err == nil {
-			p = real
-		}
-		return filepath.Dir(filepath.Dir(p))
-	}
-	return "/opt/rocm"
-}
-
-// runRocminfo executes `rocminfo` and returns its output, or "" if it is not
-// available.
-func runRocminfo() string {
-	var cmdPath string
-	if p, err := exec.LookPath("rocminfo"); err == nil {
-		cmdPath = p
-	} else {
-		candidate := filepath.Join(rocmInstallDir(), "bin", "rocminfo")
-		if _, err := os.Stat(candidate); err == nil {
-			cmdPath = candidate
-		} else {
-			klog.V(1).Infof("rocminfo not found; assuming any AMD GPU is a discrete GPU")
-			return ""
-		}
-	}
-	cmd := exec.Command(cmdPath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		klog.V(1).Infof("rocminfo failed to execute: %v", err)
-		return ""
-	}
-	return string(output)
-}
-
-// rocminfoHasDiscreteGPU parses `rocminfo` output and reports whether at least
-// one AMD GPU agent is a discrete GPU (as opposed to an integrated APU, which
-// reports "Memory Properties: APU").
-func rocminfoHasDiscreteGPU(output string) bool {
-	blocks := strings.Split(output, "*******")
-	for _, block := range blocks {
-		name := rocminfoField(block, "Name:")
-		if !strings.HasPrefix(name, "gfx") {
-			continue // Not a GPU agent (e.g. the CPU agent).
-		}
-		if rocminfoField(block, "Memory Properties:") != "APU" {
-			return true
-		}
-	}
-	return false
-}
-
-// rocminfoField returns the value of the given field (e.g. "Name:") within a
-// rocminfo agent block, or "" if not found.
-func rocminfoField(block, field string) string {
-	for _, line := range strings.Split(block, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, field) {
-			continue
-		}
-		return strings.TrimSpace(line[len(field):])
-	}
-	return ""
-}
+// RocmDetectedVersion returns the installed ROCm version (e.g. "7.2.4"), read
+// from the ROCm version file, located using rocm.InstallDir.
+var RocmDetectedVersion = rocm.DetectedVersion
 
 func init() {
 	autoInstallers["rocm"] = RocmAutoInstall
@@ -289,27 +149,6 @@ func RocmInstall(version, installPath string, useCache bool, verbosity Verbosity
 	case Quiet:
 	}
 	return nil
-}
-
-// RocmDetectedVersion returns the installed ROCm version (e.g. "7.2.4"), read
-// from the ROCm version file, located using rocmInstallDir.
-func RocmDetectedVersion() (string, error) {
-	root := rocmInstallDir()
-	for _, p := range []string{
-		filepath.Join(root, ".info", "version"),
-		filepath.Join(root, "lib", ".info", "version"),
-	} {
-		b, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		version := strings.TrimSpace(string(b))
-		if version != "" {
-			return version, nil
-		}
-	}
-	return "", errors.Errorf("could not detect the installed ROCm version: "+
-		"no version file found under %q", root)
 }
 
 // RocmGetWheelURL returns the download URL of the ROCm PJRT wheel for the given

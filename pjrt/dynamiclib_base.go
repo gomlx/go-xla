@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gomlx/go-xla/internal/rocm"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -233,7 +234,7 @@ func checkPlugin(name, pluginPath string) (err error) {
 	if IsCUDAName(name) && !hasNvidiaGPU() {
 		return errors.Errorf("plugin %q (%q): no GPU card found, skipping", name, pluginPath)
 	}
-	if IsROCMName(name) && !hasAMDGPU() {
+	if IsROCMName(name) && !rocm.HasAMDGPU() {
 		return errors.Errorf("plugin %q (%q): no discrete AMD GPU found, skipping", name, pluginPath)
 	}
 
