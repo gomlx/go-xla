@@ -49,14 +49,14 @@ The PJRT comes in the form of a _plugin_, a dynamically linked library (`.so` fi
 `.dylib` in Darwin, or `.dll` in Windows). Typically, there is one plugin per hardware you are supporting. 
 E.g.: there are PJRT plugins for CPU (Linux/amd64 and macOS for now, but likely it could be compiled for
 other CPUs -- SIMD/AVX are well-supported), for TPUs (Google's accelerator), 
-GPUs (Nvidia is well-supported; there are AMD and Intel's PJRT plugins, but they were not tested), 
+GPUs (Nvidia and AMD ROCm are well-supported; there are Intel's PJRT plugins, but they were not tested), 
 and others are in development. Some PJRT plugins are not open-source, but are available for download.
 
 The **go-xla** project provides the package `github.com/gomlx/go-xla/pjrt`, 
 a Go API for dynamically loading and calling the **PJRT** runtime.
 It also provides a installer (`github.com/gomlx/go-xla/cmd/pjrt_installer`) or library (`github.com/gomlx/go-xla/installer`) to 
 auto-install (download pre-compiled binaries) **PJRT** plugins for CPU (from GitHub), 
-CUDA (from pypi.org Jax pacakges) and TPU (also from pypi.org).
+CUDA (from pypi.org Jax packages), ROCm (from AMD's manylinux repository) and TPU (also from pypi.org).
 
 ### **StableHLO** - "Stable High Level Optimization" (?)
 
@@ -87,8 +87,8 @@ See details in [compute/xla/README.md](https://github.com/gomlx/go-xla/blob/mast
 
 ### Package `installer` and `cmd/pjrt_installer`
 
-Installs latest pre-built PJRT for CPU, CUDA (using Jax distribution in pypi.org) or TPU (also using Jax distribution
-form pypi.org) .
+Installs latest pre-built PJRT for CPU, CUDA (using Jax distribution in pypi.org), ROCm (using Jax
+distribution from AMD's manylinux repository) or TPU (also using Jax distribution form pypi.org) .
 
 ## 🗺️ How to use it?
 

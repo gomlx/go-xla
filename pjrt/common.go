@@ -18,3 +18,9 @@ func IsCUDAName(name string) bool {
 	return strings.Contains(strings.ToUpper(name), "CUDA") ||
 		strings.Contains(strings.ToUpper(name), "NVIDIA")
 }
+
+// IsROCMName tries to guess that the plugin named is associated with AMD ROCm.
+func IsROCMName(name string) bool {
+	return strings.Contains(strings.ToUpper(name), "ROCM") ||
+		strings.Contains(strings.ToUpper(name), "AMD")
+}
