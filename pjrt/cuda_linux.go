@@ -19,7 +19,7 @@ import (
 // hasNvidiaGPU tries to guess if there is an actual Nvidia GPU installed (as opposed to only the drivers/PJRT
 // file installed, but no actual hardware).
 // It does that by checking for the presence of the device files in /dev/nvidia*.
-var hasNvidiaGPU = sync.OnceValue[bool](func() bool {
+var hasNvidiaGPU = sync.OnceValue(func() bool {
 	matches, err := filepath.Glob("/dev/nvidia*")
 	if err != nil {
 		klog.Errorf("Failed to figure out if there is an Nvidia GPU installed while searching for files matching \"/dev/nvidia*\": %v", err)
