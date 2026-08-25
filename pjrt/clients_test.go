@@ -1,13 +1,16 @@
 package pjrt
 
 import (
+	"embed"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/gomlx/go-xla/internal/protos/hlo"
 	"google.golang.org/protobuf/proto"
 )
+
+//go:embed test_hlo.pb test_tuple_hlo.pb
+var fs embed.FS
 
 type testFileInfo struct {
 	name        string
@@ -65,7 +68,7 @@ func TestCompileAndExecute(t *testing.T) {
 		fmt.Printf("Program: %s\n", programTest.name)
 
 		// Load test program.
-		hloBin, err := os.ReadFile(programTest.name)
+		hloBin, err := fs.ReadFile(programTest.name)
 		requireNoError(t, err)
 		hloProto := &hlo.HloModuleProto{}
 		requireNoError(t, proto.Unmarshal(hloBin, hloProto), "Unmarshalling HloModuleProto")
