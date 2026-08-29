@@ -128,7 +128,11 @@ var Capabilities = compute.Capabilities{
 	},
 
 	Functions:   true,
-	DynamicAxes: false,
+	DynamicAxes: false, // Deprecated.
+
+	// For now set to to DynamicShapesNone, but XLA does support compile.DynamicShapesRecompiling,
+	// it's not implemented yet.
+	DynamicShapes: compute.DynamicShapesNone,
 
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:       true,

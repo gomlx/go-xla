@@ -5,7 +5,6 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/types/shapes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTensorLiteral_ToStableHLO(t *testing.T) {
@@ -51,7 +50,9 @@ func TestTensorLiteral_ToStableHLO(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tl := newTensorLiteralFromFlatAndShape(tt.value, tt.shape)
 			actual := tl.ToStableHLO()
-			require.Equal(t, tt.expected, actual)
+			if actual != tt.expected {
+				t.Errorf("got %q, want %q", actual, tt.expected)
+			}
 		})
 	}
 }

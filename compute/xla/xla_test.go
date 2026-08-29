@@ -12,7 +12,6 @@ import (
 	"github.com/gomlx/compute/support/backendtest"
 	"github.com/gomlx/compute/support/testutil"
 	"github.com/gomlx/go-xla/compute/xla"
-	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2"
 )
 
@@ -59,8 +58,12 @@ func TestCompileAndRun(t *testing.T) {
 		y0, err := testutil.Exec1(backend, nil, func(f compute.Function, params []compute.Value) (compute.Value, error) {
 			return f.Constant([]float32{-7})
 		})
-		assert.NoError(t, err)
-		assert.Equal(t, float32(-7), y0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := y0, float32(-7); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	})
 }
 
@@ -81,7 +84,9 @@ func TestNewWithOptions(t *testing.T) {
 	backend, err := xla.NewWithOptions("cpu", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.True(t, backend.HasSharedBuffers())
+		if !backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be true")
+		}
 	} else {
 		t.Logf("cpu plugin not available, skipping test: %v", err)
 	}
@@ -90,65 +95,87 @@ func TestNewWithOptions(t *testing.T) {
 	backend, err = xla.NewWithOptions("cpu,shared_buffers=false", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.False(t, backend.HasSharedBuffers())
+		if backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be false")
+		}
 	}
 
 	// Test cpu with shared_buffers=0
 	backend, err = xla.NewWithOptions("cpu,shared_buffers=0", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.False(t, backend.HasSharedBuffers())
+		if backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be false")
+		}
 	}
 
 	// Test cpu with shared_buffers=true
 	backend, err = xla.NewWithOptions("cpu,shared_buffers=true", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.True(t, backend.HasSharedBuffers())
+		if !backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be true")
+		}
 	}
 
 	// Test cpu with shared_buffers (no value, should default to true)
 	backend, err = xla.NewWithOptions("cpu,shared_buffers", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.True(t, backend.HasSharedBuffers())
+		if !backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be true")
+		}
 	}
 
 	// Test cpu with noshared_buffers
 	backend, err = xla.NewWithOptions("cpu,noshared_buffers", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.False(t, backend.HasSharedBuffers())
+		if backend.HasSharedBuffers() {
+			t.Errorf("expected HasSharedBuffers to be false")
+		}
 	}
 
 	// Test cpu with notf32
 	backend, err = xla.NewWithOptions("cpu,notf32", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.False(t, backend.DotGeneralUseTF32)
+		if backend.DotGeneralUseTF32 {
+			t.Errorf("expected DotGeneralUseTF32 to be false")
+		}
 	}
 
 	// Test cpu with tf32=false
 	backend, err = xla.NewWithOptions("cpu,tf32=false", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.False(t, backend.DotGeneralUseTF32)
+		if backend.DotGeneralUseTF32 {
+			t.Errorf("expected DotGeneralUseTF32 to be false")
+		}
 	}
 
 	// Test cpu with tf32 (no value, should default to true)
 	backend, err = xla.NewWithOptions("cpu,tf32", nil)
 	if err == nil {
 		defer backend.Finalize()
-		assert.True(t, backend.DotGeneralUseTF32)
+		if !backend.DotGeneralUseTF32 {
+			t.Errorf("expected DotGeneralUseTF32 to be true")
+		}
 	}
 
 	// Test help requested via pluginName
 	_, err = xla.NewWithOptions("help", nil)
-	assert.Error(t, err)
-	assert.Equal(t, "Help requested", err.Error())
+	if err == nil {
+		t.Errorf("expected error for help")
+	} else if err.Error() != "Help requested" {
+		t.Errorf("expected %q, got %q", "Help requested", err.Error())
+	}
 
 	// Test help requested via option
 	_, err = xla.NewWithOptions("cpu,help", nil)
-	assert.Error(t, err)
-	assert.Equal(t, "Help requested", err.Error())
+	if err == nil {
+		t.Errorf("expected error for cpu,help")
+	} else if err.Error() != "Help requested" {
+		t.Errorf("expected %q, got %q", "Help requested", err.Error())
+	}
 }

@@ -3,9 +3,8 @@
 package xla
 
 import (
+	"slices"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestParseOptions(t *testing.T) {
@@ -18,28 +17,60 @@ func TestParseOptions(t *testing.T) {
 	}
 
 	val, found, err := parseOptions[bool]("foo", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.True(t, val)
-	assert.NotContains(t, opts, "foo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if !val {
+		t.Errorf("expected val=true")
+	}
+	if _, ok := opts["foo"]; ok {
+		t.Errorf("expected 'foo' to be removed from opts")
+	}
 
 	val, found, err = parseOptions[bool]("bar", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.False(t, val)
-	assert.NotContains(t, opts, "bar")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if val {
+		t.Errorf("expected val=false")
+	}
+	if _, ok := opts["bar"]; ok {
+		t.Errorf("expected 'bar' to be removed from opts")
+	}
 
 	val, found, err = parseOptions[bool]("baz", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.True(t, val)
-	assert.NotContains(t, opts, "baz")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if !val {
+		t.Errorf("expected val=true")
+	}
+	if _, ok := opts["baz"]; ok {
+		t.Errorf("expected 'baz' to be removed from opts")
+	}
 
 	val, found, err = parseOptions[bool]("fizz", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.False(t, val)
-	assert.NotContains(t, opts, "nofizz")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if val {
+		t.Errorf("expected val=false")
+	}
+	if _, ok := opts["nofizz"]; ok {
+		t.Errorf("expected 'nofizz' to be removed from opts")
+	}
 
 	// Test []int64 option
 	opts = map[string]string{
@@ -51,29 +82,59 @@ func TestParseOptions(t *testing.T) {
 	}
 
 	valList, found, err := parseOptions[[]int64]("devices1", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, []int64{0, 1, 2}, valList)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if want := []int64{0, 1, 2}; !slices.Equal(valList, want) {
+		t.Errorf("got %v, want %v", valList, want)
+	}
 
 	valList, found, err = parseOptions[[]int64]("devices2", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, []int64{3, 4, 5}, valList)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if want := []int64{3, 4, 5}; !slices.Equal(valList, want) {
+		t.Errorf("got %v, want %v", valList, want)
+	}
 
 	valList, found, err = parseOptions[[]int64]("devices3", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, []int64{6, 7, 8}, valList)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if want := []int64{6, 7, 8}; !slices.Equal(valList, want) {
+		t.Errorf("got %v, want %v", valList, want)
+	}
 
 	valList, found, err = parseOptions[[]int64]("devices4", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, []int64{9}, valList)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if want := []int64{9}; !slices.Equal(valList, want) {
+		t.Errorf("got %v, want %v", valList, want)
+	}
 
 	valList, found, err = parseOptions[[]int64]("devices5", opts)
-	assert.NoError(t, err)
-	assert.True(t, found)
-	assert.Nil(t, valList)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Errorf("expected found=true")
+	}
+	if valList != nil {
+		t.Errorf("expected valList to be nil, got %v", valList)
+	}
 
 	// Test error cases
 	opts = map[string]string{
@@ -82,8 +143,12 @@ func TestParseOptions(t *testing.T) {
 	}
 
 	_, _, err = parseOptions[bool]("bad_bool", opts)
-	assert.Error(t, err)
+	if err == nil {
+		t.Errorf("expected error for bad_bool")
+	}
 
 	_, _, err = parseOptions[[]int64]("bad_int", opts)
-	assert.Error(t, err)
+	if err == nil {
+		t.Errorf("expected error for bad_int")
+	}
 }

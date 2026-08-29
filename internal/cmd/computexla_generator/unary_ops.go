@@ -53,7 +53,8 @@ var (
 
 	UnaryOpsToExclude = sets.MakeWith(
 		"Identity", "Conj", "IsNaN",
-		"Abs", // Abs is excluded because we special-handle values of complex types.
+		"Abs",          // Abs is excluded because we special-handle values of complex types.
+		"DynamicShape", // Not available in XLA.
 	)
 
 	unaryOpsTemplate = template.Must(template.New(unaryOpsFile).Parse(`

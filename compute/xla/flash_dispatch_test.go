@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSelectFMHAVariant_StandardCausal(t *testing.T) {
@@ -47,9 +46,13 @@ func TestSelectFMHAVariant_RejectsF32(t *testing.T) {
 // ErrNotImplemented so the caller falls back to the decomposed path. CPU, Mac-runnable.
 func TestSelectFMHAVariant_FP8NotImplemented(t *testing.T) {
 	_, err := selectFMHAVariant("fmha", dtypes.F8E4M3FN, &compute.ScaledDotProductAttentionConfig{Causal: true})
-	require.True(t, compute.IsNotImplemented(err), "fp8 must be NotImplemented (paused), got %v", err)
+	if !compute.IsNotImplemented(err) {
+		t.Errorf("fp8 must be NotImplemented (paused), got %v", err)
+	}
 	_, err = selectFMHAVariant("fmha", dtypes.F8E5M2, &compute.ScaledDotProductAttentionConfig{Causal: true})
-	require.True(t, compute.IsNotImplemented(err), "fp8 e5m2 must be NotImplemented (paused), got %v", err)
+	if !compute.IsNotImplemented(err) {
+		t.Errorf("fp8 e5m2 must be NotImplemented (paused), got %v", err)
+	}
 }
 
 // TestSelectFMHAVariant_SeqLenPadding confirms that both-seqlens routes to PADDING (non-causal)
@@ -139,34 +142,52 @@ func TestValidateSeqLen(t *testing.T) {
 	t.Run("wrong dtype (bf16)", func(t *testing.T) {
 		v := nodeWithShape(shapes.Make(dtypes.BFloat16, batch))
 		err := validateSeqLen("QuerySeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must be int32")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "must be int32") {
+			t.Errorf("expected error containing 'must be int32', got %q", err.Error())
+		}
 	})
 
 	t.Run("wrong rank (rank-2)", func(t *testing.T) {
 		v := nodeWithShape(shapes.Make(dtypes.Int32, batch, 1))
 		err := validateSeqLen("KeyValueSeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "rank-1")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "rank-1") {
+			t.Errorf("expected error containing 'rank-1', got %q", err.Error())
+		}
 	})
 
 	t.Run("wrong length", func(t *testing.T) {
 		v := nodeWithShape(shapes.Make(dtypes.Int32, batch+1))
 		err := validateSeqLen("QuerySeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "!= batch size")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "!= batch size") {
+			t.Errorf("expected error containing '!= batch size', got %q", err.Error())
+		}
 	})
 
 	t.Run("not a *Node", func(t *testing.T) {
 		var v compute.Value = struct{}{}
 		err := validateSeqLen("QuerySeqLen", v, batch)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "*Node")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "*Node") {
+			t.Errorf("expected error containing '*Node', got %q", err.Error())
+		}
 	})
 
 	t.Run("valid int32 [B]", func(t *testing.T) {
 		v := nodeWithShape(shapes.Make(dtypes.Int32, batch))
-		require.NoError(t, validateSeqLen("QuerySeqLen", v, batch))
+		if err := validateSeqLen("QuerySeqLen", v, batch); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 }
 
@@ -197,9 +218,16 @@ func TestFlashBackendConfigV_ElementTypeFromDtype(t *testing.T) {
 		{dtypes.Float16, "F16"},
 	} {
 		v, err := selectFMHAVariant("op", tc.dtype, &compute.ScaledDotProductAttentionConfig{Causal: true})
-		require.NoError(t, err)
-		require.Equal(t, tc.want, v.elementType, "elementType for %s", tc.dtype)
+		if err != nil {
+			t.Fatalf("unexpected error for %s: %v", tc.dtype, err)
+		}
+		if v.elementType != tc.want {
+			t.Errorf("elementType for %s: got %q, want %q", tc.dtype, v.elementType, tc.want)
+		}
 		cfg := strings.ReplaceAll(flashBackendConfigV(1, 1, 8, 1.0, map[string]any{"x": 1}, v), " ", "")
-		require.Contains(t, cfg, `"element_type":"`+tc.want+`"`, "config element_type for %s", tc.dtype)
+		wantCfg := `"element_type":"` + tc.want + `"`
+		if !strings.Contains(cfg, wantCfg) {
+			t.Errorf("config element_type for %s: missing %q in %s", tc.dtype, wantCfg, cfg)
+		}
 	}
 }

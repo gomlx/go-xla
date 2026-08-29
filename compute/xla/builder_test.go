@@ -3,11 +3,11 @@
 package xla_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/testutil"
-	"github.com/stretchr/testify/require"
 )
 
 // TestBinaryOp covers the different types of automatic broadcasting for binary operations.
@@ -18,8 +18,12 @@ func TestBinaryOp(t *testing.T) {
 				result, err := testutil.Exec1(backend, []any{lhs, rhs}, func(f compute.Function, params []compute.Value) (compute.Value, error) {
 					return f.Add(params[0], params[1])
 				})
-				require.NoError(t, err)
-				require.Equal(t, want, result)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !reflect.DeepEqual(want, result) {
+					t.Errorf("got %v, want %v", result, want)
+				}
 			})
 		}
 
@@ -39,11 +43,13 @@ func TestBinaryOp(t *testing.T) {
 			}, func(f compute.Function, params []compute.Value) (compute.Value, error) {
 				return f.LogicalAnd(params[0], params[1])
 			})
-			require.NoError(t, err)
-			require.Equal(t,
-				[][]bool{{false, false}, {false, true}},
-				result)
-
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			want := [][]bool{{false, false}, {false, true}}
+			if !reflect.DeepEqual(want, result) {
+				t.Errorf("got %v, want %v", result, want)
+			}
 		})
 	})
 }

@@ -67,7 +67,7 @@ func newFunction(b *Builder, fn *stablehlo.Function, name string) *Function {
 	return &Function{
 		Function: notimplemented.Function{
 			ErrFn: func(op compute.OpType) error {
-				return errors.Errorf("%s not implemented for XLA backend", op)
+				return errors.Wrapf(compute.ErrNotImplemented, "%s not implemented for XLA backend", op)
 			},
 		},
 		builder: b,
