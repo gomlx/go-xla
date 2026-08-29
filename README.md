@@ -2,7 +2,6 @@
 
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/go-xla?tab=doc)
 [![GitHub](https://img.shields.io/github/license/gomlx/go-xla)](https://github.com/gomlx/go-xla/blob/master/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gomlx/go-xla)](https://goreportcard.com/report/github.com/gomlx/go-xla)
 [![TestStatus](https://github.com/gomlx/go-xla/actions/workflows/linux_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/go-xla/actions/workflows/linux_amd64_tests.yaml)
 [![TestStatus](https://github.com/gomlx/go-xla/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/go-xla/actions/workflows/linux_arm64_tests.yaml)
 [![TestStatus](https://github.com/gomlx/go-xla/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/go-xla/actions/workflows/darwin_tests.yaml)
