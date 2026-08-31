@@ -10,14 +10,16 @@ XLA/PJRT uses C++ written PJRT "plugins", `.so` files that implements XLA(PRJT).
 By default, the this XLA backend loads the requested plugins after the program starts and specifies the desired
 plugin name (default to "cpu") using `dlopen`.
 
-If the plugins are not available, the backend will download them automatically ("auto-install):
+If the plugins are not available, the backend can download them automatically ("auto-install")
+if the autoinstall package is imported (e.g. `import _ "github.com/gomlx/go-xla/compute/xla/autoinstall"`):
 
 - From github.com/gomlx/pjrt-cpu-binaries for CPU PJRT plugins.
-- From pypi.org, using the Jax pacakges for the CUDA and TPU PJRT plugins.
+- From pypi.org, using the Jax packages for the CUDA and TPU PJRT plugins.
 
 Auto-install has no effect if default plugins are already installed. But to control it you can:
 
-  - Call xla.AutoInstall() directly if you want to call it immediately.
+  - Import `_ "github.com/gomlx/go-xla/compute/xla/autoinstall"` to enable auto-installation.
+  - Call xla.AutoInstall() directly if you want to call it immediately (requires `autoinstall` to be imported).
   - Configure it with xla.EnableAutoInstall() if you want to enable/disable it globally (default is enabled).
   - Set GOMLX_NO_AUTO_INSTALL, which sets the global auto-install flag to false -- but it can be overridden by
     calling xla.EnableAutoInstall().

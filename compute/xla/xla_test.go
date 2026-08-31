@@ -3,6 +3,7 @@
 package xla_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -179,3 +180,57 @@ func TestNewWithOptions(t *testing.T) {
 		t.Errorf("expected %q, got %q", "Help requested", err.Error())
 	}
 }
+
+type mockInstaller struct {
+	calledAutoInstall       bool
+	calledAutoInstallPlugin string
+}
+
+func (m *mockInstaller) AutoInstall() error {
+	m.calledAutoInstall = true
+	return nil
+}
+
+func (m *mockInstaller) AutoInstallPlugin(pluginName string) error {
+	m.calledAutoInstallPlugin = pluginName
+	return nil
+}
+
+func TestAutoInstall(t *testing.T) {
+	// 1. When not registered:
+	err := xla.AutoInstall()
+	if err == nil {
+		t.Fatal("expected error when auto-installer is not registered")
+	}
+	if !errors.Is(err, xla.ErrNoAutoInstaller) {
+		t.Fatalf("expected ErrNoAutoInstaller, got: %v", err)
+	}
+
+	err = xla.AutoInstallPlugin("cuda")
+	if err == nil {
+		t.Fatal("expected error when auto-installer is not registered")
+	}
+	if !errors.Is(err, xla.ErrNoAutoInstaller) {
+		t.Fatalf("expected ErrNoAutoInstaller, got: %v", err)
+	}
+
+	// 2. When registered:
+	mock := &mockInstaller{}
+	xla.RegisterAutoInstaller(mock)
+	defer xla.RegisterAutoInstaller(nil)
+
+	if err := xla.AutoInstall(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mock.calledAutoInstall {
+		t.Errorf("expected AutoInstall to be called on mock")
+	}
+
+	if err := xla.AutoInstallPlugin("cuda"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.calledAutoInstallPlugin != "cuda" {
+		t.Errorf("expected AutoInstallPlugin to be called with 'cuda', got %q", mock.calledAutoInstallPlugin)
+	}
+}
+
