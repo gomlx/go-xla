@@ -80,6 +80,45 @@ func TestCompliance(t *testing.T) {
 	})
 }
 
+func benchAllPlugins(b *testing.B, fn func(b *testing.B, backend compute.Backend, plugin string)) {
+	envBackend := os.Getenv(compute.ConfigEnvVar)
+	if envBackend != "" {
+		backend, err := compute.New()
+		if err != nil {
+			b.Fatalf("Failed to create backend %q: %v", envBackend, err)
+		}
+		defer backend.Finalize()
+		xlaBackend := backend.(*xla.Backend)
+		fn(b, backend, xlaBackend.PluginName())
+		return
+	}
+
+	plugins := []string{"cpu", "cuda", "tpu"}
+	for _, plugin := range plugins {
+		b.Run(plugin, func(b *testing.B) {
+			backendName := fmt.Sprintf("%s:%s", xla.BackendName, plugin)
+			if err := os.Setenv(compute.ConfigEnvVar, backendName); err != nil {
+				b.Fatalf("Failed to set env %s=%s", compute.ConfigEnvVar, backendName)
+			}
+			defer os.Unsetenv(compute.ConfigEnvVar)
+
+			backend, err := compute.New()
+			if err != nil {
+				b.Skipf("Plugin %q not available: %v", plugin, err)
+				return
+			}
+			defer backend.Finalize()
+			fn(b, backend, plugin)
+		})
+	}
+}
+
+func BenchmarkCompliance(b *testing.B) {
+	benchAllPlugins(b, func(b *testing.B, backend compute.Backend, plugin string) {
+		backendtest.RunAllBenchmarks(b, backend)
+	})
+}
+
 func TestNewWithOptions(t *testing.T) {
 	// Test cpu backend default hasSharedBuffers behavior
 	backend, err := xla.NewWithOptions("cpu", nil)
@@ -233,4 +272,3 @@ func TestAutoInstall(t *testing.T) {
 		t.Errorf("expected AutoInstallPlugin to be called with 'cuda', got %q", mock.calledAutoInstallPlugin)
 	}
 }
-
