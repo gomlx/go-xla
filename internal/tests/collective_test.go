@@ -29,7 +29,7 @@ func testCollectiveOps(t *testing.T, client *pjrt.Client) {
 	}
 
 	t.Run("CollectiveBroadcast", func(t *testing.T) {
-		if strings.ToUpper(client.Plugin().Name()) == "CPU" {
+		if strings.HasSuffix(strings.ToUpper(client.Plugin().Name()), "CPU") {
 			t.Skip("Skipping CollectiveBroadcast test: it is not implemented in PJRT CPU. ")
 			return
 		}
