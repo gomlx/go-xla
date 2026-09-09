@@ -164,7 +164,7 @@ func (fn *Function) NamedInputWithShardingAndAttributes(name string, shape shape
 		}
 		value.Attributes["sdy.sharding"] = literalStr(shardingSpec.ToValueAttribute(value.shape))
 		if slices.Index(fn.Builder.meshes, shardingSpec.Mesh) == -1 {
-			meshesNames := make([]string, len(fn.Builder.meshes))
+			meshesNames := make([]string, 0, len(fn.Builder.meshes))
 			for _, mesh := range fn.Builder.meshes {
 				meshesNames = append(meshesNames, mesh.Name())
 			}
