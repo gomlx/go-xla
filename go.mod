@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/gofrs/flock v0.13.0
-	github.com/gomlx/compute v0.1.9
+	github.com/gomlx/compute v0.1.10
 	github.com/janpfeifer/go-benchmarks v0.1.1
 	github.com/pkg/errors v0.9.1
 	golang.org/x/term v0.40.0
@@ -20,11 +20,11 @@ require (
 	github.com/pascaldekloe/name v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/mod v0.35.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
+	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/tools v0.50.0 // indirect
 )
 
 tool github.com/dmarkham/enumer
