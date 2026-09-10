@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapeinference"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/go-xla/stablehlo"
@@ -388,6 +389,21 @@ func (f *Function) Concatenate(axis int, operands ...compute.Value) (compute.Val
 	return f.newNode(value), nil
 }
 
+func (f *Function) broadcastNodeToShape(node *Node, targetShape shapes.Shape) (*Node, error) {
+	if node.shape.Equal(targetShape) {
+		return node, nil
+	}
+	var broadcastAxes []int
+	if !node.shape.IsScalar() {
+		broadcastAxes = xslices.Iota(0, targetShape.Rank())
+	}
+	val, err := stablehlo.BroadcastInDim(node.value, ShapeToXLA(targetShape), broadcastAxes)
+	if err != nil {
+		return nil, err
+	}
+	return f.newNode(val), nil
+}
+
 // Where implements compute.Function interface.
 func (f *Function) Where(condition, onTrue, onFalse compute.Value) (compute.Value, error) {
 	operandsNodes, err := f.verifyAndCastValues("Where", condition, onTrue, onFalse)
@@ -396,28 +412,25 @@ func (f *Function) Where(condition, onTrue, onFalse compute.Value) (compute.Valu
 	}
 	conditionN, onTrueN, onFalseN := operandsNodes[0], operandsNodes[1], operandsNodes[2]
 
-	// Where allows onTrue and onFalse to be broadcast automatically if they are scalars, while stablehlo.Select doesn't.
-	// We perform their broadcasting here but leave the condition broadcasting to be handled by stablehlo.Select.
-	outputDims := conditionN.shape.Dimensions
-	if !onTrueN.shape.IsScalar() {
-		outputDims = onTrueN.shape.Dimensions
+	targetShape, err := shapeinference.Where(conditionN.shape, onTrueN.shape, onFalseN.shape)
+	if err != nil {
+		return nil, err
 	}
-	if !onFalseN.shape.IsScalar() {
-		outputDims = onFalseN.shape.Dimensions
+
+	condTargetShape := targetShape.Clone()
+	condTargetShape.DType = dtypes.Bool
+
+	conditionN, err = f.broadcastNodeToShape(conditionN, condTargetShape)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while broadcasting condition for op Where()")
 	}
-	if onTrueN.shape.IsScalar() && len(outputDims) > 0 {
-		onTrue, err = f.BroadcastInDim(onTrue, shapes.Make(onTrueN.shape.DType, outputDims...), nil)
-		if err != nil {
-			return nil, errors.WithMessage(err, "while broadcasting onTrue for op Where()")
-		}
-		onTrueN = onTrue.(*Node)
+	onTrueN, err = f.broadcastNodeToShape(onTrueN, targetShape)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while broadcasting onTrue for op Where()")
 	}
-	if onFalseN.shape.IsScalar() && len(outputDims) > 0 {
-		onFalse, err = f.BroadcastInDim(onFalse, shapes.Make(onTrueN.shape.DType, outputDims...), nil)
-		if err != nil {
-			return nil, errors.WithMessage(err, "while broadcasting onFalse for op Where()")
-		}
-		onFalseN = onFalse.(*Node)
+	onFalseN, err = f.broadcastNodeToShape(onFalseN, targetShape)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while broadcasting onFalse for op Where()")
 	}
 
 	// Where operation is called Select in stablehlo.
