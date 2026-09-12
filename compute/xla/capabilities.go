@@ -132,7 +132,8 @@ var Capabilities = compute.Capabilities{
 
 	// For now set to to DynamicShapesNone, but XLA does support compile.DynamicShapesRecompiling,
 	// it's not implemented yet.
-	DynamicShapes: compute.DynamicShapesNone,
+	DynamicShapes:   compute.DynamicShapesNone,
+	DynamicDimDType: dtypes.Int32,
 
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:       true,
