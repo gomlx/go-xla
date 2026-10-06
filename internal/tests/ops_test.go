@@ -523,6 +523,7 @@ func testOps(t *testing.T, client *pjrt.Client) {
 			program := must1(builder.Build())
 			fmt.Printf("%s program:\n%s", t.Name(), withLines(program))
 			outputs := compileAndExecute(t, client, program)
+			defer destroy(outputs...)
 			flat, dims, err := outputs[0].ToFlatDataAndDimensions()
 			if err != nil {
 				t.Fatalf("ToFlatDataAndDimensions error: %v", err)
@@ -667,6 +668,7 @@ func testOps(t *testing.T, client *pjrt.Client) {
 		program := must1(builder.Build())
 		fmt.Printf("%s program:\n%s", t.Name(), withLines(program))
 		outputs := compileAndExecute(t, client, program)
+		defer destroy(outputs...)
 
 		gotDims := must1(outputs[0].Dimensions())
 		fmt.Printf("\t- FFTForward output dims: %v\n", gotDims)
@@ -1241,6 +1243,7 @@ func testConstants(t *testing.T, client *pjrt.Client) {
 		program := must1(builder.Build())
 		fmt.Printf("%s program:\n%s", t.Name(), withLines(program))
 		output := compileAndExecute(t, client, program)[0]
+		defer destroy(output)
 		gotFlat, gotDim, err := output.ToFlatDataAndDimensions()
 		if err != nil {
 			t.Fatalf("ToFlatDataAndDimensions error: %v", err)
@@ -1274,6 +1277,7 @@ func testConstants(t *testing.T, client *pjrt.Client) {
 		program := must1(builder.Build())
 		fmt.Printf("%s program:\n%s", t.Name(), withLines(program))
 		output := compileAndExecute(t, client, program)[0]
+		defer destroy(output)
 		gotFlat, gotDims, err := output.ToFlatDataAndDimensions()
 		if err != nil {
 			t.Fatalf("ToFlatDataAndDimensions error: %v", err)
@@ -1372,4 +1376,10 @@ func TestFunctionCall(t *testing.T) {
 			}
 		})
 	})
+}
+
+func destroy(outputs ...*pjrt.Buffer) {
+	for _, b := range outputs {
+		must(b.Destroy())
+	}
 }
