@@ -125,6 +125,11 @@ func RegisterPreloadedPlugin(name string, api uintptr) error {
 // Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories, if it is a ":" separated list.
 // If it is not set it will search in `/usr/local/lib/gomlx` and the standard libraries directories of the
 // system (in linux in LD_LIBRARY_CONFIG and /etc/ld.so.conf file).
+//
+// Note: XLA/PJRT plugins read the `TF_CPP_MIN_LOG_LEVEL` environment variable only once when the plugin shared
+// library is loaded via `dlopen`. To suppress verbose XLA C++ logging (info/warning/error logs), set
+// `os.Setenv("TF_CPP_MIN_LOG_LEVEL", "3")` before calling `GetPlugin` or `AvailablePlugins` (the higher-level
+// `compute/xla` package does this automatically). See https://github.com/openxla/xla/issues/26466.
 func GetPlugin(name string) (*Plugin, error) {
 	return loadNamedPlugin(name)
 }

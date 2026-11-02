@@ -167,6 +167,10 @@ func pathToPluginName(pPath string) string {
 //
 // If there are plugins with the same name but different versions in different directories, it respects the order of the
 // directories given by PJRT_PLUGIN_LIBRARY_PATH or by the system.
+//
+// Note: Because this function calls `dlopen` to verify candidate plugins, XLA's C++ logging initializer will read
+// `TF_CPP_MIN_LOG_LEVEL` during this call. If you want to suppress XLA C++ logs, set `TF_CPP_MIN_LOG_LEVEL` (e.g. to "3")
+// before calling `AvailablePlugins` or `GetPlugin`.
 func AvailablePlugins() (pluginsPaths map[string]string) {
 	return searchPlugins("")
 }
