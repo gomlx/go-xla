@@ -192,15 +192,16 @@ Or run it with `go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -autoin
 
 * **Why does PJRT spit out so many logs? Can we disable it?**
   This is a great question ... imagine if every library we use decided they also want to clutter our stderr?
-  I have [an open question in Abseil about it](https://github.com/abseil/abseil-cpp/discussions/1700).
-  It may be some issue with [Abseil Logging](https://abseil.io/docs/python/guides/logging) which also has this other issue
-  of not allowing two different linked programs/libraries to call its initialization (see [Issue #1656](https://github.com/abseil/abseil-cpp/issues/1656)).
-  A hacky workaround is duplicating fd 2 and assign to Go's `os.Stderr`, and then close fd 2, so PJRT plugins
-  won't have where to log. This hack is encoded in the function `pjrt.SuppressAbseilLoggingHack()`: call it
-  before calling `pjrt.GetPlugin`. But it may have unintended consequences if some other library depends
-  on the fd 2 to work, or if a real exceptional situation needs to be reported and is not.
+  XLA/PJRT plugins read the `TF_CPP_MIN_LOG_LEVEL` environment variable during dynamic library loading (`dlopen`)
+  to configure the minimum log level (`0`=INFO, `1`=WARNING, `2`=ERROR, `3`=FATAL; see [openxla/xla#26466](https://github.com/openxla/xla/issues/26466)).
+  When using the `compute/xla` backend package, it automatically sets `TF_CPP_MIN_LOG_LEVEL=3` (if not already set)
+  before loading any plugin. If you are using the `pjrt` package directly, we recommend setting
+  `os.Setenv("TF_CPP_MIN_LOG_LEVEL", "3")` before calling `pjrt.GetPlugin` or `pjrt.AvailablePlugins`.
+  For older plugins, a hacky workaround is duplicating fd 2 and assigning it to Go's `os.Stderr`, and then closing fd 2,
+  encoded in `pjrt.SuppressAbseilLoggingHack()`.
 
 ## 🤝 Collaborating or asking for help
+
 
 Discussion in the [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 (you can [join the slack server here](https://invite.slack.golangbridge.org/)).
@@ -216,6 +217,8 @@ Environment variables that help control or debug how PJRT works:
   For compatibility with the older version, it also searches in 
   `/usr/local/lib/gomlx/pjrt`, `${HOME}/.local/lib/gomlx/pjrt`.
   In MacOS it's the equivalent under `${HOME}/Library/Application Support/`.
+* `TF_CPP_MIN_LOG_LEVEL`: Controls the C++ log threshold in XLA/PJRT (`0`=INFO, `1`=WARNING, `2`=ERROR, `3`=FATAL).
+  Read once by the plugin when `dlopen` is called. `compute/xla` defaults this to `3` if unset.
 * `XLA_FLAGS`: Used by the C++ PJRT plugins. Documentation is linked by the [Jax XLA_FLAGS page](https://docs.jax.dev/en/latest/xla_flags.html),
   but I found it easier to just set this to "--help" and it prints out the flags.
 * `XLA_DEBUG_OPTIONS`: If set, it is parsed as a `DebugOptions` proto that

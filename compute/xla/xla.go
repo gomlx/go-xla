@@ -75,6 +75,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
@@ -93,11 +94,15 @@ import (
 // The stablehlo backend also accepts the "xla", "hlo" and "pjrt" aliases.
 const BackendName = "xla"
 
-// Disable XLA logging by default by setting TF_CPP_MIN_LOG_LEVEL to 3 (above errors level), if it is not already set.
+// setDefaultLogLevel disables XLA logging by default by setting TF_CPP_MIN_LOG_LEVEL to 3 (above errors level),
+// if it is not already set.
+//
+// It is called via sync.OnceFunc before loading PJRT plugins (rather than in init) to avoid a data race on
+// environment variables when compiled as a C archive or shared library (see issue #56).
 // This won't work if the PJRT is linked statically or dynamically before the go program start (without `dlopen` that is).
 //
-// See issue https://github.com/openxla/xla/issues/26466
-func init() {
+// See issues https://github.com/openxla/xla/issues/26466 and https://github.com/gomlx/go-xla/issues/56
+var setDefaultLogLevel = sync.OnceFunc(func() {
 	const TensorflowCPPMinLogLevelEnv = "TF_CPP_MIN_LOG_LEVEL"
 	tfLogLevel := os.Getenv(TensorflowCPPMinLogLevelEnv)
 	if tfLogLevel == "" {
@@ -106,7 +111,7 @@ func init() {
 			klog.Errorf("Failed to set $%s to 3: %v", TensorflowCPPMinLogLevelEnv, err)
 		}
 	}
-}
+})
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
@@ -135,6 +140,7 @@ const optionsDocumentation = `"xla" backend extra options:
 //
 // This function triggers AutoInstall if it is enabled (the default). See EnableAutoInstall to disable it.
 func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
+	setDefaultLogLevel()
 	pluginName := config
 
 	// Make shallow copy options, since we may change it:
@@ -478,6 +484,7 @@ func EnableAutoInstall(enable bool) {
 //
 // See details in pjrt.AvailablePlugins.
 func GetAvailablePlugins() []string {
+	setDefaultLogLevel()
 	if autoInstall && registeredAutoInstaller != nil {
 		err := registeredAutoInstaller.AutoInstall()
 		if err != nil {
