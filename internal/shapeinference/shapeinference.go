@@ -1751,6 +1751,10 @@ func Pad(x, fill shapes.Shape, paddingStart, paddingEnd, paddingInterior []int) 
 		} else {
 			outputDims[axis] = paddingStart[axis] + paddingEnd[axis] + inputDim + (inputDim-1)*paddingInterior[axis]
 		}
+		if outputDims[axis] < 0 {
+			return shapes.Invalid(), errors.Errorf("Pad: resulting dimension size %d for axis %d cannot be negative (input dim=%d, start=%d, end=%d, interior=%d)",
+				outputDims[axis], axis, inputDim, paddingStart[axis], paddingEnd[axis], paddingInterior[axis])
+		}
 	}
 	return shapes.Make(x.DType, outputDims...), nil
 }

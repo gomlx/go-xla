@@ -1035,7 +1035,7 @@ func Convert(x *Value, dtype dtypes.DType) (*Value, error) {
 //   - paddingStart elements are inserted before the tensor.
 //     This value can be negative, in which case elements are removed from the start of the axis.
 //   - paddingEnd elements are appended after the tensor.
-//     This value can be negative, in which case elements are removed from the start of the axis.
+//     This value can be negative, in which case elements are removed from the end of the axis.
 //   - paddingInterior elements are inserted between consecutive elements of the tensor.
 //     So setting paddingInterior[i]=2 for axis "i" means 2 elements will be inserted between
 //     every adjacent pair of elements.
