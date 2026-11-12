@@ -1,3 +1,6 @@
+* 2026/11/12
+  - Updated `FusedQuantizedDense` signature and added `FusedQuantizedDenseVJP` stub in `compute/xla` to match `compute.FusedOps`.
+
 * 2026/08/03
   - Updated error message expectation to updates in PJRT.
   - Bumped XLA PJRT version to v0.114.0
