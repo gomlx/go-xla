@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/huh/spinner v0.0.0-20260223110133-9dc45e34a40b
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/gomlx/go-xla v0.4.29-0.20261112222946-c11d89f53f64
+	github.com/gomlx/go-xla v0.4.29-0.20261113091552-d35fa254f092
 	github.com/pkg/errors v0.9.1
 	k8s.io/klog/v2 v2.140.0
 )
@@ -28,7 +28,7 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/compute v0.1.29-0.20261112222756-256350f63771 // indirect
+	github.com/gomlx/compute v0.1.29-0.20261113091304-1512c3e4bdaa // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
