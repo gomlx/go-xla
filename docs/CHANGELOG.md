@@ -1,3 +1,6 @@
+* 2026/11/14
+  - Clone caller slices in `stablehlo.Function.ConstantFromFlatAndShape` (and validate non-slice/nil inputs in `ConstantFromFlatAndDimensions`) so mutating a slice after `Function.Constant(...)` does not corrupt constants rendered at `Compile()`/`Build()` time.
+
 * 2026/11/12
   - Updated `FusedQuantizedDense` signature and added `FusedQuantizedDenseVJP` stub in `compute/xla` to match `compute.FusedOps`.
 
