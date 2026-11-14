@@ -14,6 +14,9 @@
   3. **`compute/xla`**: Implements `compute.Backend` (registered as `"xla"` with aliases `"stablehlo"`, `"shlo"`, `"hlo"`) by lowering `compute` operations into `stablehlo` and compiling/executing them through `pjrt`.
   4. **`installer` + `cmd/pjrt_installer`**: Library and standalone CLI for downloading and installing prebuilt PJRT plugins (CPU from `gomlx/pjrt-cpu-binaries`, CUDA and TPU from PyPI JAX wheels, ROCm from AMD's manylinux wheels).
 
+When navigating the codebase of any of the related projects, read their .agents/AGENTS.md file to get more information about
+the structure of the codebase and their specific conventions.
+
 ### Documentation & Git Workflow
 
 - Record user-visible or API changes in `docs/CHANGELOG.md` (with `docs/CHANGELOG-pjrt.md` and `docs/CHANGELOG-stablehlo.md` kept as historical archives).
