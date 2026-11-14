@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/notimplemented"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-xla/stablehlo"
@@ -178,6 +179,44 @@ func (f *Function) Constant(flat any, dimensions ...int) (compute.Value, error) 
 	value, err := f.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building op Constant()")
+	}
+	return f.newNode(value), nil
+}
+
+// ConstantFromBuffer creates a constant in the function initialized from buf.
+func (f *Function) ConstantFromBuffer(buf compute.Buffer, donate bool) (compute.Value, error) {
+	if err := f.CheckValid(); err != nil {
+		return nil, err
+	}
+	if buf == nil {
+		return nil, errors.Errorf("ConstantFromBuffer: buffer is nil")
+	}
+	xlaBuf, ok := buf.(*Buffer)
+	if !ok {
+		return nil, errors.Errorf("ConstantFromBuffer: buffer (%T) does not belong to backend %q", buf, BackendName)
+	}
+	if xlaBuf.backend != f.builder.backend {
+		return nil, errors.Errorf("ConstantFromBuffer: buffer belongs to a different backend instance")
+	}
+	shape, err := xlaBuf.Shape()
+	if err != nil {
+		return nil, errors.WithMessagef(err, "ConstantFromBuffer")
+	}
+	var flat any
+	if shape.IsZeroSize() {
+		flat = dtypes.MakeAnySlice(shape.DType, 0)
+	} else {
+		flat = dtypes.MakeAnySlice(shape.DType, shape.Size())
+		if err := xlaBuf.ToFlatData(flat); err != nil {
+			return nil, errors.WithMessagef(err, "ConstantFromBuffer: failed to transfer buffer to host")
+		}
+	}
+	value, err := f.fn.ConstantFromFlatAndShape(flat, ShapeToXLA(shape))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building op ConstantFromBuffer()")
+	}
+	if donate {
+		_ = xlaBuf.Finalize()
 	}
 	return f.newNode(value), nil
 }
