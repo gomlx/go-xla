@@ -4,15 +4,16 @@
 
 `github.com/gomlx/go-xla` provides extensible Go wrappers for [OpenXLA's StableHLO](https://openxla.org/#stablehlo) and [OpenXLA's PJRT](https://openxla.org/#pjrt), an automatic PJRT plugin installer, and the `"xla"` backend implementation for [`github.com/gomlx/compute`](https://github.com/gomlx/compute).
 
-### Relationship to `gomlx/compute` and `gomlx/gomlx`
+## Related Repositories (including this one)
 
 - **[`github.com/gomlx/gomlx`](https://github.com/gomlx/gomlx)**: High-level ML framework in Go (tensors, layers, automatic differentiation, optimizers, model training loops). GoMLX delegates lower-level graph compilation and execution to a `compute.Backend`.
 - **[`github.com/gomlx/compute`](https://github.com/gomlx/compute)**: Foundational execution and backend abstraction interface (`compute.Backend`, `compute.Builder`, `compute.Function`, `compute.Executable`, `compute.Buffer`), shared `dtypes`, `shapes`, `shapeinference`, and backend compliance tests (`compute/support/backendtest`).
-- **`github.com/gomlx/go-xla` (This Repository)**: Depends **only** on `github.com/gomlx/compute` (never on `github.com/gomlx/gomlx`, to avoid circular dependencies) and is organized into four main layers:
-  1. **`stablehlo` + `types`**: Pure-Go AST builder and serializer for StableHLO MLIR text programs, including eager shape inference, closures, Shardy distributed meshes/sharding, bounded dynamic shapes, and quantization metadata.
-  2. **`pjrt`**: Low-level CGo wrapper around OpenXLA's C API (`pjrt_c_api.h`) for dynamically loading (`dlopen`) hardware PJRT plugins (`cpu`, `cuda`, `rocm`, `tpu`, etc.), compiling StableHLO/HLO modules, managing device memory, and executing computations.
-  3. **`compute/xla`**: Implements `compute.Backend` (registered as `"xla"` with aliases `"stablehlo"`, `"shlo"`, `"hlo"`) by lowering `compute` operations into `stablehlo` and compiling/executing them through `pjrt`.
-  4. **`installer` + `cmd/pjrt_installer`**: Library and standalone CLI for downloading and installing prebuilt PJRT plugins (CPU from `gomlx/pjrt-cpu-binaries`, CUDA and TPU from PyPI JAX wheels, ROCm from AMD's manylinux wheels).
+  - It also includes the "go" backend: written in pure Go, portable (including WASM), optionally supporting SIMD.
+- **`github.com/gomlx/go-xla`**: Depends **only** on `github.com/gomlx/compute` (never on `github.com/gomlx/gomlx`, to avoid circular dependencies).
+- **`github.com/gomlx/compute-onnx`**: Implements a ONNX Runtime (ORT) based backend. Supports Dynamic Shapes. Depends **only** on `github.com/gomlx/compute`
+- **`github.com/gomlx/go-darwinml`**: Implements the "mps" (Apple's MPSGraph based) and "mlx" (Apple's MLX based) backends. Depends **only** on `github.com/gomlx/compute`.
+- **`github.com/gomlx/onnx-gomlx`**: Converts `.onnx` models to GoMLX models. 
+- **`github.com/gomlx/go-huggingface`**: Hugging Face models tools: download repo files, iterate over datasets, tokenizer implementations, model implementations (using GoMLX). Currently it supports only a subset of the models ( mainly LLMs for text generation and instruction following) but is expandable.
 
 When navigating the codebase of any of the related projects, read their .agents/AGENTS.md file to get more information about
 the structure of the codebase and their specific conventions.
