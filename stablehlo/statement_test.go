@@ -1,6 +1,7 @@
 package stablehlo
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -54,5 +55,47 @@ func TestTensorLiteral_ToStableHLO(t *testing.T) {
 				t.Errorf("got %q, want %q", actual, tt.expected)
 			}
 		})
+	}
+}
+
+func TestConstantFromFlatSliceMutationAndValidation(t *testing.T) {
+	b := New("const_mutation")
+	fn := b.Main()
+
+	if _, err := fn.ConstantFromFlatAndDimensions(nil); err == nil {
+		t.Fatal("expected error for nil flat in ConstantFromFlatAndDimensions")
+	}
+	if _, err := fn.ConstantFromFlatAndDimensions(float32(5)); err == nil {
+		t.Fatal("expected error for non-slice flat in ConstantFromFlatAndDimensions")
+	}
+	if _, err := fn.ConstantFromFlatAndShape(float32(5), shapes.Make(dtypes.F32)); err == nil {
+		t.Fatal("expected error for non-slice flat in ConstantFromFlatAndShape")
+	}
+
+	scratch := []float32{1, 2, 3}
+	c1, err := fn.ConstantFromFlatAndDimensions(scratch, 3)
+	if err != nil {
+		t.Fatalf("ConstantFromFlatAndDimensions(c1) failed: %v", err)
+	}
+	scratch[0], scratch[1], scratch[2] = 10, 20, 30
+	c2, err := fn.ConstantFromFlatAndShape(scratch, shapes.Make(dtypes.F32, 3))
+	if err != nil {
+		t.Fatalf("ConstantFromFlatAndShape(c2) failed: %v", err)
+	}
+	scratch[0] = -999
+
+	if err := fn.Return(c1, c2); err != nil {
+		t.Fatalf("Return failed: %v", err)
+	}
+	mlirBytes, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	mlir := string(mlirBytes)
+	if !strings.Contains(mlir, "dense<[1.0, 2.0, 3.0]> : tensor<3xf32>") {
+		t.Errorf("expected unmutated c1 literal in MLIR, got:\n%s", mlir)
+	}
+	if !strings.Contains(mlir, "dense<[10.0, 20.0, 30.0]> : tensor<3xf32>") {
+		t.Errorf("expected unmutated c2 literal in MLIR, got:\n%s", mlir)
 	}
 }

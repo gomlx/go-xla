@@ -3,7 +3,6 @@ package stablehlo
 import (
 	"fmt"
 	"io"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -217,27 +216,36 @@ func (fn *Function) ConstantFromScalar(value any) (*Value, error) {
 
 // ConstantFromFlatAndDimensions creates a new constant statement from a flat slice with the raw values and the dimensions of the shape.
 //
-// Deprecated: use FromFlatAndShape instead, because there is not a clear 1-to-1 mapping from dtypes and Go types. In particular, there .
+// Deprecated: use ConstantFromFlatAndShape instead, because there is not a clear 1-to-1 mapping from Go types to DTypes.
 func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (*Value, error) {
 	if fn.Returned {
 		return nil, errors.Errorf("Function.Return already called for %q", fn.Name)
 	}
-	flatV := reflect.ValueOf(flat)
-	dtype := dtypes.FromGoType(flatV.Type().Elem())
-	if dtype == dtypes.INVALID {
-		return nil, errors.Errorf("unsupported constant flat values type %T -- expected a slice of a basic data type", flat)
+	if flat == nil {
+		return nil, errors.Errorf("nil value given to ConstantFromFlatAndDimensions")
+	}
+	dtype, flatLen, err := dtypes.FromAnySlice(flat)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ConstantFromFlatAndDimensions")
 	}
 	shape := shapes.Make(dtype, dimensions...)
-	if shape.Size() != flatV.Len() {
-		return nil, errors.Errorf("flat values size %d doesn't match shape size %d (%s)", flatV.Len(), shape.Size(), shape)
+	if shape.Size() != flatLen {
+		return nil, errors.Errorf("flat values size %d doesn't match shape size %d (%s)", flatLen, shape.Size(), shape)
 	}
 	return fn.ConstantFromFlatAndShape(flat, shape)
 }
 
 // ConstantFromFlatAndShape creates a new constant statement from a flat slice with the raw values of the given shape.
+// The flat slice is cloned via dtypes.CloneAnySlice so subsequent mutations by the caller do not affect the constant.
 func (fn *Function) ConstantFromFlatAndShape(flat any, shape shapes.Shape) (*Value, error) {
 	if fn.Returned {
 		return nil, errors.Errorf("Function.Return already called for %q", fn.Name)
+	}
+	if flat != nil {
+		if _, _, err := dtypes.FromAnySlice(flat); err != nil {
+			return nil, errors.Wrapf(err, "ConstantFromFlatAndShape")
+		}
+		flat = dtypes.CloneAnySlice(flat)
 	}
 	c := &Statement{
 		Builder:    fn.Builder,
