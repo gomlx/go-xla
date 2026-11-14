@@ -1,4 +1,5 @@
 * 2026/11/14
+  - Implemented `Function.ConstantFromBuffer` (`compute/xla/function.go`) using `stablehlo.Function.ConstantFromFlatAndShape` + `ToFlatData`, finalizing donated buffers when `donate == true`.
   - Clone caller slices in `stablehlo.Function.ConstantFromFlatAndShape` (and validate non-slice/nil inputs in `ConstantFromFlatAndDimensions`) so mutating a slice after `Function.Constant(...)` does not corrupt constants rendered at `Compile()`/`Build()` time.
 
 * 2026/11/12
