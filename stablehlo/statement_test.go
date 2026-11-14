@@ -68,6 +68,9 @@ func TestConstantFromFlatSliceMutationAndValidation(t *testing.T) {
 	if _, err := fn.ConstantFromFlatAndDimensions(float32(5)); err == nil {
 		t.Fatal("expected error for non-slice flat in ConstantFromFlatAndDimensions")
 	}
+	if _, err := fn.ConstantFromFlatAndShape(float32(5), shapes.Make(dtypes.F32)); err == nil {
+		t.Fatal("expected error for non-slice flat in ConstantFromFlatAndShape")
+	}
 
 	scratch := []float32{1, 2, 3}
 	c1, err := fn.ConstantFromFlatAndDimensions(scratch, 3)

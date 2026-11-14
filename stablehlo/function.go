@@ -3,14 +3,11 @@ package stablehlo
 import (
 	"fmt"
 	"io"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/dtypes/bfloat16"
-	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/internal/optypes"
 	"github.com/gomlx/go-xla/internal/shapeinference"
 	"github.com/gomlx/go-xla/types/shapes"
@@ -227,28 +224,29 @@ func (fn *Function) ConstantFromFlatAndDimensions(flat any, dimensions ...int) (
 	if flat == nil {
 		return nil, errors.Errorf("nil value given to ConstantFromFlatAndDimensions")
 	}
-	flatV := reflect.ValueOf(flat)
-	if flatV.Kind() != reflect.Slice && flatV.Kind() != reflect.Array {
-		return nil, errors.Errorf("unsupported constant flat values type %T -- expected a slice of a basic data type", flat)
-	}
-	dtype := dtypes.FromGoType(flatV.Type().Elem())
-	if dtype == dtypes.INVALID {
-		return nil, errors.Errorf("unsupported constant flat values type %T -- expected a slice of a basic data type", flat)
+	dtype, flatLen, err := dtypes.FromAnySlice(flat)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ConstantFromFlatAndDimensions")
 	}
 	shape := shapes.Make(dtype, dimensions...)
-	if shape.Size() != flatV.Len() {
-		return nil, errors.Errorf("flat values size %d doesn't match shape size %d (%s)", flatV.Len(), shape.Size(), shape)
+	if shape.Size() != flatLen {
+		return nil, errors.Errorf("flat values size %d doesn't match shape size %d (%s)", flatLen, shape.Size(), shape)
 	}
 	return fn.ConstantFromFlatAndShape(flat, shape)
 }
 
 // ConstantFromFlatAndShape creates a new constant statement from a flat slice with the raw values of the given shape.
-// The flat slice is cloned so subsequent mutations by the caller do not affect the constant.
+// The flat slice is cloned via dtypes.CloneAnySlice so subsequent mutations by the caller do not affect the constant.
 func (fn *Function) ConstantFromFlatAndShape(flat any, shape shapes.Shape) (*Value, error) {
 	if fn.Returned {
 		return nil, errors.Errorf("Function.Return already called for %q", fn.Name)
 	}
-	flat = cloneFlatSlice(flat)
+	if flat != nil {
+		if _, _, err := dtypes.FromAnySlice(flat); err != nil {
+			return nil, errors.Wrapf(err, "ConstantFromFlatAndShape")
+		}
+		flat = dtypes.CloneAnySlice(flat)
+	}
 	c := &Statement{
 		Builder:    fn.Builder,
 		Function:   fn,
@@ -262,57 +260,6 @@ func (fn *Function) ConstantFromFlatAndShape(flat any, shape shapes.Shape) (*Val
 	c.Attributes["value"] = newTensorLiteralFromFlatAndShape(flat, shape)
 	fn.Statements = append(fn.Statements, c)
 	return c.Outputs[0], nil
-}
-
-// cloneFlatSlice clones a flat slice so caller mutations after Constant creation cannot alter emitted StableHLO.
-func cloneFlatSlice(flat any) any {
-	if flat == nil {
-		return nil
-	}
-	switch s := flat.(type) {
-	case []float64:
-		return slices.Clone(s)
-	case []float32:
-		return slices.Clone(s)
-	case []float16.Float16:
-		return slices.Clone(s)
-	case []bfloat16.BFloat16:
-		return slices.Clone(s)
-	case []int:
-		return slices.Clone(s)
-	case []int64:
-		return slices.Clone(s)
-	case []int32:
-		return slices.Clone(s)
-	case []int16:
-		return slices.Clone(s)
-	case []int8:
-		return slices.Clone(s)
-	case []uint:
-		return slices.Clone(s)
-	case []uint64:
-		return slices.Clone(s)
-	case []uint32:
-		return slices.Clone(s)
-	case []uint16:
-		return slices.Clone(s)
-	case []uint8:
-		return slices.Clone(s)
-	case []bool:
-		return slices.Clone(s)
-	case []complex64:
-		return slices.Clone(s)
-	case []complex128:
-		return slices.Clone(s)
-	default:
-		v := reflect.ValueOf(flat)
-		if v.Kind() == reflect.Slice && !v.IsNil() {
-			copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-			reflect.Copy(copied, v)
-			return copied.Interface()
-		}
-		return flat
-	}
 }
 
 // Return adds a return statement to the function with the given return values.
