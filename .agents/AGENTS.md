@@ -22,6 +22,7 @@ the structure of the codebase and their specific conventions.
 - Record user-visible or API changes in `docs/CHANGELOG.md` (with `docs/CHANGELOG-pjrt.md` and `docs/CHANGELOG-stablehlo.md` kept as historical archives).
 - Keep `.agents/AGENTS.md` (symlinked from `GEMINI.md`) updated whenever architecture, conventions, or non-obvious behavior changes.
 - **Never `git commit` or `git push`** without explicit user instruction; leave changes uncommitted in the working tree for review.
+- When changing code, if not explicitly asked, always wait for the operator to review the changes before committing them.
 
 ### Coding Style & Dependencies
 
