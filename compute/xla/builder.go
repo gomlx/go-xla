@@ -295,7 +295,11 @@ func broadcastShapeForBinaryOps(
 			)
 			return
 		}
-		output.Dimensions[axis] = max(lhsDim, rhsDim)
+		if lhsDim == 1 {
+			output.Dimensions[axis] = rhsDim
+		} else {
+			output.Dimensions[axis] = lhsDim
+		}
 	}
 	return
 

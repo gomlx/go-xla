@@ -1,3 +1,6 @@
+* 2026/11/16
+  - Fixed `broadcastShapeForBinaryOps` (`compute/xla/builder.go`) when broadcasting a static unit dimension (`1`) with a zero-length dimension (`0`): output dimension is now `0` instead of `max(1, 0) == 1`.
+
 * 2026/11/14
   - Implemented `Function.ConstantFromBuffer` (`compute/xla/function.go`) using `stablehlo.Function.ConstantFromFlatAndShape` + `ToFlatData`, finalizing donated buffers when `donate == true`.
   - Clone caller slices in `stablehlo.Function.ConstantFromFlatAndShape` (and validate non-slice/nil inputs in `ConstantFromFlatAndDimensions`) so mutating a slice after `Function.Constant(...)` does not corrupt constants rendered at `Compile()`/`Build()` time.
