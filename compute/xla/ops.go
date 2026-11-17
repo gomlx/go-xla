@@ -487,21 +487,44 @@ func (f *Function) Transpose(x compute.Value, permutation ...int) (compute.Value
 	return f.newNode(value), nil
 }
 
-// RNGBitGenerator generates the given shape filled with random bits.
+// RNGBitGenerator generates the given shape filled with uniformly distributed random bits
+// using the specified Pseudo-Random Number Generator (PRNG) algorithm.
 //
-// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
-//
-// Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
-func (f *Function) RNGBitGenerator(state compute.Value, shape shapes.Shape) (newState compute.Value, values compute.Value, err error) {
+// Supported native algorithms: [compute.RNGDefault] (resolved to [compute.RNGPhilox]),
+// [compute.RNGPhilox] ([3]uint64 state), and [compute.RNGThreeFry] ([2]uint64 state).
+// Unsupported algorithms return an error wrapping [compute.ErrNotImplemented].
+func (f *Function) RNGBitGenerator(
+	state compute.Value,
+	shape shapes.Shape,
+	algorithm compute.RNGAlgorithm,
+) (newState compute.Value, values compute.Value, err error) {
 	nodes, err := f.verifyAndCastValues("RNGBitGenerator", state)
 	if err != nil {
 		return nil, nil, err
 	}
+	expectedStateShape, err := Capabilities.RNGStateShape(algorithm)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, _, err := shapeinference.RNGBitGenerator(expectedStateShape, nodes[0].shape, shape); err != nil {
+		return nil, nil, err
+	}
+
+	var shloAlgo stablehlotypes.RNGBitGeneratorAlgorithm
+	switch Capabilities.ResolveRNGAlgorithm(algorithm) {
+	case compute.RNGPhilox:
+		shloAlgo = stablehlotypes.RNGPhilox
+	case compute.RNGThreeFry:
+		shloAlgo = stablehlotypes.RNGThreeFry
+	default:
+		return nil, nil, errors.Wrapf(compute.ErrNotImplemented, "RNGBitGenerator: unsupported RNG algorithm %s on XLA backend", algorithm)
+	}
+
 	shloShape := ShapeToXLA(shape)
 	if !shloShape.Ok() {
 		return nil, nil, errors.Errorf("RNGBitGenerator: invalid shape: %s", shape)
 	}
-	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, stablehlotypes.RNGPhilox)
+	newStateV, valueV, err := stablehlo.RNGBitGenerator(nodes[0].value, shloShape, shloAlgo)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -151,4 +151,11 @@ var Capabilities = compute.Capabilities{
 		dtypes.Complex64:  true,
 		dtypes.Complex128: true,
 	},
+
+	RNGAlgorithms: map[compute.RNGAlgorithm]bool{
+		compute.RNGDefault:  true,
+		compute.RNGPhilox:   true,
+		compute.RNGThreeFry: true,
+	},
+	DefaultRNGAlgorithm: compute.RNGPhilox,
 }
