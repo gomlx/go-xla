@@ -1,4 +1,5 @@
 * 2026/11/17
+  - Updated `RNGBitGenerator(state, shape, algorithm)` (`compute/xla/ops.go`, `compute/xla/capabilities.go`) for the redesigned `compute.RNGAlgorithm` API: supports `RNGDefault` (resolved to `RNGPhilox`), `RNGPhilox` (`[3]uint64`), and `RNGThreeFry` (`[2]uint64`), validates shapes via `shapeinference.RNGBitGenerator`, and returns `compute.ErrNotImplemented` for unsupported algorithms.
   - Updated `FusedOps.QuantizedEmbeddingLookup` stub to `QuantizedGather(x, indices, xQuantization)` (`compute/xla/fused_ops.go`), updated `Slice`/`Gather` comments (`compute/xla/ops.go`), and bumped `github.com/gomlx/compute` dependency.
 
 * 2026/11/16
