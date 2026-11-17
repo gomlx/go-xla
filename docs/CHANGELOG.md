@@ -1,3 +1,6 @@
+* 2026/11/17
+  - Updated `FusedOps.QuantizedEmbeddingLookup` stub to `QuantizedGather(x, indices, xQuantization)` (`compute/xla/fused_ops.go`), updated `Slice`/`Gather` comments (`compute/xla/ops.go`), and bumped `github.com/gomlx/compute` dependency.
+
 * 2026/11/16
   - Fixed `broadcastShapeForBinaryOps` (`compute/xla/builder.go`) when broadcasting a static unit dimension (`1`) with a zero-length dimension (`0`): output dimension is now `0` instead of `max(1, 0) == 1`.
 

@@ -42,6 +42,6 @@ func (f *Function) FusedQuantizedDenseVJP(x, weight, bias, y, dOutput compute.Va
 	return nil, nil, errors.Wrapf(compute.ErrNotImplemented, "FusedQuantizedDenseVJP not implemented in XLA backend")
 }
 
-func (f *Function) QuantizedEmbeddingLookup(data, indices compute.Value, dataQuantization *compute.Quantization) (compute.Value, error) {
-	return nil, errors.Wrapf(compute.ErrNotImplemented, "QuantizedEmbeddingLookup not implemented in XLA backend")
+func (f *Function) QuantizedGather(x, indices compute.Value, xQuantization *compute.Quantization) (compute.Value, error) {
+	return nil, errors.Wrapf(compute.ErrNotImplemented, "QuantizedGather not implemented in XLA backend")
 }
