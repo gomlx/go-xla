@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/gofrs/flock v0.13.0
-	github.com/gomlx/compute v0.1.31-0.20261117070526-684c66915b5a
+	github.com/gomlx/compute v0.1.31-0.20261117105406-e9568581fb4c
 	github.com/janpfeifer/go-benchmarks v0.1.1
 	github.com/pkg/errors v0.9.1
 	golang.org/x/term v0.40.0
