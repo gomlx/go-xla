@@ -96,6 +96,7 @@ func (f *Function) Reshape(x compute.Value, dimensions ...int) (compute.Value, e
 }
 
 // Slice implements compute.Function interface.
+// Packed sub-byte dtypes are not supported directly; use Bitcast to Uint8 or ConvertDType first.
 func (f *Function) Slice(x compute.Value, starts, limits, strides []int) (compute.Value, error) {
 	nodes, err := f.verifyAndCastValues("Slice", x)
 	if err != nil {
@@ -348,6 +349,8 @@ func (f *Function) Clamp(min, a compute.Value, max compute.Value) (compute.Value
 }
 
 // Gather is a powerful but cumbersome Gather operation. See details in the backend.
+//
+// Packed sub-byte dtypes are not supported directly; use QuantizedGather or Bitcast to Uint8 first.
 //
 // Notice GoMLX backend Gather operation doesn't support batching axes, which StableHLO does.
 // For compatibility, we simply leave them empty.
