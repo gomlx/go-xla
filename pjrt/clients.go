@@ -9,8 +9,12 @@ import "C"
 import (
 	"fmt"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
+	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -136,13 +140,21 @@ func pjrtClientCompile(plugin *Plugin, client *Client, program []byte, programFo
 	if err != nil {
 		return nil, err
 	}
-	return newLoadedExecutable(plugin, client, args.executable)
+	return newLoadedExecutableLocked(plugin, client, args.executable)
+}
+
+const numBufferShards = 32
+
+type bufferShard struct {
+	mu   sync.Mutex
+	head *bufferWrapper
 }
 
 // Client manages the resources of one device: its buffers, compilation and execution of HLO code.
 type Client struct {
 	plugin                    *Plugin
 	client                    *clientC
+	cleanup                   runtime.Cleanup
 	platform, platformVersion string
 	processIndex              int
 	addressableDevices        []*Device
@@ -151,7 +163,143 @@ type Client struct {
 
 type clientC struct {
 	// c holds the pointer to the C/C++ structure.
-	c *C.PJRT_Client
+	c      *C.PJRT_Client
+	plugin *Plugin
+
+	// lifecycle coordinates in-flight PJRT calls against Client.Destroy().
+	lifecycle xsync.Lifecycle
+
+	// bufferShards holds a 32-shard intrusive doubly-linked list of live *bufferWrapper
+	// instances so Client.Destroy() can destroy all PJRT_Buffer handles before
+	// PJRT_Client_Destroy without preventing Go GC of *Buffer.
+	bufferShards [numBufferShards]bufferShard
+	nextShard    atomic.Uint32
+
+	// execMu guards execs, tracking live detached *loadedExecutableC wrappers so
+	// Client.Destroy() destroys all executables before PJRT_Client_Destroy without
+	// preventing Go GC of *LoadedExecutable.
+	execMu sync.Mutex
+	execs  map[*loadedExecutableC]struct{}
+}
+
+func errClientDestroyed(op string) error {
+	return errors.Wrapf(compute.ErrBackendFinalized, "pjrt.Client.%s: client has been destroyed", op)
+}
+
+func (cc *clientC) trackBuffer(w *bufferWrapper) {
+	shardIdx := uint8(cc.nextShard.Add(1) % numBufferShards)
+	w.shard = shardIdx
+	s := &cc.bufferShards[shardIdx]
+	s.mu.Lock()
+	w.prev = nil
+	w.next = s.head
+	if s.head != nil {
+		s.head.prev = w
+	}
+	s.head = w
+	w.linked = true
+	s.mu.Unlock()
+}
+
+// untrackAndDetachBuffer unlinks w from its shard and atomically detaches its C PJRT_Buffer
+// pointer so at most one caller destroys it.
+func (cc *clientC) untrackAndDetachBuffer(w *bufferWrapper) (*C.PJRT_Buffer, *Plugin) {
+	s := &cc.bufferShards[w.shard]
+	s.mu.Lock()
+	if w.linked {
+		if w.prev != nil {
+			w.prev.next = w.next
+		} else if s.head == w {
+			s.head = w.next
+		}
+		if w.next != nil {
+			w.next.prev = w.prev
+		}
+		w.prev = nil
+		w.next = nil
+		w.linked = false
+	}
+	cBuf := w.c
+	plugin := w.plugin
+	w.c = nil
+	w.plugin = nil
+	s.mu.Unlock()
+	return cBuf, plugin
+}
+
+func (cc *clientC) drainAndDestroyBuffersLocked() {
+	for i := range cc.bufferShards {
+		s := &cc.bufferShards[i]
+		s.mu.Lock()
+		head := s.head
+		s.head = nil
+		for w := head; w != nil; {
+			next := w.next
+			w.prev = nil
+			w.next = nil
+			w.linked = false
+			cBuf := w.c
+			plugin := w.plugin
+			w.c = nil
+			w.plugin = nil
+			w = next
+			if cBuf != nil && plugin != nil && plugin.api != nil {
+				// Release shard lock? No other goroutine holds lifecycle.Enter() during Finalize,
+				// so calling destroyPJRTBufferC directly while walking the detached chain is safe.
+				if err := destroyPJRTBufferC(plugin, cBuf); err != nil {
+					klog.Warningf("Failed to destroy pjrt.Buffer during Client.Destroy: %+v", err)
+				}
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (cc *clientC) trackExecutable(w *loadedExecutableC) {
+	cc.execMu.Lock()
+	if cc.execs == nil {
+		cc.execs = make(map[*loadedExecutableC]struct{})
+	}
+	cc.execs[w] = struct{}{}
+	cc.execMu.Unlock()
+}
+
+func (cc *clientC) untrackExecutable(w *loadedExecutableC) {
+	cc.execMu.Lock()
+	delete(cc.execs, w)
+	cc.execMu.Unlock()
+}
+
+func (cc *clientC) drainAndDestroyExecutablesLocked() {
+	cc.execMu.Lock()
+	execs := cc.execs
+	cc.execs = nil
+	cc.execMu.Unlock()
+	for w := range execs {
+		if err := w.destroyLocked(); err != nil {
+			klog.Warningf("Failed to destroy pjrt.LoadedExecutable during Client.Destroy: %+v", err)
+		}
+	}
+}
+
+func (cc *clientC) numTrackedBuffers() int {
+	total := 0
+	for i := range cc.bufferShards {
+		s := &cc.bufferShards[i]
+		s.mu.Lock()
+		for w := s.head; w != nil; w = w.next {
+			total++
+		}
+		s.mu.Unlock()
+	}
+	return total
+}
+
+func (cc *clientC) numTrackedExecutables() int {
+	cc.execMu.Lock()
+	n := len(cc.execs)
+	cc.execMu.Unlock()
+	return n
 }
 
 // newClient is called by Plugin.NewClient to create a new PJRT_Client wrapper.
@@ -173,7 +321,10 @@ func newClient(plugin *Plugin, options NamedValuesMap) (*Client, error) {
 	// Prepare the Client object: not all initializations are fatal to the construction of the client.
 	c := &Client{
 		plugin: plugin,
-		client: &clientC{c: args.client},
+		client: &clientC{
+			c:      args.client,
+			plugin: plugin,
+		},
 	}
 	c.platform, err = pjrtClientPlatformName(plugin, c)
 	if err != nil {
@@ -194,13 +345,13 @@ func newClient(plugin *Plugin, options NamedValuesMap) (*Client, error) {
 	if err != nil {
 		// Fatal
 		err = errors.WithMessagef(err, "failed to retrieve addressable devices for new client (plugin %s) -- can't use client with no addressable device", plugin)
-		c.client.Destroy(plugin)
+		_ = c.client.Destroy()
 		return nil, err
 	}
 
 	// Register cleanup.
-	runtime.AddCleanup(c, func(client *clientC) {
-		err := client.Destroy(plugin)
+	c.cleanup = runtime.AddCleanup(c, func(client *clientC) {
+		err := client.Destroy()
 		if err != nil {
 			klog.Errorf("Failed to destroy client (plugin %s): %v", plugin, err)
 		}
@@ -213,34 +364,49 @@ func (c *Client) Plugin() *Plugin {
 	return c.plugin
 }
 
-func (client *clientC) Destroy(plugin *Plugin) error {
-	if plugin == nil || client == nil || client.c == nil {
-		// Already destroyed, no-op.
+func (client *clientC) Destroy() error {
+	if client == nil {
 		return nil
 	}
-	defer runtime.KeepAlive(client)
-	args := C.new_PJRT_Client_Destroy_Args()
-	defer cFree(args)
-	args.client = client.c
-	err := toError(plugin, C.call_PJRT_Client_Destroy(plugin.api, args))
-	client.c = nil
-	return err
+	var destroyErr error
+	client.lifecycle.Finalize(func() {
+		defer runtime.KeepAlive(client)
+		// Destroy all tracked executables and buffers BEFORE destroying PJRT_Client,
+		// as required by the PJRT C API contract.
+		client.drainAndDestroyExecutablesLocked()
+		client.drainAndDestroyBuffersLocked()
+
+		plugin := client.plugin
+		if plugin == nil || plugin.api == nil || client.c == nil {
+			client.c = nil
+			return
+		}
+		args := C.new_PJRT_Client_Destroy_Args()
+		defer cFree(args)
+		args.client = client.c
+		destroyErr = toError(plugin, C.call_PJRT_Client_Destroy(plugin.api, args))
+		client.c = nil
+	})
+	return destroyErr
 }
 
 // IsValid returns if client has been properly created and not yet destroyed.
 func (c *Client) IsValid() bool {
-	return c != nil && c.client != nil && c.client.c != nil
+	return c != nil && c.client != nil && !c.client.lifecycle.IsFinalized()
 }
 
 // Destroy the client, release resources, and Client is no longer valid.
+// It waits for any in-flight PJRT calls on this client to finish, destroys all tracked
+// executables and buffers, and then destroys the underlying PJRT_Client.
 // This is automatically called if Client is garbage collected.
 func (c *Client) Destroy() error {
-	if c.plugin == nil || c.client == nil {
+	if c == nil || c.client == nil {
 		// Already destroyed, no-op.
 		return nil
 	}
 	defer runtime.KeepAlive(c)
-	return c.client.Destroy(c.plugin)
+	c.cleanup.Stop()
+	return c.client.Destroy()
 }
 
 // String implements fmt.Stringer.
@@ -281,6 +447,10 @@ func (c *Client) ProcessIndex() int {
 //
 // Usually, you want to use the AddressableDevices method instead.
 func (c *Client) AllDevices() ([]*Device, error) {
+	if c == nil || c.client == nil || !c.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("AllDevices")
+	}
+	defer c.client.lifecycle.Leave()
 	return pjrtClientDevices(c.plugin, c)
 }
 
@@ -308,6 +478,10 @@ func (c *Client) NumDevices() int {
 //
 // The returned slice is of length numReplicas * numPartitions.
 func (c *Client) DefaultDeviceAssignment(numReplicas, numPartitions int) ([]int, error) {
+	if c == nil || c.client == nil || !c.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("DefaultDeviceAssignment")
+	}
+	defer c.client.lifecycle.Leave()
 	return pjrtClientDefaultDeviceAssignment(c.plugin, c, numReplicas, numPartitions)
 }
 

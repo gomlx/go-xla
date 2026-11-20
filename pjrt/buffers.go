@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -23,6 +24,7 @@ import (
 
 // Buffer is a reference to an on-device array storage (buffer).
 type Buffer struct {
+	client         *Client
 	wrapper        *bufferWrapper
 	wrapperCleanUp runtime.Cleanup
 
@@ -39,53 +41,92 @@ type Buffer struct {
 }
 
 // bufferWrapper wraps the C/C++ data that requires clean up.
+// It intentionally does NOT hold a pointer back to *Buffer so clientC can track it
+// in an intrusive doubly-linked list without preventing Go GC of *Buffer.
 type bufferWrapper struct {
-	c                *C.PJRT_Buffer
+	c      *C.PJRT_Buffer
+	plugin *Plugin
+	client *clientC
+
+	// sharedMu guards sharedRawStorage so host shared memory is freed at most once
+	// by Buffer.Destroy() or GC cleanup (and never eagerly unmapped by Client.Destroy()).
+	sharedMu         sync.Mutex
 	sharedRawStorage unsafe.Pointer
-	plugin           *Plugin
-	client           *Client
+
+	// Intrusive doubly-linked list guarded by client.bufferShards[shard].mu.
+	shard  uint8
+	linked bool
+	prev   *bufferWrapper
+	next   *bufferWrapper
 }
 
 func (wrapper *bufferWrapper) IsValid() bool {
 	return wrapper != nil && wrapper.c != nil
 }
 
+func (wrapper *bufferWrapper) freeSharedStorage() {
+	if wrapper == nil {
+		return
+	}
+	wrapper.sharedMu.Lock()
+	raw := wrapper.sharedRawStorage
+	wrapper.sharedRawStorage = nil
+	wrapper.sharedMu.Unlock()
+	if raw != nil {
+		AlignedFree(raw)
+	}
+}
+
+func destroyPJRTBufferC(plugin *Plugin, cBuf *C.PJRT_Buffer) error {
+	if plugin == nil || plugin.api == nil || cBuf == nil {
+		return nil
+	}
+	arena := plugin.getDefaultArena()
+	defer plugin.returnArena(arena)
+	args := arenaAlloc[C.PJRT_Buffer_Destroy_Args](arena)
+	args.struct_size = C.PJRT_Buffer_Destroy_Args_STRUCT_SIZE
+	args.buffer = cBuf
+	err := toError(plugin, C.call_PJRT_Buffer_Destroy(plugin.api, args))
+	buffersAlive.Add(-1)
+	return err
+}
+
+// destroyLocked destroys the PJRT_Buffer and frees any shared storage.
+// Caller MUST already hold wrapper.client.lifecycle.Enter().
+func (wrapper *bufferWrapper) destroyLocked() error {
+	if wrapper == nil {
+		return nil
+	}
+	defer wrapper.freeSharedStorage()
+	if wrapper.client == nil {
+		return nil
+	}
+	cBuf, plugin := wrapper.client.untrackAndDetachBuffer(wrapper)
+	if cBuf == nil || plugin == nil || plugin.api == nil {
+		return nil
+	}
+	defer runtime.KeepAlive(wrapper)
+	return destroyPJRTBufferC(plugin, cBuf)
+}
+
 func (wrapper *bufferWrapper) Destroy() error {
 	if wrapper == nil {
 		return nil
 	}
-	defer func() {
-		// Make sure sharedBuffer is freed, even if plugin or client has been reset.
-		if wrapper.sharedRawStorage != nil {
-			// Shared storage can only be freed after the buffer is destroyed.
-			AlignedFree(wrapper.sharedRawStorage)
-			wrapper.sharedRawStorage = nil
-		}
-	}()
-
-	if wrapper.plugin == nil || wrapper.c == nil || wrapper.plugin.api == nil {
+	defer wrapper.freeSharedStorage()
+	client := wrapper.client
+	if client == nil || !client.lifecycle.Enter() {
+		// Client has already been destroyed (which already destroyed all tracked PJRT_Buffers).
+		return nil
+	}
+	defer client.lifecycle.Leave()
+	cBuf, plugin := client.untrackAndDetachBuffer(wrapper)
+	if cBuf == nil || plugin == nil || plugin.api == nil {
 		// Already destroyed, no-op.
 		return nil
 	}
-	if !wrapper.client.IsValid() {
-		// Client is already destroyed, assume buffer is also destroyed.
-		buffersAlive.Add(-1)
-		return nil
-	}
 	defer runtime.KeepAlive(wrapper)
-
-	arena := wrapper.plugin.getDefaultArena()
-	defer wrapper.plugin.returnArena(arena)
-	args := arenaAlloc[C.PJRT_Buffer_Destroy_Args](arena)
-	args.struct_size = C.PJRT_Buffer_Destroy_Args_STRUCT_SIZE
-	args.buffer = wrapper.c
-	wrapper.c = nil
-	plugin := wrapper.plugin
-	wrapper.plugin = nil
-	wrapper.client = nil
-	err := toError(plugin, C.call_PJRT_Buffer_Destroy(plugin.api, args))
-	buffersAlive.Add(-1)
-	return err
+	return destroyPJRTBufferC(plugin, cBuf)
 }
 
 var buffersAlive atomic.Int64
@@ -95,10 +136,18 @@ func BuffersAlive() int64 {
 	return buffersAlive.Load()
 }
 
-// newBuffer creates Buffer and registers it for freeing.
-func newBuffer(client *Client, cBuffer *C.PJRT_Buffer) *Buffer {
+// newBufferLocked creates a Buffer, tracks its detached wrapper on client.client,
+// and registers it for GC cleanup. Caller MUST already hold client.client.lifecycle.Enter().
+func newBufferLocked(client *Client, cBuffer *C.PJRT_Buffer) *Buffer {
+	w := &bufferWrapper{
+		plugin: client.plugin,
+		c:      cBuffer,
+		client: client.client,
+	}
+	client.client.trackBuffer(w)
 	b := &Buffer{
-		wrapper: &bufferWrapper{plugin: client.plugin, c: cBuffer, client: client},
+		client:  client,
+		wrapper: w,
 		// DEBUG: creationStackTrace: errors.New("bufferCreation"),
 	}
 	buffersAlive.Add(1)
@@ -111,10 +160,22 @@ func newBuffer(client *Client, cBuffer *C.PJRT_Buffer) *Buffer {
 	return b
 }
 
+// destroyLocked destroys b when caller already holds b.wrapper.client.lifecycle.Enter()
+// (used for donated inputs inside LoadedExecutable.Execute().Done()).
+func (b *Buffer) destroyLocked() error {
+	if b == nil || b.wrapper == nil {
+		return nil
+	}
+	err := b.wrapper.destroyLocked()
+	b.wrapperCleanUp.Stop()
+	return err
+}
+
 // Destroy the Buffer, release resources, and Buffer is no longer valid.
 // This is automatically called if Buffer is garbage collected.
+// Safe to call multiple times or after the parent Client has been destroyed.
 func (b *Buffer) Destroy() error {
-	if !b.wrapper.IsValid() {
+	if b == nil || b.wrapper == nil {
 		return nil
 	}
 	err := b.wrapper.Destroy()
@@ -122,29 +183,48 @@ func (b *Buffer) Destroy() error {
 	return err
 }
 
-// Check returns an error if the Buffer is invalid.
+// Check returns an error if the Buffer is invalid or its Client has been destroyed.
 func (b *Buffer) Check() error {
-	if b == nil || b.wrapper == nil || b.wrapper.client == nil || b.wrapper.plugin == nil || !b.wrapper.IsValid() {
-		return errors.New("Buffer is invalid: either it is nil or it has been destroyed, or its client has been destroyed")
+	if b == nil || b.wrapper == nil || b.wrapper.client == nil {
+		return errors.New("Buffer is invalid: it is nil or uninitialized")
+	}
+	if b.wrapper.client.lifecycle.IsFinalized() {
+		return errClientDestroyed("Buffer.Check")
+	}
+	if !b.wrapper.IsValid() {
+		return errors.New("Buffer is invalid: it has been destroyed")
 	}
 	return nil
 }
 
-func (b *Buffer) getPlugin() (*Plugin, error) {
-	if b == nil || b.wrapper == nil || b.wrapper.client == nil || b.wrapper.plugin == nil || !b.wrapper.IsValid() {
-		return nil, errors.New("Buffer is invalid: either it is nil or it has been destroyed, or its client has been destroyed")
+// enterClient acquires the parent client's lifecycle read lock and verifies that b is still valid.
+// When err == nil, caller MUST call b.wrapper.client.lifecycle.Leave().
+func (b *Buffer) enterClient(op string) (*Plugin, error) {
+	if b == nil || b.wrapper == nil || b.wrapper.client == nil {
+		return nil, errors.Errorf("Buffer.%s: buffer is nil or uninitialized", op)
 	}
-	return b.wrapper.client.plugin, nil
+	if !b.wrapper.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("Buffer." + op)
+	}
+	if !b.wrapper.IsValid() || b.wrapper.plugin == nil {
+		b.wrapper.client.lifecycle.Leave()
+		return nil, errors.Errorf("Buffer.%s: buffer has been destroyed", op)
+	}
+	return b.wrapper.plugin, nil
 }
 
 // Dimensions of the Buffer.
 // The buffer owns the returned slice to avoid creating a copy. Don't change it.
 func (b *Buffer) Dimensions() (dims []int, err error) {
-	var plugin *Plugin
-	plugin, err = b.getPlugin()
+	plugin, err := b.enterClient("Dimensions")
 	if err != nil {
-		return
+		return nil, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
+	return b.dimensionsLocked(plugin)
+}
+
+func (b *Buffer) dimensionsLocked(plugin *Plugin) (dims []int, err error) {
 	if b.dimsSet {
 		return b.dims, nil
 	}
@@ -170,11 +250,16 @@ func (b *Buffer) Dimensions() (dims []int, err error) {
 // DType of the Buffer (PJRT_Buffer_ElementType).
 func (b *Buffer) DType() (dtype dtypes.DType, err error) {
 	dtype = dtypes.InvalidDType
-	var plugin *Plugin
-	plugin, err = b.getPlugin()
+	plugin, err := b.enterClient("DType")
 	if err != nil {
-		return
+		return dtype, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
+	return b.dtypeLocked(plugin)
+}
+
+func (b *Buffer) dtypeLocked(plugin *Plugin) (dtype dtypes.DType, err error) {
+	dtype = dtypes.InvalidDType
 	defer runtime.KeepAlive(b)
 	if b.dtypeSet {
 		return b.dtype, nil
@@ -197,11 +282,11 @@ func (b *Buffer) DType() (dtype dtypes.DType, err error) {
 
 // Device returns the device the buffer is stored.
 func (b *Buffer) Device() (device *Device, err error) {
-	var plugin *Plugin
-	plugin, err = b.getPlugin()
+	plugin, err := b.enterClient("Device")
 	if err != nil {
-		return
+		return nil, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
 	defer runtime.KeepAlive(b)
 
 	arena := plugin.getDefaultArena()
@@ -213,13 +298,16 @@ func (b *Buffer) Device() (device *Device, err error) {
 	if err != nil {
 		return
 	}
-	device = newDevice(b.wrapper.client, args.device)
+	device = newDevice(b.client, args.device)
 	return
 }
 
 // Client returns the client that created this Buffer.
 func (b *Buffer) Client() *Client {
-	return b.wrapper.client
+	if b == nil {
+		return nil
+	}
+	return b.client
 }
 
 // ScalarToRaw generates the raw values needed by BufferFromHostConfig.FromRawData to feed a simple scalar value.
@@ -231,10 +319,11 @@ func ScalarToRaw[T gotype.Supported](value T) ([]byte, dtypes.DType, []int) {
 
 // Size returns the size in bytes if required for the buffer to be transferred with ToHost.
 func (b *Buffer) Size() (int, error) {
-	plugin, err := b.getPlugin()
+	plugin, err := b.enterClient("Size")
 	if err != nil {
 		return 0, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
 	defer runtime.KeepAlive(b)
 
 	arena := plugin.getDefaultArena()
@@ -370,10 +459,11 @@ func (b *Buffer) ToFlatDataAndDimensions() (flat any, dimensions []int, err erro
 // CopyToDevice copies the buffer to the given device and returns a new buffer.
 // The original buffer is not affected.
 func (b *Buffer) CopyToDevice(dstDevice *Device) (*Buffer, error) {
-	plugin, err := b.getPlugin()
+	plugin, err := b.enterClient("CopyToDevice")
 	if err != nil {
 		return nil, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
 	if dstDevice == nil || dstDevice.cDevice == nil {
 		return nil, errors.New("destination device is nil")
 	}
@@ -393,26 +483,24 @@ func (b *Buffer) CopyToDevice(dstDevice *Device) (*Buffer, error) {
 		return nil, errors.WithMessagef(err, "failed to copy buffer to device %v", dstDevice)
 	}
 
-	newBuff := newBuffer(b.wrapper.client, args.dst_buffer)
+	newBuff := newBufferLocked(b.client, args.dst_buffer)
 	return newBuff, nil
 }
 
 // Bitcast bitcasts the buffer to a new type, following the same expansion/contraction rules
 // as used by shapeinference.BitcastConvert to figure out the output shape.
 func (b *Buffer) Bitcast(dtype dtypes.DType) (*Buffer, error) {
-	if err := b.Check(); err != nil {
-		return nil, err
-	}
-	plugin, err := b.getPlugin()
+	plugin, err := b.enterClient("Bitcast")
 	if err != nil {
 		return nil, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
 
-	currentDType, err := b.DType()
+	currentDType, err := b.dtypeLocked(plugin)
 	if err != nil {
 		return nil, err
 	}
-	currentDims, err := b.Dimensions()
+	currentDims, err := b.dimensionsLocked(plugin)
 	if err != nil {
 		return nil, err
 	}
@@ -451,5 +539,5 @@ func (b *Buffer) Bitcast(dtype dtypes.DType) (*Buffer, error) {
 		return nil, errors.WithMessage(err, "failed to call PJRT_Buffer_Bitcast")
 	}
 
-	return newBuffer(b.wrapper.client, args.out_buffer), nil
+	return newBufferLocked(b.client, args.out_buffer), nil
 }

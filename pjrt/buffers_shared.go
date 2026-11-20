@@ -59,6 +59,14 @@ import (
 // See: dtypes.SizeForDimensions() to calculate the size for an arbitrary shape; AlignedAlloc, AlignedFree and
 // BufferAlignment (a constant with the required alignment size) to allocate and free aligned storage.
 func (c *Client) CreateViewOfDeviceBuffer(rawData unsafe.Pointer, dtype dtypes.DType, dimensions []int, device ...*Device) (*Buffer, error) {
+	if c == nil || c.client == nil || !c.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("CreateViewOfDeviceBuffer")
+	}
+	defer c.client.lifecycle.Leave()
+	return c.createViewOfDeviceBufferLocked(rawData, dtype, dimensions, device...)
+}
+
+func (c *Client) createViewOfDeviceBufferLocked(rawData unsafe.Pointer, dtype dtypes.DType, dimensions []int, device ...*Device) (*Buffer, error) {
 	var selectedDevice *Device
 	if len(device) > 1 {
 		return nil, errors.Errorf("only one device can be given to CreateViewOfDeviceBuffer, %d were given", len(device))
@@ -98,7 +106,7 @@ func (c *Client) CreateViewOfDeviceBuffer(rawData unsafe.Pointer, dtype dtypes.D
 	if err != nil {
 		return nil, err
 	}
-	buffer := newBuffer(c, args.buffer)
+	buffer := newBufferLocked(c, args.buffer)
 	buffer.isShared = true
 	buffer.dims = slices.Clone(dimensions)
 	buffer.dimsSet = true
@@ -119,16 +127,22 @@ func (c *Client) CreateViewOfDeviceBuffer(rawData unsafe.Pointer, dtype dtypes.D
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
 func (c *Client) NewSharedBuffer(dtype dtypes.DType, dimensions []int, device ...*Device) (buffer *Buffer, flat any, err error) {
+	if c == nil || c.client == nil || !c.client.lifecycle.Enter() {
+		return nil, nil, errClientDestroyed("NewSharedBuffer")
+	}
+	defer c.client.lifecycle.Leave()
 	memorySize := uintptr(dtype.SizeForDimensions(dimensions...))
 	rawStorage := AlignedAlloc(memorySize, BufferAlignment)
-	buffer, err = c.CreateViewOfDeviceBuffer(rawStorage, dtype, dimensions, device...)
+	buffer, err = c.createViewOfDeviceBufferLocked(rawStorage, dtype, dimensions, device...)
 	if err != nil {
 		AlignedFree(rawStorage)
 		err = errors.WithMessagef(err, "NewSharedBuffer failed creating new buffer")
 		buffer = nil
 		return
 	}
+	buffer.wrapper.sharedMu.Lock()
 	buffer.wrapper.sharedRawStorage = rawStorage
+	buffer.wrapper.sharedMu.Unlock()
 	buffer.isShared = true
 
 	goDType := dtype.GoType()
@@ -151,11 +165,15 @@ func (b *Buffer) IsShared() bool {
 // To be on the safe side, only use this if Client.HasSharedBuffers is true.
 // It uses the undocumented PJRT_Buffer_UnsafePointer.
 func (b *Buffer) UnsafePointer() (unsafe.Pointer, error) {
-	plugin, err := b.getPlugin()
+	plugin, err := b.enterClient("UnsafePointer")
 	if err != nil {
 		return nil, err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
+	return b.unsafePointerLocked(plugin)
+}
 
+func (b *Buffer) unsafePointerLocked(plugin *Plugin) (unsafe.Pointer, error) {
 	// Arena for memory allocations used by CGO.
 	arena := plugin.getDefaultArena()
 	defer plugin.returnArena(arena)
@@ -165,7 +183,7 @@ func (b *Buffer) UnsafePointer() (unsafe.Pointer, error) {
 	args = arenaAlloc[C.PJRT_Buffer_UnsafePointer_Args](arena)
 	args.struct_size = C.PJRT_Buffer_UnsafePointer_Args_STRUCT_SIZE
 	args.buffer = b.wrapper.c
-	err = toError(plugin, C.call_PJRT_Buffer_UnsafePointer(plugin.api, args))
+	err := toError(plugin, C.call_PJRT_Buffer_UnsafePointer(plugin.api, args))
 	if err != nil {
 		return nil, err
 	}
@@ -177,21 +195,26 @@ func (b *Buffer) UnsafePointer() (unsafe.Pointer, error) {
 // This is an undocumented feature of PJRT and likely only works for CPU platforms.
 // The flat slice returned is only valid while the buffer is alive.
 func (b *Buffer) Data() (flat any, err error) {
+	plugin, err := b.enterClient("Data")
+	if err != nil {
+		return nil, err
+	}
+	defer b.wrapper.client.lifecycle.Leave()
 	var rawStorage unsafe.Pointer
-	rawStorage, err = b.UnsafePointer()
+	rawStorage, err = b.unsafePointerLocked(plugin)
 	if err != nil {
 		return nil, err
 	}
 	dims := b.dims
 	dtype := b.dtype
 	if !b.dimsSet {
-		dims, err = b.Dimensions()
+		dims, err = b.dimensionsLocked(plugin)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if !b.dtypeSet {
-		dtype, err = b.DType()
+		dtype, err = b.dtypeLocked(plugin)
 		if err != nil {
 			return nil, err
 		}

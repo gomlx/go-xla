@@ -1,3 +1,8 @@
+* 2026/11/20
+  - Implemented safe concurrent backend finalization and deterministic pre-client native teardown across `pjrt` and `compute/xla`:
+    - `pjrt` (`clients.go`, `devices.go`, `buffers*.go`, `executables.go`, `loadedexecutables.go`, `compile.go`): Added `xsync.Lifecycle` on `clientC` so `Client.Destroy()` waits for all in-flight compilations, executions, and host/device transfers, tracks live detached `*loadedExecutableC` wrappers and `*bufferWrapper` instances (via a 32-shard zero-alloc intrusive doubly-linked list without preventing Go GC of `*Buffer`/`*LoadedExecutable`), destroys all tracked executables and buffers **before** `PJRT_Client_Destroy`, defers `AlignedFree` of shared host memory to `Buffer.Destroy()`/GC cleanup, and returns `compute.ErrBackendFinalized` on post-destroy calls.
+    - `compute/xla` (`backend.go`, `executable.go`, `xla_test.go`): Added `xsync.Lifecycle` on `Backend` and `Executable`, made `Buffer.Finalize()` and `Executable.Finalize()` idempotent/safe after `Backend.Finalize()`, and added `backendtest.TestFinalize` + `pjrt.TestClientDestroyDrainsBuffersAndExecutables` tests.
+
 * 2026/11/17
   - Updated `RNGBitGenerator(state, shape, algorithm)` (`compute/xla/ops.go`, `compute/xla/capabilities.go`) for the redesigned `compute.RNGAlgorithm` API: supports `RNGDefault` (resolved to `RNGPhilox`), `RNGPhilox` (`[3]uint64`), and `RNGThreeFry` (`[2]uint64`), validates shapes via `shapeinference.RNGBitGenerator`, and returns `compute.ErrNotImplemented` for unsupported algorithms.
   - Updated `FusedOps.QuantizedEmbeddingLookup` stub to `QuantizedGather(x, indices, xQuantization)` (`compute/xla/fused_ops.go`), updated `Slice`/`Gather` comments (`compute/xla/ops.go`), and bumped `github.com/gomlx/compute` dependency.

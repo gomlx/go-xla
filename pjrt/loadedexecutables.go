@@ -36,6 +36,7 @@ import "C"
 import (
 	"runtime"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -48,6 +49,7 @@ import (
 // All public attributes are read-only.
 type LoadedExecutable struct {
 	wrapper *loadedExecutableC
+	cleanup runtime.Cleanup
 	plugin  *Plugin
 	client  *Client
 
@@ -70,26 +72,74 @@ type LoadedExecutable struct {
 	OnDeviceMemoryUsageStats, OnHostMemoryUsageStats ExecutableMemoryUsageStats
 }
 
-// loadedExecutableC wraps the C pointer, so we can use runtime.addCleanUp.
+// loadedExecutableC wraps the C pointer, so we can use runtime.AddCleanup and track it
+// on clientC without preventing Go GC of *LoadedExecutable.
 type loadedExecutableC struct {
-	c      *C.PJRT_LoadedExecutable
-	plugin *Plugin
+	mu          sync.Mutex
+	c           *C.PJRT_LoadedExecutable
+	plugin      *Plugin
+	client      *clientC
+	execWrapper *executableWrapper
 }
 
-func (wrapper *loadedExecutableC) Destroy() error {
-	if wrapper == nil || wrapper.plugin == nil || wrapper.plugin.api == nil || wrapper.c == nil {
-		// Already destroyed, no-op.
+func (wrapper *loadedExecutableC) isValid() bool {
+	if wrapper == nil {
+		return false
+	}
+	wrapper.mu.Lock()
+	valid := wrapper.c != nil && wrapper.plugin != nil && wrapper.plugin.api != nil
+	wrapper.mu.Unlock()
+	return valid
+}
+
+// destroyLocked destroys the inner PJRT_Executable and PJRT_LoadedExecutable.
+// Caller MUST already hold wrapper.client.lifecycle (either Enter or Finalize).
+func (wrapper *loadedExecutableC) destroyLocked() error {
+	if wrapper == nil {
 		return nil
+	}
+	wrapper.mu.Lock()
+	cExec := wrapper.c
+	plugin := wrapper.plugin
+	execWrapper := wrapper.execWrapper
+	wrapper.c = nil
+	wrapper.plugin = nil
+	wrapper.execWrapper = nil
+	wrapper.mu.Unlock()
+
+	var firstErr error
+	if execWrapper != nil {
+		if err := execWrapper.Destroy(); err != nil {
+			firstErr = err
+		}
+	}
+	if cExec == nil || plugin == nil || plugin.api == nil {
+		return firstErr
 	}
 	defer runtime.KeepAlive(wrapper)
 	args := C.new_PJRT_LoadedExecutable_Destroy_Args()
 	defer cFree(args)
-	args.executable = wrapper.c
-	err := toError(wrapper.plugin, C.call_PJRT_LoadedExecutable_Destroy(wrapper.plugin.api, args))
-	wrapper.plugin = nil
-	wrapper.c = nil
+	args.executable = cExec
+	err := toError(plugin, C.call_PJRT_LoadedExecutable_Destroy(plugin.api, args))
 	numLoadedExecutables.Add(-1)
-	return err
+	if err != nil {
+		return err
+	}
+	return firstErr
+}
+
+func (wrapper *loadedExecutableC) Destroy() error {
+	if wrapper == nil {
+		return nil
+	}
+	client := wrapper.client
+	if client == nil || !client.lifecycle.Enter() {
+		// Client has already been destroyed (which already destroyed all tracked executables).
+		return nil
+	}
+	defer client.lifecycle.Leave()
+	client.untrackExecutable(wrapper)
+	return wrapper.destroyLocked()
 }
 
 var numLoadedExecutables atomic.Int64
@@ -99,44 +149,63 @@ func LoadedExecutablesAlive() int64 {
 	return numLoadedExecutables.Load()
 }
 
-// newLoadedExecutable creates LoadedExecutable and registers it for freeing.
-func newLoadedExecutable(plugin *Plugin, client *Client, cLoadedExecutable *C.PJRT_LoadedExecutable) (*LoadedExecutable, error) {
+// newLoadedExecutableLocked creates LoadedExecutable, tracks its detached wrapper on client.client,
+// and registers it for GC cleanup. Caller MUST already hold client.client.lifecycle.Enter().
+func newLoadedExecutableLocked(plugin *Plugin, client *Client, cLoadedExecutable *C.PJRT_LoadedExecutable) (*LoadedExecutable, error) {
+	wrapper := &loadedExecutableC{
+		c:      cLoadedExecutable,
+		plugin: plugin,
+		client: client.client,
+	}
+	client.client.trackExecutable(wrapper)
 	e := &LoadedExecutable{
 		plugin:        plugin,
 		client:        client,
-		wrapper:       &loadedExecutableC{c: cLoadedExecutable, plugin: plugin},
+		wrapper:       wrapper,
 		numPartitions: 1,
 		numReplicas:   1,
 	}
 	numLoadedExecutables.Add(1)
-	runtime.AddCleanup(e, func(e *loadedExecutableC) {
-		err := e.Destroy()
+	e.cleanup = runtime.AddCleanup(e, func(w *loadedExecutableC) {
+		err := w.Destroy()
 		if err != nil {
 			klog.Errorf("Failed to destroy pjrt.LoadedExecutable: %+v", err)
 		}
 	}, e.wrapper)
 
+	cleanupOnErr := func() {
+		e.cleanup.Stop()
+		client.client.untrackExecutable(wrapper)
+		if err := wrapper.destroyLocked(); err != nil {
+			klog.Errorf("LoadedExecutable.destroyLocked failed: %v", err)
+		}
+	}
+
 	// Gather information about executable:
 	var err error
 	e.executable, err = e.getExecutable()
 	if err != nil {
-		e.destroyOrLog()
+		cleanupOnErr()
 		return nil, errors.WithMessagef(err, "failed to GetExecutable from compiled LoadedExecutable")
 	}
+	wrapper.mu.Lock()
+	wrapper.execWrapper = e.executable.wrapper
+	wrapper.mu.Unlock()
+
 	e.Name, err = e.executable.Name()
 	if err != nil {
-		e.destroyOrLog()
+		cleanupOnErr()
 		return nil, errors.WithMessagef(err, "failed to get Executable.Name from compiled LoadedExecutable")
 	}
 	e.NumOutputs, err = e.executable.NumOutputs()
 	if err != nil {
-		e.destroyOrLog()
+		cleanupOnErr()
 		return nil, errors.WithMessagef(err, "failed to Executable.NumOutputs from compiled LoadedExecutable")
 	}
 
 	e.OnDeviceMemoryUsageStats, e.OnHostMemoryUsageStats, err = e.executable.GetMemoryStats()
 	if err != nil {
-		e.destroyOrLog()
+		cleanupOnErr()
 		return nil, errors.WithMessagef(err, "failed to Executable.GetMemoryStats from compiled LoadedExecutable")
 	}
 	return e, nil
@@ -144,19 +213,15 @@ func newLoadedExecutable(plugin *Plugin, client *Client, cLoadedExecutable *C.PJ
 
 // Destroy the LoadedExecutable, release resources, and LoadedExecutable is no longer valid.
 // This is automatically called if LoadedExecutable is garbage collected.
+// Safe to call multiple times or after the parent Client has been destroyed.
 func (e *LoadedExecutable) Destroy() error {
-	if e == nil || e.plugin == nil || e.wrapper == nil {
+	if e == nil || e.wrapper == nil {
 		// Already destroyed, no-op.
 		return nil
 	}
 	defer runtime.KeepAlive(e)
-	if e.executable != nil {
-		e.executable.destroyOrLog()
-	}
-	err := e.wrapper.Destroy()
-	e.plugin = nil
-	e.wrapper = nil
-	return err
+	e.cleanup.Stop()
+	return e.wrapper.Destroy()
 }
 
 // destroyOrLog destroys the LoadedExecutable and log any errors.
@@ -374,12 +439,29 @@ func (c *ExecutionConfig) Done() ([]*Buffer, error) {
 		return nil, c.err
 	}
 	e := c.executable
-	plugin := e.plugin
+	if e == nil || e.wrapper == nil || e.client == nil || e.client.client == nil {
+		return nil, errors.New("LoadedExecutable is nil, or its plugin or wrapped C representation is nil -- has it been destroyed already?")
+	}
+	if !e.client.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("LoadedExecutable.Execute")
+	}
+	defer e.client.client.lifecycle.Leave()
 
-	if plugin == nil || e.wrapper == nil {
+	e.wrapper.mu.Lock()
+	cExec := e.wrapper.c
+	plugin := e.wrapper.plugin
+	e.wrapper.mu.Unlock()
+	if plugin == nil || cExec == nil {
 		return nil, errors.New("LoadedExecutable is nil, or its plugin or wrapped C representation is nil -- has it been destroyed already?")
 	}
 	defer runtime.KeepAlive(e)
+
+	// Verify all inputs are still valid before passing their C handles to PJRT.
+	for i, input := range c.inputs {
+		if input == nil || !input.wrapper.IsValid() {
+			return nil, errors.Errorf("LoadedExecutable.Execute(): input buffer #%d is nil or has been destroyed", i)
+		}
+	}
 
 	// Dimensions of inputs/outputs.
 	numDevices := e.numReplicas * e.numPartitions
@@ -402,7 +484,7 @@ func (c *ExecutionConfig) Done() ([]*Buffer, error) {
 	var args *C.PJRT_LoadedExecutable_Execute_Args
 	args = arenaAlloc[C.PJRT_LoadedExecutable_Execute_Args](arena)
 	args.struct_size = C.PJRT_LoadedExecutable_Execute_Args_STRUCT_SIZE
-	args.executable = e.wrapper.c
+	args.executable = cExec
 	args.num_devices = C.size_t(numDevices)
 	if e.isPortable {
 		if numDevices > 1 {
@@ -465,13 +547,13 @@ func (c *ExecutionConfig) Done() ([]*Buffer, error) {
 	outputs := make([]*Buffer, numOutputs)
 	outputBuffers := unsafe.Slice(*args.output_lists, numOutputs)
 	for ii := range outputs {
-		outputs[ii] = newBuffer(e.client, outputBuffers[ii])
+		outputs[ii] = newBufferLocked(e.client, outputBuffers[ii])
 	}
 
 	// Destroy donated inputs, since they are no longer valid.
 	for idx, input := range c.inputs {
 		if c.nonDonatableInputs == nil || slices.Index(c.nonDonatableInputs, idx) == -1 {
-			err := input.Destroy()
+			err := input.destroyLocked()
 			if err != nil {
 				err = errors.WithMessagef(err, "LoadedExecutable.Execute().Done() failed to destroy donated input %d: %v", idx, err)
 				return nil, err

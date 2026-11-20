@@ -114,6 +114,8 @@ func (cc *CompileConfig) Done() (*LoadedExecutable, error) {
 	}
 	cc.err = compileConfigOnlyOnce
 
+	client := cc.client
+	plugin := cc.plugin
 	// Make sure things are cleaned up before leaving:
 	defer func() {
 		if cc.cbufferToFree != nil {
@@ -123,6 +125,10 @@ func (cc *CompileConfig) Done() (*LoadedExecutable, error) {
 		cc.client = nil
 		cc.plugin = nil
 	}()
+	if client.client == nil || !client.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("Compile.Done")
+	}
+	defer client.client.lifecycle.Leave()
 
 	// Other sanity checks.
 	if cc.programFormat == "" || len(cc.program) == 0 {
@@ -170,7 +176,7 @@ func (cc *CompileConfig) Done() (*LoadedExecutable, error) {
 	pinner.Pin(unsafe.SliceData(binOptions))
 
 	klog.V(2).Infof("calling pjrtClientCompile()")
-	exec, err := pjrtClientCompile(cc.plugin, cc.client, cc.program, cc.programFormat, binOptions)
+	exec, err := pjrtClientCompile(plugin, client, cc.program, cc.programFormat, binOptions)
 	if err != nil {
 		klog.V(1).Infof("pjrtClientCompile() failed: %v", err)
 		return nil, errors.WithMessagef(err, "failed to compile the program")

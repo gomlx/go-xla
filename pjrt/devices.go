@@ -53,13 +53,14 @@ func pjrtDeviceDescriptionProcessIndex(dDesc *DeviceDescription) (int, error) {
 // are device-specific and operate on individual PjrtDevice objects (obtained from the PjrtClient_Devices list).
 type Device struct {
 	plugin          *Plugin
+	client          *clientC
 	cDevice         *C.PJRT_Device // (PJRT) `device` has the same lifetime as (PJRT) `client`. It is owned by (PJRT) `client`.
 	localHardwareId int
 }
 
 // newDevice create a new Device reference.
 func newDevice(client *Client, device *C.PJRT_Device) *Device {
-	d := &Device{plugin: client.plugin, cDevice: device}
+	d := &Device{plugin: client.plugin, client: client.client, cDevice: device}
 	var err error
 	d.localHardwareId, err = pjrtDeviceLocalHardwareId(d)
 	if err != nil {
@@ -70,6 +71,10 @@ func newDevice(client *Client, device *C.PJRT_Device) *Device {
 
 // IsAddressable returns whether the device is addressable by this client.
 func (d *Device) IsAddressable() (bool, error) {
+	if d == nil || d.client == nil || !d.client.lifecycle.Enter() {
+		return false, errClientDestroyed("Device.IsAddressable")
+	}
+	defer d.client.lifecycle.Leave()
 	args := C.new_PJRT_Device_IsAddressable_Args()
 	defer cFree(args)
 	args.device = d.cDevice
@@ -88,6 +93,10 @@ func (d *Device) LocalHardwareID() int {
 
 // GetDescription get a DeviceDescription object associated with this device.
 func (d *Device) GetDescription() (*DeviceDescription, error) {
+	if d == nil || d.client == nil || !d.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("Device.GetDescription")
+	}
+	defer d.client.lifecycle.Leave()
 	args := C.new_PJRT_Device_GetDescription_Args()
 	defer cFree(args)
 	args.device = d.cDevice

@@ -80,6 +80,31 @@ func TestCompliance(t *testing.T) {
 	})
 }
 
+// TestFinalize verifies backend finalization and concurrent teardown semantics.
+func TestFinalize(t *testing.T) {
+	envBackend := os.Getenv(compute.ConfigEnvVar)
+	if envBackend != "" {
+		backendtest.TestFinalize(t, func() (compute.Backend, error) {
+			return compute.New()
+		})
+		return
+	}
+	for _, plugin := range []string{"cpu", "cuda", "tpu"} {
+		t.Run(plugin, func(t *testing.T) {
+			cfg := plugin
+			b, err := xla.New(cfg)
+			if err != nil {
+				t.Skipf("Plugin %q not available: %v", plugin, err)
+				return
+			}
+			b.Finalize()
+			backendtest.TestFinalize(t, func() (compute.Backend, error) {
+				return xla.New(cfg)
+			})
+		})
+	}
+}
+
 func benchAllPlugins(b *testing.B, fn func(b *testing.B, backend compute.Backend, plugin string)) {
 	envBackend := os.Getenv(compute.ConfigEnvVar)
 	if envBackend != "" {

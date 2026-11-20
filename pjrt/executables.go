@@ -8,6 +8,7 @@ package pjrt
 import "C"
 import (
 	"runtime"
+	"sync"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -19,9 +20,11 @@ import (
 // and related information.
 type Executable struct {
 	wrapper *executableWrapper
+	cleanup runtime.Cleanup
 }
 
 type executableWrapper struct {
+	mu     sync.Mutex
 	c      *C.PJRT_Executable
 	plugin *Plugin
 }
@@ -51,7 +54,7 @@ func newExecutable(plugin *Plugin, cExecutable *C.PJRT_Executable) *Executable {
 		plugin: plugin,
 		c:      cExecutable,
 	}}
-	runtime.AddCleanup(e, func(wrapper *executableWrapper) {
+	e.cleanup = runtime.AddCleanup(e, func(wrapper *executableWrapper) {
 		err := wrapper.Destroy()
 		if err != nil {
 			klog.Errorf("pjrt.Executable.Destroy failed: %v", err)
@@ -61,22 +64,34 @@ func newExecutable(plugin *Plugin, cExecutable *C.PJRT_Executable) *Executable {
 }
 
 func (wrapper *executableWrapper) IsValid() bool {
-	return wrapper != nil && wrapper.c != nil && wrapper.plugin != nil && wrapper.plugin.api != nil
+	if wrapper == nil {
+		return false
+	}
+	wrapper.mu.Lock()
+	valid := wrapper.c != nil && wrapper.plugin != nil && wrapper.plugin.api != nil
+	wrapper.mu.Unlock()
+	return valid
 }
 
 func (wrapper *executableWrapper) Destroy() error {
-	if !wrapper.IsValid() {
+	if wrapper == nil {
+		return nil
+	}
+	wrapper.mu.Lock()
+	cExec := wrapper.c
+	plugin := wrapper.plugin
+	wrapper.c = nil
+	wrapper.plugin = nil
+	wrapper.mu.Unlock()
+	if cExec == nil || plugin == nil || plugin.api == nil {
 		// Already destroyed, no-op.
 		return nil
 	}
 	defer runtime.KeepAlive(wrapper)
 	args := C.new_PJRT_Executable_Destroy_Args()
 	defer cFree(args)
-	args.executable = wrapper.c
-	err := toError(wrapper.plugin, C.call_PJRT_Executable_Destroy(wrapper.plugin.api, args))
-	wrapper.plugin = nil
-	wrapper.c = nil
-	return err
+	args.executable = cExec
+	return toError(plugin, C.call_PJRT_Executable_Destroy(plugin.api, args))
 }
 
 // Destroy the Executable releasing immediately its resources.
@@ -86,6 +101,7 @@ func (e *Executable) Destroy() error {
 	if e == nil {
 		return nil
 	}
+	e.cleanup.Stop()
 	return e.wrapper.Destroy()
 }
 
