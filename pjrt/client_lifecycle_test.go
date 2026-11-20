@@ -5,13 +5,20 @@ package pjrt
 import (
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/go-xla/stablehlo"
 	"github.com/gomlx/go-xla/types/shapes"
 )
+
+//go:noinline
+func createEphemeralBuffer(t *testing.T, client *Client) {
+	t.Helper()
+	ephemeral, err := ArrayToBuffer(client, []float32{5, 6, 7, 8}, 4)
+	requireNoError(t, err)
+	_ = ephemeral
+}
 
 func TestClientDestroyDrainsBuffersAndExecutables(t *testing.T) {
 	plugin, err := GetPlugin(*FlagPluginName)
@@ -20,8 +27,11 @@ func TestClientDestroyDrainsBuffersAndExecutables(t *testing.T) {
 	requireNoError(t, err)
 
 	// Stabilize baseline counts after any prior tests' GC cleanups.
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
+	// Note: testing/synctest cannot be used here because runtime.AddCleanup callbacks
+	// run outside of any synctest bubble.
+	for range 3 {
+		runtime.GC()
+	}
 	baseBuffers := BuffersAlive()
 	baseExecs := LoadedExecutablesAlive()
 
@@ -46,19 +56,10 @@ func TestClientDestroyDrainsBuffersAndExecutables(t *testing.T) {
 	requireNoError(t, err)
 	outBuf := outs[0]
 
-	// Create an ephemeral buffer and verify GC collects & unlinks it while client is still alive.
-	func() {
-		ephemeral, err := ArrayToBuffer(client, []float32{5, 6, 7, 8}, 4)
-		requireNoError(t, err)
-		_ = ephemeral
-	}()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	// Create an ephemeral buffer in a non-inlined frame and verify GC collects & unlinks it while client is still alive.
+	createEphemeralBuffer(t, client)
+	for range 3 {
 		runtime.GC()
-		if BuffersAlive() == baseBuffers+2 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
 	}
 	assertEqual(t, baseBuffers+2, BuffersAlive())
 	assertEqual(t, baseExecs+1, LoadedExecutablesAlive())
@@ -96,8 +97,9 @@ func TestClientDestroyDrainsBuffersAndExecutables(t *testing.T) {
 	runtime.KeepAlive(inBuf)
 	runtime.KeepAlive(outBuf)
 	runtime.KeepAlive(exec)
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
+	for range 3 {
+		runtime.GC()
+	}
 
 	assertEqual(t, baseBuffers, BuffersAlive())
 	assertEqual(t, baseExecs, LoadedExecutablesAlive())
