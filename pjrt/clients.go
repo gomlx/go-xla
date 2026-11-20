@@ -282,6 +282,26 @@ func (cc *clientC) drainAndDestroyExecutablesLocked() {
 	}
 }
 
+func (cc *clientC) numTrackedBuffers() int {
+	total := 0
+	for i := range cc.bufferShards {
+		s := &cc.bufferShards[i]
+		s.mu.Lock()
+		for w := s.head; w != nil; w = w.next {
+			total++
+		}
+		s.mu.Unlock()
+	}
+	return total
+}
+
+func (cc *clientC) numTrackedExecutables() int {
+	cc.execMu.Lock()
+	n := len(cc.execs)
+	cc.execMu.Unlock()
+	return n
+}
+
 // newClient is called by Plugin.NewClient to create a new PJRT_Client wrapper.
 func newClient(plugin *Plugin, options NamedValuesMap) (*Client, error) {
 	// Create C.PJRT_Client object.
