@@ -176,6 +176,10 @@ func (b *BufferFromHostConfig) Done() (*Buffer, error) {
 		// Return first error saved during configuration.
 		return nil, b.err
 	}
+	if b.client == nil || b.client.client == nil || !b.client.client.lifecycle.Enter() {
+		return nil, errClientDestroyed("BufferFromHost.Done")
+	}
+	defer b.client.client.lifecycle.Leave()
 
 	defer runtime.KeepAlive(b)
 
@@ -220,7 +224,7 @@ func (b *BufferFromHostConfig) Done() (*Buffer, error) {
 		return nil, err
 	}
 
-	buffer := newBuffer(b.client, args.buffer)
+	buffer := newBufferLocked(b.client, args.buffer)
 	buffer.dims = slices.Clone(b.dimensions)
 	buffer.dimsSet = true
 	buffer.dtype = b.dtype

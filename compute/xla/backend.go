@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xsync"
 	"github.com/gomlx/go-xla/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -16,6 +17,7 @@ import (
 
 // Backend implements the XLA/PJRT compute.Backend for GoMLX.
 type Backend struct {
+	lifecycle          xsync.Lifecycle
 	plugin             *pjrt.Plugin
 	client             *pjrt.Client
 	config, pluginName string
@@ -39,8 +41,24 @@ func (backend *Backend) CheckValid() error {
 	if backend == nil {
 		return errors.Errorf("%q backend is nil", BackendName)
 	}
-	if backend.plugin == nil {
-		return errors.Errorf("backend %q has already been finalized", BackendName)
+	if backend.lifecycle.IsFinalized() || backend.plugin == nil {
+		return errors.Wrapf(compute.ErrBackendFinalized, "backend %q has already been finalized", BackendName)
+	}
+	return nil
+}
+
+// enterLifecycle acquires the backend's shared lifecycle lock for an in-flight operation.
+// On success (err == nil), the caller MUST call backend.lifecycle.Leave().
+func (backend *Backend) enterLifecycle(op string) error {
+	if backend == nil {
+		return errors.Errorf("%q backend is nil", BackendName)
+	}
+	if !backend.lifecycle.Enter() {
+		return errors.Wrapf(compute.ErrBackendFinalized, "backend %q: %s", BackendName, op)
+	}
+	if backend.plugin == nil || backend.client == nil {
+		backend.lifecycle.Leave()
+		return errors.Wrapf(compute.ErrBackendFinalized, "backend %q: %s", BackendName, op)
 	}
 	return nil
 }
@@ -84,9 +102,10 @@ func (backend *Backend) NumDevices() int {
 
 // DeviceDescription returns a description of the deviceNum.
 func (backend *Backend) DeviceDescription(deviceNum compute.DeviceNum) string {
-	if backend.CheckValid() != nil {
+	if backend.enterLifecycle("DeviceDescription") != nil {
 		return fmt.Sprintf("%s: in an invalid state!", BackendName)
 	}
+	defer backend.lifecycle.Leave()
 	if int(deviceNum) >= backend.numDevices || int(deviceNum) < 0 {
 		return fmt.Sprintf("invalid deviceNum %d", deviceNum)
 	}
@@ -100,22 +119,24 @@ func (backend *Backend) DeviceDescription(deviceNum compute.DeviceNum) string {
 
 // Finalize releases all the associated resources immediately and makes the backend invalid.
 func (backend *Backend) Finalize() {
-	if backend.plugin == nil {
+	if backend == nil {
 		return
 	}
-	if backend.client != nil {
-		err := backend.client.Destroy()
-		if err != nil {
-			klog.Warningf("Failure while destroying PJRT client: %+v", err)
+	backend.lifecycle.Finalize(func() {
+		if backend.client != nil {
+			err := backend.client.Destroy()
+			if err != nil {
+				klog.Warningf("Failure while destroying PJRT client: %+v", err)
+			}
+			backend.client = nil
 		}
-		backend.client = nil
-	}
-	backend.plugin = nil
+		backend.plugin = nil
+	})
 }
 
 // IsFinalized returns true if the backend is in an invalid state.
 func (backend *Backend) IsFinalized() bool {
-	return backend == nil || backend.plugin == nil
+	return backend == nil || backend.lifecycle.IsFinalized()
 }
 
 // castToPJRT casts the buffer to pjrt.Buffer and panics if not possible.
@@ -142,9 +163,10 @@ func (b *Buffer) Backend() compute.Backend {
 }
 
 // Finalize implements compute.Buffer.
+// Safe to call multiple times or after the parent Backend has been finalized.
 func (b *Buffer) Finalize() error {
-	if err := b.backend.CheckValid(); err != nil {
-		return errors.WithMessagef(err, "backend %q is invalid", BackendName)
+	if b == nil || b.pjrtBuffer == nil {
+		return nil
 	}
 	err := b.pjrtBuffer.Destroy()
 	if err != nil {
@@ -153,12 +175,8 @@ func (b *Buffer) Finalize() error {
 	return nil
 }
 
-// Shape implements compute.Buffer.
-func (b *Buffer) Shape() (shapes.Shape, error) {
+func (b *Buffer) shapeLocked() (shapes.Shape, error) {
 	var noShape shapes.Shape
-	if err := b.backend.CheckValid(); err != nil {
-		return noShape, err
-	}
 	xlaDType, err := b.pjrtBuffer.DType()
 	if err != nil {
 		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
@@ -170,11 +188,22 @@ func (b *Buffer) Shape() (shapes.Shape, error) {
 	return shapes.Make(xlaDType, dims...), nil
 }
 
+// Shape implements compute.Buffer.
+func (b *Buffer) Shape() (shapes.Shape, error) {
+	var noShape shapes.Shape
+	if err := b.backend.enterLifecycle("Buffer.Shape"); err != nil {
+		return noShape, err
+	}
+	defer b.backend.lifecycle.Leave()
+	return b.shapeLocked()
+}
+
 // DeviceNum implements compute.Buffer.
 func (b *Buffer) DeviceNum() (compute.DeviceNum, error) {
-	if err := b.backend.CheckValid(); err != nil {
+	if err := b.backend.enterLifecycle("Buffer.DeviceNum"); err != nil {
 		return 0, err
 	}
+	defer b.backend.lifecycle.Leave()
 	device, err := b.pjrtBuffer.Device()
 	if err != nil {
 		return 0, errors.WithMessagef(err, "backend %q", BackendName)
@@ -188,10 +217,11 @@ func (b *Buffer) DeviceNum() (compute.DeviceNum, error) {
 
 // ToFlatData implements compute.Buffer.
 func (b *Buffer) ToFlatData(flat any) error {
-	if err := b.backend.CheckValid(); err != nil {
+	if err := b.backend.enterLifecycle("Buffer.ToFlatData"); err != nil {
 		return err
 	}
-	shape, err := b.Shape()
+	defer b.backend.lifecycle.Leave()
+	shape, err := b.shapeLocked()
 	if err != nil {
 		return err
 	}
@@ -213,9 +243,10 @@ func (b *Buffer) ToFlatData(flat any) error {
 
 // Data implements compute.Buffer.
 func (b *Buffer) Data() (flat any, err error) {
-	if err := b.backend.CheckValid(); err != nil {
+	if err := b.backend.enterLifecycle("Buffer.Data"); err != nil {
 		return nil, err
 	}
+	defer b.backend.lifecycle.Leave()
 	if err = b.pjrtBuffer.Check(); err != nil {
 		return nil, err
 	}
@@ -228,9 +259,10 @@ func (b *Buffer) Data() (flat any, err error) {
 
 // CopyToDevice implements compute.Buffer.
 func (b *Buffer) CopyToDevice(deviceNum compute.DeviceNum) (compute.Buffer, error) {
-	if err := b.backend.CheckValid(); err != nil {
+	if err := b.backend.enterLifecycle("Buffer.CopyToDevice"); err != nil {
 		return nil, err
 	}
+	defer b.backend.lifecycle.Leave()
 	if err := b.pjrtBuffer.Check(); err != nil {
 		return nil, err
 	}
@@ -261,6 +293,10 @@ func (b *Buffer) CopyToDevice(deviceNum compute.DeviceNum) (compute.Buffer, erro
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
 func (backend *Backend) BufferFromFlatData(deviceNum compute.DeviceNum, flat any, shape shapes.Shape) (compute.Buffer, error) {
+	if err := backend.enterLifecycle("BufferFromFlatData"); err != nil {
+		return nil, err
+	}
+	defer backend.lifecycle.Leave()
 	srcData := dtypes.UnsafeByteSliceFromAny(flat)
 	pjrtBuffer, err := backend.client.BufferFromHost().
 		FromRawData(srcData, shape.DType, shape.Dimensions).
@@ -283,9 +319,10 @@ func (backend *Backend) HasSharedBuffers() bool {
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
 func (backend *Backend) NewSharedBuffer(deviceNum compute.DeviceNum, shape shapes.Shape) (buffer compute.Buffer, flat any, err error) {
-	if err = backend.CheckValid(); err != nil {
+	if err = backend.enterLifecycle("NewSharedBuffer"); err != nil {
 		return
 	}
+	defer backend.lifecycle.Leave()
 	devices := backend.client.AddressableDevices()
 	if deviceNum < 0 || int(deviceNum) >= len(devices) {
 		err = errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))

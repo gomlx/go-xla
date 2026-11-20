@@ -57,14 +57,15 @@ import "C"
 // This always request a major-to-minor layout, the assumption of the layout in host memory -- TPUs are known to
 // reorganize the layout.
 func (b *Buffer) ToHost(dst []byte) error {
-	plugin, err := b.getPlugin()
+	plugin, err := b.enterClient("ToHost")
 	if err != nil {
 		return err
 	}
+	defer b.wrapper.client.lifecycle.Leave()
 	defer runtime.KeepAlive(b)
 
 	// We'll need the buffer rank to set up the layout.
-	dims, err := b.Dimensions()
+	dims, err := b.dimensionsLocked(plugin)
 	if err != nil {
 		return err
 	}

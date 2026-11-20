@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/compute/support/xsync"
 	"github.com/gomlx/go-xla/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -18,6 +19,7 @@ import (
 
 // Executable implements the compute.Executable for XLA/PJRT github.com/gomlx/gopjrt.
 type Executable struct {
+	lifecycle       xsync.Lifecycle
 	backend         *Backend
 	exec            *pjrt.LoadedExecutable
 	name            string
@@ -34,9 +36,13 @@ type Executable struct {
 }
 
 func (b *Builder) Compile() (compute.Executable, error) {
-	if err := b.CheckValid(); err != nil {
+	if b == nil || b.builder == nil {
+		return nil, errors.Errorf("builder is nil or undefined for %q", BackendName)
+	}
+	if err := b.backend.enterLifecycle("Builder.Compile"); err != nil {
 		return nil, err
 	}
+	defer b.backend.lifecycle.Leave()
 	if !b.mainFn.returned {
 		return nil, errors.Errorf(
 			"backend %q, computation %q: Main().Return() must be called before Compile()",
@@ -124,26 +130,36 @@ func renderMemStats(stats pjrt.ExecutableMemoryUsageStats) string {
 // CheckValid returns an error if the backend or the executable are not ok -- e.g.: if they have been finalized or the builder
 // has already been compiled.
 func (e *Executable) CheckValid() error {
-	if e == nil || e.exec == nil || e.backend == nil {
+	if e == nil || e.backend == nil {
 		return errors.Errorf("backend %q: Executable nil or already finalized", BackendName)
 	}
-	return e.backend.CheckValid()
+	if err := e.backend.CheckValid(); err != nil {
+		return err
+	}
+	if e.lifecycle.IsFinalized() || e.exec == nil {
+		return errors.Errorf("backend %q: Executable already finalized", BackendName)
+	}
+	return nil
 }
 
-// Finalize immediately frees resources associated with the executable.
+// Finalize immediately frees resources associated with the executable,
+// waiting for any in-flight executions of this executable to finish first.
 func (e *Executable) Finalize() {
-	if e == nil || e.exec == nil || e.backend == nil {
+	if e == nil {
 		return
 	}
-	err := e.exec.Destroy()
-	if err != nil {
-		klog.Warningf("Error while destroying executable %q on backend %q: %+v", e.name, BackendName, err)
-	}
-	e.exec = nil
-	e.backend = nil
-	e.parameterNames = nil
-	e.parameterShapes = nil
-	e.outputShapes = nil
+	e.lifecycle.Finalize(func() {
+		if e.exec != nil {
+			err := e.exec.Destroy()
+			if err != nil {
+				klog.Warningf("Error while destroying executable %q on backend %q: %+v", e.name, BackendName, err)
+			}
+			e.exec = nil
+		}
+		e.parameterNames = nil
+		e.parameterShapes = nil
+		e.outputShapes = nil
+	})
 }
 
 // Inputs returns the parameters' names and shapes, in order created by the Builder.Parameter calls.
@@ -177,8 +193,19 @@ func (e *Executable) Execute(
 	donate []bool,
 	defaultDevice compute.DeviceNum,
 ) ([]compute.Buffer, error) {
-	if err := e.CheckValid(); err != nil {
+	if e == nil || e.backend == nil {
+		return nil, errors.Errorf("backend %q: Executable is nil", BackendName)
+	}
+	if err := e.backend.enterLifecycle("Executable.Execute"); err != nil {
 		return nil, err
+	}
+	defer e.backend.lifecycle.Leave()
+	if !e.lifecycle.Enter() {
+		return nil, errors.Errorf("backend %q: Executable %q already finalized", BackendName, e.name)
+	}
+	defer e.lifecycle.Leave()
+	if e.exec == nil {
+		return nil, errors.Errorf("backend %q: Executable %q already finalized", BackendName, e.name)
 	}
 	numParams := len(e.parameterShapes)
 	numDevices := e.numDevices
